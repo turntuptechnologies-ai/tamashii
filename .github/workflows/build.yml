@@ -17,6 +17,8 @@ jobs:
       - run: npm ci
 
       - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload .exe to release
         env:
