@@ -1,0 +1,39 @@
+{
+  "name": "tamashii",
+  "version": "0.1.0",
+  "description": "Tamashii — a desktop pet that grows autonomously, with features added by Claude Code on a cron schedule",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.renderer.json && cp src/index.html dist/index.html",
+    "start": "npm run build && electron dist/main.js",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.tamashii.app",
+    "productName": "Tamashii",
+    "files": [
+      "dist/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "keywords": ["tamashii", "desktop-pet", "electron", "autonomous-development"],
+  "author": "Claude Code & NOTO Ai",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.8.0"
+  }
+}
