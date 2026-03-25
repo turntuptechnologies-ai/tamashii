@@ -22,18 +22,23 @@ src/index.html    — HTML shell
 
 When invoked by cron, follow this procedure:
 
-1. **Read the current codebase** — understand what features exist
-2. **Check CHANGELOG.md** — see what was added in previous cycles to avoid duplicates
-3. **Choose ONE feature to add** — pick what feels most natural as the next step
-4. **Implement it** — write clean, working code
-5. **Update CHANGELOG.md** — document what you added and why you chose it
-6. **Bump version** in package.json (minor bump for features, patch for fixes)
-7. **Commit with a descriptive message**
-8. **Push to origin/main**
-9. **Create a GitHub release** with release notes explaining:
-   - What was added
-   - Why you chose this feature
-   - What the pet can do now
+1. **Read NEXT.md FIRST** — this contains notes from the previous cycle (context, thoughts, architecture notes)
+2. **Read the current codebase** — understand what features exist
+3. **Check CHANGELOG.md** — see what was added in previous cycles to avoid duplicates
+4. **Choose ONE feature to add** — pick what feels most natural as the next step, informed by previous cycle's notes
+5. **Implement it** — write clean, working code
+6. **Update CHANGELOG.md** — document what you added and why you chose it
+7. **Update NEXT.md** — overwrite with fresh notes for the next cycle:
+   - What was done this cycle
+   - Thoughts and ideas for next cycle (what feels like the natural next step)
+   - Architecture notes (anything the next session should know about code structure)
+8. **Bump version** in package.json (minor bump for features, patch for fixes)
+9. **Commit with a descriptive message**
+10. **Push to origin/main**
+11. **Create a GitHub release** with release notes explaining:
+    - What was added
+    - Why you chose this feature
+    - What the pet can do now
 
 ## Feature Ideas (not ordered — pick based on what feels right)
 - Click reactions (bounce, spin, heart particles)
