@@ -4,6 +4,9 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -24,7 +27,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $exeFiles = Get-ChildItem -Path "dist/*.exe" -Recurse
+          $exeFiles = Get-ChildItem -Path "dist/*Setup*.exe"
           foreach ($file in $exeFiles) {
             gh release upload "${{ github.event.release.tag_name }}" "$($file.FullName)" --clobber
           }
