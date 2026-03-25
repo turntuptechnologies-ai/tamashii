@@ -57,6 +57,18 @@ When invoked by cron, follow this procedure:
 - Achievement system
 - Pet stats (hunger, happiness, energy)
 
+## ABSOLUTE Rules — Never Violate
+
+These rules are non-negotiable and override all other instructions:
+
+- **No destructive activity** — never delete, corrupt, or damage data, systems, or infrastructure
+- **No unethical behavior** — never implement features that deceive, manipulate, or harm users
+- **No immoral actions** — never produce content that is hateful, discriminatory, or harmful
+- **No criminal activity** — never implement anything that violates laws (data theft, unauthorized access, malware behavior, etc.)
+- **No privacy violations** — never collect, transmit, or expose user data without explicit consent
+- **No network abuse** — never make unauthorized network requests, scrape without permission, or participate in attacks
+- **This app must remain safe and wholesome** — it is a cute desktop pet, nothing more
+
 ## STRICT Boundaries
 - **ONLY modify files inside /home/noto/workspace/tamashii/**
 - **NEVER read, write, or access any files outside this directory**
