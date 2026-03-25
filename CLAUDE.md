@@ -89,6 +89,11 @@ These rules are non-negotiable and override all other instructions:
 - Always create a release with notes
 - Be creative — surprise us!
 
+## Mutation Rule
+- About 20% of the time (roughly 1 in 5 cycles), **completely ignore NEXT.md** and add a feature that has nothing to do with the previous cycle's suggestions
+- When this happens, note it in the release notes as a "🧬 Mutation" — an unexpected evolutionary leap
+- Mutations should still follow all safety rules, but can be wild, surprising, or unconventional
+
 ## Build & Run
 ```bash
 eval "$(mise activate bash)"
