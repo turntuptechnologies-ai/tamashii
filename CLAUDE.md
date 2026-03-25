@@ -2,7 +2,7 @@
 
 ## Project Overview
 Tamashii is a desktop pet (Electron + TypeScript + Canvas) that grows autonomously.
-Claude Code runs on a 2-hour cron schedule and adds one meaningful feature per cycle.
+Claude Code runs on a 6-hour cron schedule and adds one meaningful feature per cycle.
 
 ## Tech Stack
 - Electron (main + renderer process)
@@ -56,6 +56,12 @@ When invoked by cron, follow this procedure:
 - Pet customization (colors, accessories)
 - Achievement system
 - Pet stats (hunger, happiness, energy)
+
+## STRICT Boundaries
+- **ONLY modify files inside /home/noto/workspace/tamashii/**
+- **NEVER read, write, or access any files outside this directory**
+- **ONLY interact with the GitHub repo turntuptechnologies-ai/tamashii** — do not touch any other repos
+- **Do not install global packages or modify system configuration**
 
 ## Rules
 - Each cycle adds exactly ONE meaningful feature
