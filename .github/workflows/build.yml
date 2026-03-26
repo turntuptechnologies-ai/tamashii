@@ -23,12 +23,12 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: Upload .exe to release
+      - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $exeFiles = Get-ChildItem -Path "dist/*Setup*.exe"
-          foreach ($file in $exeFiles) {
+          $files = Get-ChildItem -Path "dist" -Include "*Setup*.exe","*.zip" -Recurse
+          foreach ($file in $files) {
             gh release upload "${{ github.event.release.tag_name }}" "$($file.FullName)" --clobber
           }
         shell: pwsh

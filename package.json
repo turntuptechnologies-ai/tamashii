@@ -18,7 +18,7 @@
       "assets/**/*"
     ],
     "win": {
-      "target": "nsis",
+      "target": ["nsis", "zip"],
       "icon": "assets/icon.png"
     },
     "linux": {
