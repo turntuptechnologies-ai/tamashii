@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.7.0] — 2026-03-26 — Gravity & Bounce Physics
+
+### Added
+- Drag the pet up and release — it falls back down with realistic gravity!
+- Bouncy landings: the pet bounces off the ground with decreasing energy until it settles
+- Landing squish effect: the harder the impact, the more the pet squishes on landing
+- Dust particle puffs on hard landings — little clouds burst outward from the impact point
+- Grabbing the pet mid-fall instantly stops it (no fighting gravity to catch it)
+- Shadow stretches dynamically during landing squish for a polished feel
+
+**Why this feature:** The pet could be dragged anywhere but felt weightless — releasing it from a height and having nothing happen broke the illusion. Gravity gives it physical presence and makes dragging feel playful. Picking up the pet and dropping it is now inherently fun.
+
 ## [v0.6.0] — 2026-03-26 — Right-Click Context Menu
 
 ### Added

@@ -50,7 +50,7 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz";
+  type: "heart" | "zzz" | "dust";
 }
 
 const particles: Particle[] = [];
@@ -65,6 +65,15 @@ interface SpeechBubble {
 
 let speechBubble: SpeechBubble | null = null;
 let speechCooldown = 300; // Start with a short cooldown so first bubble comes soon
+
+// --- Gravity & Falling ---
+let isFalling = false;
+let velocityY = 0;
+const GRAVITY = 0.6;       // pixels/frame² acceleration
+const BOUNCE_DAMPING = 0.45; // energy retained per bounce
+const GROUND_MARGIN = 50;   // pixels above bottom of work area for "ground"
+let groundY = 0;            // calculated ground position (screen coords)
+let landingSquish = 0;      // extra squish from landing impact
 
 // --- Wandering ---
 let wanderingEnabled = true;
@@ -132,6 +141,8 @@ let lastY = 0;
 canvas.addEventListener("mousedown", (e) => {
   isDragging = true;
   dragMoved = false;
+  isFalling = false; // Cancel any active fall when grabbed
+  velocityY = 0;
   lastX = e.screenX;
   lastY = e.screenY;
 });
@@ -152,8 +163,23 @@ window.addEventListener("mouseup", () => {
   if (isDragging && !dragMoved) {
     onPetClicked();
   }
+  if (isDragging && dragMoved) {
+    // Start falling — check if pet is above ground
+    startFalling();
+  }
   isDragging = false;
 });
+
+function startFalling(): void {
+  window.tamashii.getScreenBounds().then((bounds) => {
+    screenBoundsCache = bounds;
+    groundY = bounds.screenHeight - 200 - GROUND_MARGIN; // 200 = window size
+    if (bounds.windowY < groundY) {
+      isFalling = true;
+      velocityY = 0; // start from rest (gravity will accelerate)
+    }
+  });
+}
 
 // --- Right-click Context Menu ---
 canvas.addEventListener("contextmenu", (e) => {
@@ -419,6 +445,17 @@ function drawZzz(x: number, y: number, size: number, alpha: number): void {
   ctx.restore();
 }
 
+// --- Dust Drawing ---
+function drawDust(x: number, y: number, size: number, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fillStyle = "#C8B898";
+  ctx.fill();
+  ctx.restore();
+}
+
 // --- Speech Bubble Drawing ---
 function drawSpeechBubble(cx: number, petTopY: number): void {
   if (!speechBubble) return;
@@ -602,9 +639,13 @@ function update(): void {
     p.y += p.vy;
     if (p.type === "heart") {
       p.vy -= 0.01;
-    } else {
+    } else if (p.type === "zzz") {
       // zzz floats with gentle wave
       p.vx = Math.sin(p.life * 0.05) * 0.3;
+    } else if (p.type === "dust") {
+      // Dust puffs slow down and settle
+      p.vy += 0.03;
+      p.vx *= 0.96;
     }
     p.vx *= 0.99;
     p.life--;
@@ -666,6 +707,66 @@ function update(): void {
     }
   }
 
+  // --- Gravity / Falling ---
+  if (isFalling && !isDragging) {
+    velocityY += GRAVITY;
+    window.tamashii.moveWindow(0, Math.round(velocityY));
+
+    // Update cached position
+    screenBoundsCache.windowY += velocityY;
+
+    // Check if we hit the ground
+    if (screenBoundsCache.windowY >= groundY) {
+      screenBoundsCache.windowY = groundY;
+      // Snap to ground position
+      window.tamashii.getScreenBounds().then((b) => {
+        const overshoot = b.windowY - groundY;
+        if (overshoot > 0) {
+          window.tamashii.moveWindow(0, -overshoot);
+        }
+      });
+
+      if (Math.abs(velocityY) < 2) {
+        // Stopped bouncing
+        isFalling = false;
+        velocityY = 0;
+      } else {
+        // Bounce! Reverse velocity with damping
+        velocityY = -velocityY * BOUNCE_DAMPING;
+
+        // Landing squish proportional to impact speed
+        const impactSpeed = Math.abs(velocityY) / BOUNCE_DAMPING; // pre-bounce speed
+        landingSquish = Math.min(impactSpeed / 15, 1.0);
+
+        // Spawn dust particles on impact
+        if (impactSpeed > 4) {
+          const cx = canvas.width / 2;
+          const cy = canvas.height / 2 + 30;
+          const dustCount = Math.min(Math.floor(impactSpeed / 3), 6);
+          for (let i = 0; i < dustCount; i++) {
+            const dir = i % 2 === 0 ? -1 : 1;
+            particles.push({
+              x: cx + dir * (5 + Math.random() * 15),
+              y: cy + 10,
+              vx: dir * (1 + Math.random() * 2),
+              vy: -(0.5 + Math.random() * 1),
+              life: 30 + Math.random() * 20,
+              maxLife: 30 + Math.random() * 20,
+              size: 3 + Math.random() * 3,
+              type: "dust",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Landing squish decay
+  if (landingSquish > 0) {
+    landingSquish *= 0.85;
+    if (landingSquish < 0.01) landingSquish = 0;
+  }
+
   // Idle bounce (speed and amplitude vary by time of day)
   if (!isDragging) {
     const amplitude = getBounceAmplitude();
@@ -682,8 +783,9 @@ function draw(): void {
   const cy = canvas.height / 2 + bounceOffset;
   const size = 120;
 
-  // Shadow (wider when squished)
-  const shadowStretch = 1 + squishAmount * 0.3;
+  // Shadow (wider when squished — combine click squish and landing squish)
+  const totalSquish = Math.min(squishAmount + landingSquish, 1.2);
+  const shadowStretch = 1 + totalSquish * 0.3;
   ctx.beginPath();
   ctx.ellipse(canvas.width / 2, canvas.height / 2 + size * 0.42, 30 * shadowStretch, 8, 0, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
@@ -692,9 +794,9 @@ function draw(): void {
   // Apply squish + wander lean transform
   ctx.save();
   const feetY = canvas.height / 2 + size * 0.35;
-  if (squishAmount > 0) {
-    const scaleX = 1 + squishAmount * 0.15;
-    const scaleY = 1 - squishAmount * 0.15;
+  if (totalSquish > 0) {
+    const scaleX = 1 + totalSquish * 0.15;
+    const scaleY = 1 - totalSquish * 0.15;
     ctx.translate(cx, feetY);
     ctx.scale(scaleX, scaleY);
     ctx.translate(-cx, -feetY);
@@ -716,8 +818,10 @@ function draw(): void {
     const alpha = p.life / p.maxLife;
     if (p.type === "heart") {
       drawHeart(p.x, p.y, p.size, alpha);
-    } else {
+    } else if (p.type === "zzz") {
       drawZzz(p.x, p.y, p.size, alpha);
+    } else if (p.type === "dust") {
+      drawDust(p.x, p.y, p.size, alpha);
     }
   }
 
