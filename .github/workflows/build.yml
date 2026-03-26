@@ -17,9 +17,19 @@ jobs:
         with:
           node-version: 24
 
-      - run: npm ci
+      - name: Install dependencies
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: npm ci
 
-      - run: npm run dist:win
+      - name: Build Windows binaries
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm run dist:win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
