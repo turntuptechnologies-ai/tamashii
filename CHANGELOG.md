@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.6.0] — 2026-03-26 — Right-Click Context Menu
+
+### Added
+- Right-click the pet to open a native context menu with useful options
+- **Mood display** — see the pet's current mood and time of day at a glance
+- **Toggle wandering** — enable or disable the pet's autonomous walking
+- **About dialog** — shows version info and credits
+- **Quit** — cleanly exit Tamashii from the menu
+- Menu state is live: mood updates with time of day, wander toggle reflects current state
+
+**Why this feature:** The pet had personality, voice, and movement — but no way to interact beyond clicking and dragging. A context menu adds real utility and control, letting users toggle behaviors and learn about their pet's state without breaking the desktop-pet illusion.
+
 ## [v0.5.0] — 2026-03-26 — Wandering
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "tamashii",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Tamashii — a desktop pet that grows autonomously, with features added by Claude Code on a cron schedule",
   "main": "dist/main.js",
   "scripts": {

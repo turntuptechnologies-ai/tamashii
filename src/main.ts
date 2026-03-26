@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain } from "electron";
+import { app, BrowserWindow, screen, ipcMain, Menu, dialog } from "electron";
 import * as path from "path";
 
 let mainWindow: BrowserWindow | null = null;
@@ -46,6 +46,46 @@ ipcMain.handle("get-screen-bounds", () => {
     screen.getPrimaryDisplay().workAreaSize;
   const [windowX, windowY] = mainWindow ? mainWindow.getPosition() : [0, 0];
   return { screenWidth, screenHeight, windowX, windowY };
+});
+
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean }) => {
+  if (!mainWindow) return;
+  const { timeOfDay, wanderingEnabled } = menuData;
+
+  const moodLabels: Record<string, string> = {
+    morning: "☀️ Energetic (Morning)",
+    afternoon: "🌤️ Content (Afternoon)",
+    evening: "🌅 Winding Down (Evening)",
+    night: "🌙 Sleepy (Night)",
+  };
+  const moodLabel = moodLabels[timeOfDay] || "Unknown";
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { label: `Mood: ${moodLabel}`, enabled: false },
+    { type: "separator" },
+    {
+      label: wanderingEnabled ? "🚶 Disable Wandering" : "🧍 Enable Wandering",
+      click: () => { mainWindow?.webContents.send("toggle-wandering"); },
+    },
+    { type: "separator" },
+    {
+      label: "About Tamashii",
+      click: () => {
+        dialog.showMessageBox(mainWindow!, {
+          type: "info",
+          title: "About Tamashii",
+          message: "Tamashii — Desktop Pet",
+          detail: "Version 0.6.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          buttons: ["OK"],
+        });
+      },
+    },
+    { type: "separator" },
+    { label: "Quit", click: () => { app.quit(); } },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup({ window: mainWindow });
 });
 
 app.whenReady().then(createWindow);

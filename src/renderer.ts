@@ -3,6 +3,8 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean }) => Promise<void>;
+      onToggleWandering: (callback: () => void) => void;
     };
   }
 }
@@ -65,6 +67,7 @@ let speechBubble: SpeechBubble | null = null;
 let speechCooldown = 300; // Start with a short cooldown so first bubble comes soon
 
 // --- Wandering ---
+let wanderingEnabled = true;
 type WanderState = "idle" | "walking" | "pausing";
 let wanderState: WanderState = "pausing";
 let wanderDirection = Math.random() < 0.5 ? -1 : 1; // -1 = left, 1 = right
@@ -150,6 +153,24 @@ window.addEventListener("mouseup", () => {
     onPetClicked();
   }
   isDragging = false;
+});
+
+// --- Right-click Context Menu ---
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  window.tamashii.showContextMenu({
+    timeOfDay: currentTimeOfDay,
+    wanderingEnabled,
+  });
+});
+
+// Listen for toggle-wandering from main process
+window.tamashii.onToggleWandering(() => {
+  wanderingEnabled = !wanderingEnabled;
+  if (!wanderingEnabled) {
+    wanderState = "pausing";
+    wanderTimer = 60;
+  }
 });
 
 function onPetClicked(): void {
@@ -594,7 +615,7 @@ function update(): void {
 
   // --- Wandering logic ---
   const wanderSpeed = getWanderSpeed();
-  if (!isDragging && wanderSpeed > 0) {
+  if (!isDragging && wanderSpeed > 0 && wanderingEnabled) {
     // Fetch screen bounds periodically (every ~2 seconds)
     boundsFetchTimer++;
     if (boundsFetchTimer > 120) {
