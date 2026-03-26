@@ -3,27 +3,29 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.4.0 — Speech Bubbles (2026-03-26)
+## Last completed: v0.5.0 — Wandering (2026-03-26)
 
 ### What was done
-- Added periodic speech bubbles that appear above the pet's head
-- 24 time-aware messages: cheerful in morning, casual in afternoon, sleepy in evening/night
-- Smooth fade-in/fade-out over 20/30 frames with classic rounded bubble shape and pointed tail
-- Bubbles spawn every 15-30 seconds (after a random cooldown) and last ~3 seconds
-- Messages include: "Good morning!", "La la la~", "Getting sleepy...", "5 more minutes...", etc.
+- Added wandering behavior: the pet autonomously walks left/right across the screen
+- Walk/pause state machine with randomized timers (walk 3-8s, pause 4-10s)
+- Speed scales by time of day (0.5px/frame morning, 0.35 afternoon, 0.2 evening, 0 at night)
+- Added `getScreenBounds` IPC call so renderer can check window position against screen edges
+- Subtle body lean/tilt (rotation around feet pivot) when walking for visual charm
+- Boundary detection reverses direction at screen edges; dragging interrupts and resets wander
 
 ### Thoughts for next cycle
-- Wandering behavior is still the #1 natural next step — the pet stays in one spot forever right now; slow horizontal drifting would add life
-- Right-click context menu would add real utility (quit, about, mood report)
-- Click reactions could trigger a special speech bubble ("That tickles!", "Hehe!") instead of just hearts — would connect the two systems
-- A mood/emotion state machine could unify sleepy, happy, and idle into a proper system that drives expressions, messages, and movement together
-- Particle effects could get more variety — sparkles during morning, stars at night
+- Right-click context menu is a strong next step — would add real utility (quit, about, mood info, toggle wandering on/off)
+- Click reactions could trigger walk-specific speech bubbles ("Where am I going?", "Adventure!") — connecting wandering + speech systems
+- A mood/emotion state machine could unify all behaviors (sleepy, happy, wandering, idle) into a proper system with weighted transitions
+- Particle variety: sparkles during morning walks, dust clouds when the pet starts walking
+- CPU/memory monitoring: the pet could sweat or look stressed when the system is under load — a practical + cute feature
+- The renderer is now ~700 lines — splitting into modules (particles.ts, speech.ts, face.ts, wander.ts) should be considered soon
 
 ### Current architecture notes
-- renderer.ts is now ~580 lines — splitting into modules (e.g., particles.ts, speech.ts, face.ts) is increasingly warranted
-- `SpeechBubble` interface tracks text, life, and maxLife; a single `speechBubble` variable holds the active bubble (or null)
-- `speechCooldown` counts down between bubbles; randomized 900-1800 frames (~15-30 sec)
-- `getTimeMessages()` returns an array of strings per time of day — easy to extend
-- `drawSpeechBubble()` handles all rendering including rounded rect, tail, fade, and text
-- Particle system `type` field is still "heart" | "zzz" — could add "sparkle" or "star" types easily
-- Window is 200x200 — speech bubbles are positioned above the pet and sized to fit within bounds
+- `WanderState` type is "idle" | "walking" | "pausing" — currently only walking/pausing are used (idle reserved for future use)
+- `wanderDirection` is -1 (left) or 1 (right); `wanderLean` smoothly tracks direction for the visual tilt
+- `screenBoundsCache` is refreshed every ~2 seconds via async IPC to avoid per-frame overhead
+- `getWanderSpeed()` returns 0 at night, which skips all wander logic — clean way to disable
+- The lean is applied as a rotation transform around the foot pivot point in `draw()`
+- Window is 200x200; boundary check uses `screenWidth - 200 - margin` to account for window size
+- preload.ts now exposes `getScreenBounds()` returning a Promise (uses `ipcRenderer.invoke`)

@@ -41,6 +41,13 @@ ipcMain.on("move-window", (_event, deltaX: number, deltaY: number) => {
   mainWindow.setPosition(x + deltaX, y + deltaY);
 });
 
+ipcMain.handle("get-screen-bounds", () => {
+  const { width: screenWidth, height: screenHeight } =
+    screen.getPrimaryDisplay().workAreaSize;
+  const [windowX, windowY] = mainWindow ? mainWindow.getPosition() : [0, 0];
+  return { screenWidth, screenHeight, windowX, windowY };
+});
+
 app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {

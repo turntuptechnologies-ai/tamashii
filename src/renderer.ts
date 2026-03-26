@@ -2,6 +2,7 @@ declare global {
   interface Window {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
+      getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
     };
   }
 }
@@ -62,6 +63,15 @@ interface SpeechBubble {
 
 let speechBubble: SpeechBubble | null = null;
 let speechCooldown = 300; // Start with a short cooldown so first bubble comes soon
+
+// --- Wandering ---
+type WanderState = "idle" | "walking" | "pausing";
+let wanderState: WanderState = "pausing";
+let wanderDirection = Math.random() < 0.5 ? -1 : 1; // -1 = left, 1 = right
+let wanderTimer = 180; // frames until next state change
+let wanderLean = 0; // visual tilt in walk direction (-1 to 1)
+let screenBoundsCache = { screenWidth: 1920, screenHeight: 1080, windowX: 0, windowY: 0 };
+let boundsFetchTimer = 0;
 
 function getTimeMessages(): string[] {
   switch (currentTimeOfDay) {
@@ -463,6 +473,15 @@ function getBounceAmplitude(): number {
   }
 }
 
+function getWanderSpeed(): number {
+  switch (currentTimeOfDay) {
+    case "morning": return 0.5;    // Energetic exploring
+    case "afternoon": return 0.35; // Casual strolling
+    case "evening": return 0.2;    // Slow shuffle
+    case "night": return 0;        // Too sleepy to wander
+  }
+}
+
 function update(): void {
   frame++;
 
@@ -573,6 +592,59 @@ function update(): void {
     }
   }
 
+  // --- Wandering logic ---
+  const wanderSpeed = getWanderSpeed();
+  if (!isDragging && wanderSpeed > 0) {
+    // Fetch screen bounds periodically (every ~2 seconds)
+    boundsFetchTimer++;
+    if (boundsFetchTimer > 120) {
+      boundsFetchTimer = 0;
+      window.tamashii.getScreenBounds().then((b) => { screenBoundsCache = b; });
+    }
+
+    wanderTimer--;
+
+    if (wanderState === "pausing") {
+      // Lean back to neutral while paused
+      wanderLean *= 0.92;
+      if (wanderTimer <= 0) {
+        wanderState = "walking";
+        wanderDirection = Math.random() < 0.5 ? -1 : 1;
+        // Walk for 3-8 seconds
+        wanderTimer = 180 + Math.floor(Math.random() * 300);
+      }
+    } else if (wanderState === "walking") {
+      // Move the window
+      const dx = wanderDirection * wanderSpeed;
+      window.tamashii.moveWindow(dx, 0);
+
+      // Lean into walk direction (smooth approach)
+      wanderLean += (wanderDirection * 0.6 - wanderLean) * 0.05;
+
+      // Check screen boundaries — reverse if near edge
+      const margin = 20;
+      const { screenWidth, windowX } = screenBoundsCache;
+      if (windowX <= margin && wanderDirection === -1) {
+        wanderDirection = 1;
+      } else if (windowX >= screenWidth - 200 - margin && wanderDirection === 1) {
+        wanderDirection = -1;
+      }
+
+      if (wanderTimer <= 0) {
+        wanderState = "pausing";
+        // Pause for 4-10 seconds
+        wanderTimer = 240 + Math.floor(Math.random() * 360);
+      }
+    }
+  } else {
+    // Not wandering (dragging or nighttime) — lean back to neutral
+    wanderLean *= 0.92;
+    if (isDragging) {
+      wanderState = "pausing";
+      wanderTimer = 120; // Short pause after being dropped
+    }
+  }
+
   // Idle bounce (speed and amplitude vary by time of day)
   if (!isDragging) {
     const amplitude = getBounceAmplitude();
@@ -596,14 +668,21 @@ function draw(): void {
   ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
   ctx.fill();
 
-  // Apply squish transform
+  // Apply squish + wander lean transform
   ctx.save();
+  const feetY = canvas.height / 2 + size * 0.35;
   if (squishAmount > 0) {
     const scaleX = 1 + squishAmount * 0.15;
     const scaleY = 1 - squishAmount * 0.15;
-    ctx.translate(cx, canvas.height / 2 + size * 0.35);
+    ctx.translate(cx, feetY);
     ctx.scale(scaleX, scaleY);
-    ctx.translate(-cx, -(canvas.height / 2 + size * 0.35));
+    ctx.translate(-cx, -feetY);
+  }
+  // Lean tilt when wandering (rotate around feet)
+  if (Math.abs(wanderLean) > 0.01) {
+    ctx.translate(cx, feetY);
+    ctx.rotate(wanderLean * 0.06); // subtle tilt, ~3.4 degrees max
+    ctx.translate(-cx, -feetY);
   }
 
   drawFeet(cx, cy, size);

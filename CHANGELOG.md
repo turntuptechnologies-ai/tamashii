@@ -3,6 +3,19 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.5.0] — 2026-03-26 — Wandering
+
+### Added
+- Pet now wanders! Slowly drifts left and right across the screen on its own
+- Walk/pause cycle: walks 3-8 seconds, pauses 4-10 seconds, picks a new direction
+- Speed varies by time of day — energetic morning strolls, casual afternoon walks, slow evening shuffles
+- At night the pet is too sleepy to wander and stays put
+- Subtle body lean/tilt in the walking direction for visual personality
+- Screen boundary awareness — pet reverses at screen edges instead of walking off
+- Dragging interrupts wandering; pet pauses briefly after being dropped
+
+**Why this feature:** The pet had a voice, emotions, and reactions — but it stayed rooted in one spot forever. Wandering adds the most fundamental sign of life: autonomous movement. Now the pet feels like it's actually *living* on your desktop.
+
 ## [v0.4.0] — 2026-03-26 — Speech Bubbles
 
 ### Added
