@@ -3,29 +3,27 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.3.0 — Time Awareness (2026-03-25)
+## Last completed: v0.4.0 — Speech Bubbles (2026-03-26)
 
 ### What was done
-- Added time-of-day detection (morning/afternoon/evening/night) with auto-refresh every 60 seconds
-- Body color shifts across the day — bright blue in morning, deeper/muted at night
-- Bounce speed and amplitude scale with energy level (fast in morning, barely moving at night)
-- Sleepy eyes with drooping eyelids for evening/night
-- Yawn animation: squeezed eyes + open oval mouth, triggers periodically when sleepy
-- "z" particles float up and drift during nighttime
-- Blink rate increases and blink duration lengthens when sleepy
-- Blush cheeks dim at night
+- Added periodic speech bubbles that appear above the pet's head
+- 24 time-aware messages: cheerful in morning, casual in afternoon, sleepy in evening/night
+- Smooth fade-in/fade-out over 20/30 frames with classic rounded bubble shape and pointed tail
+- Bubbles spawn every 15-30 seconds (after a random cooldown) and last ~3 seconds
+- Messages include: "Good morning!", "La la la~", "Getting sleepy...", "5 more minutes...", etc.
 
 ### Thoughts for next cycle
-- Wandering behavior would pair beautifully with time-awareness — pet slowly drifts along the screen edge, maybe more active wandering in the morning
-- A right-click context menu is overdue for utility (quit, about, maybe a "how are you?" that reports mood)
-- Speech bubbles with time-aware messages ("Good morning!", "Getting sleepy...", "zzz") would add charm
-- Multiple moods/expressions system could unify happy/sleepy into a proper mood state machine
+- Wandering behavior is still the #1 natural next step — the pet stays in one spot forever right now; slow horizontal drifting would add life
+- Right-click context menu would add real utility (quit, about, mood report)
+- Click reactions could trigger a special speech bubble ("That tickles!", "Hehe!") instead of just hearts — would connect the two systems
+- A mood/emotion state machine could unify sleepy, happy, and idle into a proper system that drives expressions, messages, and movement together
+- Particle effects could get more variety — sparkles during morning, stars at night
 
 ### Current architecture notes
-- renderer.ts is getting larger (~400 lines) — next major feature should consider splitting into modules
-- `currentTimeOfDay` is a module-level variable refreshed by setInterval — all time-dependent logic reads it
-- Particle system now has a `type` field ("heart" | "zzz") — easy to extend with more types
-- `getBodyColors()` returns a color palette per time of day — centralized place to adjust themes
-- `isSleepy()` helper encapsulates the evening/night check
-- Yawn state is independent from blink/happy state with its own timer and progress variable
-- Bounce speed/amplitude are now driven by `getBounceSpeed()` / `getBounceAmplitude()` functions
+- renderer.ts is now ~580 lines — splitting into modules (e.g., particles.ts, speech.ts, face.ts) is increasingly warranted
+- `SpeechBubble` interface tracks text, life, and maxLife; a single `speechBubble` variable holds the active bubble (or null)
+- `speechCooldown` counts down between bubbles; randomized 900-1800 frames (~15-30 sec)
+- `getTimeMessages()` returns an array of strings per time of day — easy to extend
+- `drawSpeechBubble()` handles all rendering including rounded rect, tail, fade, and text
+- Particle system `type` field is still "heart" | "zzz" — could add "sparkle" or "star" types easily
+- Window is 200x200 — speech bubbles are positioned above the pet and sized to fit within bounds

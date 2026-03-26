@@ -53,6 +53,63 @@ interface Particle {
 const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
 
+// --- Speech Bubble ---
+interface SpeechBubble {
+  text: string;
+  life: number;
+  maxLife: number;
+}
+
+let speechBubble: SpeechBubble | null = null;
+let speechCooldown = 300; // Start with a short cooldown so first bubble comes soon
+
+function getTimeMessages(): string[] {
+  switch (currentTimeOfDay) {
+    case "morning":
+      return [
+        "Good morning!",
+        "Let's go!",
+        "Rise and shine~",
+        "What a nice day!",
+        "I'm so energetic!",
+        "Yay, morning!",
+      ];
+    case "afternoon":
+      return [
+        "Nice afternoon~",
+        "How's it going?",
+        "Keep it up!",
+        "La la la~",
+        "Doing great!",
+        "Hey there!",
+      ];
+    case "evening":
+      return [
+        "Getting sleepy...",
+        "What a long day~",
+        "Winding down...",
+        "*yaaawn*",
+        "Almost bedtime...",
+        "So cozy...",
+      ];
+    case "night":
+      return [
+        "zzz...",
+        "So sleepy...",
+        "Good night...",
+        "*snore*",
+        "Mmm... dreams...",
+        "5 more minutes...",
+      ];
+  }
+}
+
+function spawnSpeechBubble(): void {
+  const messages = getTimeMessages();
+  const text = messages[Math.floor(Math.random() * messages.length)];
+  speechBubble = { text, life: 180, maxLife: 180 }; // ~3 seconds
+}
+
 // --- Drag ---
 let isDragging = false;
 let dragMoved = false;
@@ -331,6 +388,62 @@ function drawZzz(x: number, y: number, size: number, alpha: number): void {
   ctx.restore();
 }
 
+// --- Speech Bubble Drawing ---
+function drawSpeechBubble(cx: number, petTopY: number): void {
+  if (!speechBubble) return;
+
+  // Fade in for first 20 frames, fade out for last 30 frames
+  let alpha = 1;
+  const fadeIn = speechBubble.maxLife - speechBubble.life;
+  if (fadeIn < 20) alpha = fadeIn / 20;
+  if (speechBubble.life < 30) alpha = speechBubble.life / 30;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Measure text
+  ctx.font = "bold 11px sans-serif";
+  const metrics = ctx.measureText(speechBubble.text);
+  const textWidth = metrics.width;
+  const padding = 8;
+  const bubbleW = textWidth + padding * 2;
+  const bubbleH = 22;
+  const bubbleX = cx - bubbleW / 2;
+  const bubbleY = petTopY - bubbleH - 10;
+  const radius = 8;
+
+  // Bubble background
+  ctx.beginPath();
+  ctx.moveTo(bubbleX + radius, bubbleY);
+  ctx.lineTo(bubbleX + bubbleW - radius, bubbleY);
+  ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY, bubbleX + bubbleW, bubbleY + radius);
+  ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius);
+  ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH);
+  // Small tail pointing down toward pet
+  ctx.lineTo(cx + 6, bubbleY + bubbleH);
+  ctx.lineTo(cx, bubbleY + bubbleH + 7);
+  ctx.lineTo(cx - 6, bubbleY + bubbleH);
+  ctx.lineTo(bubbleX + radius, bubbleY + bubbleH);
+  ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius);
+  ctx.lineTo(bubbleX, bubbleY + radius);
+  ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
+  ctx.closePath();
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(100, 100, 120, 0.5)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = "#333344";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(speechBubble.text, cx, bubbleY + bubbleH / 2);
+
+  ctx.restore();
+}
+
 // --- Animation Loop ---
 function getBounceSpeed(): number {
   switch (currentTimeOfDay) {
@@ -427,6 +540,21 @@ function update(): void {
     }
   }
 
+  // Speech bubble logic
+  if (speechBubble) {
+    speechBubble.life--;
+    if (speechBubble.life <= 0) {
+      speechBubble = null;
+      // Cooldown before next bubble: 15-30 seconds
+      speechCooldown = 900 + Math.floor(Math.random() * 900);
+    }
+  } else {
+    speechCooldown--;
+    if (speechCooldown <= 0) {
+      spawnSpeechBubble();
+    }
+  }
+
   // Particle update
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -492,6 +620,9 @@ function draw(): void {
       drawZzz(p.x, p.y, p.size, alpha);
     }
   }
+
+  // Speech bubble (above everything)
+  drawSpeechBubble(cx, cy - size * 0.4);
 }
 
 function loop(): void {

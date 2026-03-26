@@ -3,6 +3,17 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.4.0] — 2026-03-26 — Speech Bubbles
+
+### Added
+- Pet now talks! Speech bubbles appear periodically above the pet's head
+- Messages are time-aware — cheerful greetings in the morning, sleepy murmurs at night
+- 24 unique messages across 4 time periods (morning, afternoon, evening, night)
+- Smooth fade-in/fade-out animation with a classic rounded bubble and tail
+- Bubbles appear every 15-30 seconds and last ~3 seconds each
+
+**Why this feature:** The pet could react to clicks and had a sense of time, but it never communicated. Speech bubbles give it a voice and personality — now it greets you in the morning and whispers "5 more minutes..." at night.
+
 ## [v0.3.0] — 2026-03-25 — Time Awareness
 
 ### Added
