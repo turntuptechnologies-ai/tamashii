@@ -1,5 +1,6 @@
 import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog } from "electron";
 import * as path from "path";
+import * as os from "os";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -77,7 +78,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.9.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.10.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -146,7 +147,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.9.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.10.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
@@ -181,9 +182,57 @@ ipcMain.on("update-mood", (_event, mood: string) => {
   tray?.setContextMenu(buildTrayMenu());
 });
 
+// --- CPU/Memory Monitoring ---
+let previousCpuTimes: { idle: number; total: number }[] = [];
+
+function getCpuTimes(): { idle: number; total: number }[] {
+  return os.cpus().map((cpu) => {
+    const times = cpu.times;
+    const total = times.user + times.nice + times.sys + times.irq + times.idle;
+    return { idle: times.idle, total };
+  });
+}
+
+function getCpuUsage(): number {
+  const currentTimes = getCpuTimes();
+  if (previousCpuTimes.length === 0) {
+    previousCpuTimes = currentTimes;
+    return 0;
+  }
+  let totalDelta = 0;
+  let idleDelta = 0;
+  for (let i = 0; i < currentTimes.length; i++) {
+    totalDelta += currentTimes[i].total - previousCpuTimes[i].total;
+    idleDelta += currentTimes[i].idle - previousCpuTimes[i].idle;
+  }
+  previousCpuTimes = currentTimes;
+  if (totalDelta === 0) return 0;
+  return ((totalDelta - idleDelta) / totalDelta) * 100;
+}
+
+function getMemoryUsage(): number {
+  const total = os.totalmem();
+  const free = os.freemem();
+  return ((total - free) / total) * 100;
+}
+
+function startSystemMonitor(): void {
+  // Initial CPU sample
+  previousCpuTimes = getCpuTimes();
+
+  // Send stats every 3 seconds
+  setInterval(() => {
+    if (!mainWindow) return;
+    const cpu = getCpuUsage();
+    const mem = getMemoryUsage();
+    mainWindow.webContents.send("system-stats", { cpu: Math.round(cpu), mem: Math.round(mem) });
+  }, 3000);
+}
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  startSystemMonitor();
 });
 
 app.on("window-all-closed", () => {

@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   updateMood: (mood: string) => {
     ipcRenderer.send("update-mood", mood);
   },
+  onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => {
+    ipcRenderer.on("system-stats", (_event, stats) => callback(stats));
+  },
 });

@@ -6,6 +6,7 @@ declare global {
       showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean }) => Promise<void>;
       onToggleWandering: (callback: () => void) => void;
       updateMood: (mood: string) => void;
+      onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
     };
   }
 }
@@ -70,12 +71,24 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat";
 }
 
 const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
 let ambientSpawnTimer = 0;
+
+// --- System Stress ---
+let cpuUsage = 0;
+let memUsage = 0;
+let stressLevel = 0; // 0-1 smoothed stress indicator
+let sweatSpawnTimer = 0;
+let isStressed = false; // true when stress > 0.5
+
+window.tamashii.onSystemStats((stats) => {
+  cpuUsage = stats.cpu;
+  memUsage = stats.mem;
+});
 
 // --- Speech Bubble ---
 interface SpeechBubble {
@@ -147,8 +160,19 @@ function getTimeMessages(): string[] {
   }
 }
 
+const stressMessages = [
+  "So much work...",
+  "CPU is on fire!",
+  "I'm overheating!",
+  "*panting*",
+  "Need a break...",
+  "Everything's busy!",
+];
+
 function spawnSpeechBubble(): void {
-  const messages = getTimeMessages();
+  // Stress messages override normal ones ~50% of the time when stressed
+  const useStress = isStressed && Math.random() < 0.5;
+  const messages = useStress ? stressMessages : getTimeMessages();
   const text = messages[Math.floor(Math.random() * messages.length)];
   speechBubble = { text, life: 180, maxLife: 180 }; // ~3 seconds
 }
@@ -244,17 +268,40 @@ function onPetClicked(): void {
 }
 
 // --- Drawing ---
+function lerpColor(hex: string, target: string, t: number): string {
+  const r1 = parseInt(hex.slice(1, 3), 16);
+  const g1 = parseInt(hex.slice(3, 5), 16);
+  const b1 = parseInt(hex.slice(5, 7), 16);
+  const r2 = parseInt(target.slice(1, 3), 16);
+  const g2 = parseInt(target.slice(3, 5), 16);
+  const b2 = parseInt(target.slice(5, 7), 16);
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
 function getBodyColors(): { body: string; stroke: string; belly: string; foot: string } {
+  let colors: { body: string; stroke: string; belly: string; foot: string };
   switch (currentTimeOfDay) {
     case "morning":
-      return { body: "#6B9DEF", stroke: "#4A7DD8", belly: "#99C4FF", foot: "#5A8AE0" };
+      colors = { body: "#6B9DEF", stroke: "#4A7DD8", belly: "#99C4FF", foot: "#5A8AE0" }; break;
     case "afternoon":
-      return { body: "#5B8DEE", stroke: "#3A6DD1", belly: "#89B4FA", foot: "#4A7ADB" };
+      colors = { body: "#5B8DEE", stroke: "#3A6DD1", belly: "#89B4FA", foot: "#4A7ADB" }; break;
     case "evening":
-      return { body: "#5577CC", stroke: "#3A5AAA", belly: "#7799DD", foot: "#4466BB" };
+      colors = { body: "#5577CC", stroke: "#3A5AAA", belly: "#7799DD", foot: "#4466BB" }; break;
     case "night":
-      return { body: "#4A66AA", stroke: "#334D88", belly: "#6688CC", foot: "#3B5599" };
+      colors = { body: "#4A66AA", stroke: "#334D88", belly: "#6688CC", foot: "#3B5599" }; break;
   }
+  // When stressed, shift body color toward warm/red
+  if (stressLevel > 0.3) {
+    const t = Math.min((stressLevel - 0.3) * 1.4, 0.4); // max 40% shift
+    colors.body = lerpColor(colors.body, "#CC7788", t);
+    colors.stroke = lerpColor(colors.stroke, "#AA5566", t);
+    colors.belly = lerpColor(colors.belly, "#DDAABB", t);
+    colors.foot = lerpColor(colors.foot, "#BB6677", t);
+  }
+  return colors;
 }
 
 function drawBody(cx: number, cy: number, size: number): void {
@@ -309,7 +356,36 @@ function drawFace(cx: number, cy: number, size: number): void {
   const eyeY = cy - 5;
   const eyeSpacing = size * 0.15;
 
-  if (isYawning) {
+  if (isStressed && !isHappy && !isYawning) {
+    // Stressed eyes — small, worried, with raised inner brows
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      // White (slightly smaller, tense)
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 7, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Pupil (smaller, darting)
+      const dartX = Math.sin(frame * 0.15) * 1.5;
+      ctx.beginPath();
+      ctx.ellipse(ex + dartX, eyeY + 1, 3, 4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fill();
+      // Eye shine
+      ctx.beginPath();
+      ctx.ellipse(ex + dartX + 2, eyeY - 2, 1.5, 1.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Worried brow — inner end raised
+      ctx.beginPath();
+      ctx.moveTo(ex - side * 9, eyeY - 10);
+      ctx.quadraticCurveTo(ex, eyeY - 14 - stressLevel * 3, ex + side * 9, eyeY - 10 + 3);
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  } else if (isYawning) {
     // Yawning: closed squeezed eyes
     for (const side of [-1, 1]) {
       ctx.beginPath();
@@ -381,7 +457,17 @@ function drawFace(cx: number, cy: number, size: number): void {
 
   // Mouth
   ctx.beginPath();
-  if (isYawning) {
+  if (isStressed && !isHappy && !isYawning) {
+    // Stressed mouth — wavy worried line
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy + 10);
+    ctx.quadraticCurveTo(cx - 4, cy + 7, cx, cy + 11);
+    ctx.quadraticCurveTo(cx + 4, cy + 15, cx + 8, cy + 10);
+    ctx.strokeStyle = "#1a1a2e";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  } else if (isYawning) {
     // Yawn mouth — open oval
     const yawnSize = Math.sin(yawnProgress * Math.PI) * 8;
     ctx.beginPath();
@@ -561,6 +647,29 @@ function drawStar(x: number, y: number, size: number, alpha: number, life: numbe
   ctx.beginPath();
   ctx.arc(0, 0, size * 1.5, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(200, 200, 255, ${alpha * twinkle * 0.15})`;
+  ctx.fill();
+  ctx.restore();
+}
+
+// --- Sweat Drop Drawing ---
+function drawSweat(x: number, y: number, size: number, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.8;
+  // Teardrop shape
+  ctx.beginPath();
+  ctx.moveTo(x, y - size * 0.8);
+  ctx.quadraticCurveTo(x + size * 0.6, y, x, y + size * 0.5);
+  ctx.quadraticCurveTo(x - size * 0.6, y, x, y - size * 0.8);
+  ctx.closePath();
+  ctx.fillStyle = "#88CCFF";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(100, 180, 255, 0.6)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  // Highlight
+  ctx.beginPath();
+  ctx.ellipse(x - size * 0.15, y - size * 0.2, size * 0.12, size * 0.2, -0.3, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
   ctx.fill();
   ctx.restore();
 }
@@ -836,6 +945,10 @@ function update(): void {
       p.vy *= 0.98;
     } else if (p.type === "star") {
       // Stars stay still — they just twinkle in place
+    } else if (p.type === "sweat") {
+      // Sweat drops fall and accelerate slightly
+      p.vy += 0.08;
+      p.vx *= 0.97;
     }
     p.vx *= 0.99;
     p.life--;
@@ -957,6 +1070,38 @@ function update(): void {
     if (landingSquish < 0.01) landingSquish = 0;
   }
 
+  // --- System stress update ---
+  // Combine CPU and memory into a stress value (CPU weighted more heavily)
+  const rawStress = Math.min((cpuUsage * 0.7 + memUsage * 0.3) / 100, 1);
+  // Smooth transition (slow ramp up, slow ramp down)
+  stressLevel += (rawStress - stressLevel) * 0.05;
+  isStressed = stressLevel > 0.4;
+
+  // Spawn sweat particles when stressed
+  if (isStressed && !isDragging) {
+    sweatSpawnTimer++;
+    // More sweat at higher stress — interval shrinks from ~50 to ~12 frames
+    const spawnInterval = Math.max(12, 50 - stressLevel * 40);
+    if (sweatSpawnTimer > spawnInterval) {
+      sweatSpawnTimer = 0;
+      const sweatCx = canvas.width / 2;
+      const sweatCy = canvas.height / 2;
+      const side = Math.random() < 0.5 ? -1 : 1;
+      particles.push({
+        x: sweatCx + side * (20 + Math.random() * 15),
+        y: sweatCy - 20 - Math.random() * 10,
+        vx: side * (0.3 + Math.random() * 0.4),
+        vy: 0.5 + Math.random() * 0.5,
+        life: 40 + Math.random() * 20,
+        maxLife: 40 + Math.random() * 20,
+        size: 4 + Math.random() * 3 + stressLevel * 2,
+        type: "sweat",
+      });
+    }
+  } else {
+    sweatSpawnTimer = 0;
+  }
+
   // Idle bounce (speed and amplitude vary by time of day)
   if (!isDragging) {
     const amplitude = getBounceAmplitude();
@@ -1020,6 +1165,8 @@ function draw(): void {
       drawFirefly(p.x, p.y, p.size, alpha, p.life);
     } else if (p.type === "star") {
       drawStar(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "sweat") {
+      drawSweat(p.x, p.y, p.size, alpha);
     }
   }
 

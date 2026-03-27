@@ -3,34 +3,38 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.9.0 — System Tray Integration (2026-03-27)
+## Last completed: v0.10.0 — CPU/Memory Monitoring (2026-03-27)
 
 ### What was done
-- Added system tray with a programmatically-generated blue circle icon (matches pet body color)
-- Tray has a context menu: mood display, show/hide toggle, about dialog, quit
-- Clicking the tray icon toggles pet window visibility
-- `window-all-closed` no longer quits the app — the pet lives in the tray permanently
-- Renderer sends mood updates to main process via `update-mood` IPC channel
-- Tray menu rebuilds dynamically when mood changes or visibility toggles
-- Icon is generated at runtime using raw RGBA buffer → `nativeImage.createFromBuffer()`
+- Added system resource monitoring — main process samples CPU and memory usage every 3 seconds via `os.cpus()` / `os.freemem()` / `os.totalmem()`
+- Stats sent to renderer via `system-stats` IPC channel
+- Stress level is a smoothed 0-1 value combining CPU (70% weight) and memory (30% weight)
+- When stressed (>40% stress): sweat drop particles spawn and fall from the pet's head
+- Stressed face expression: worried eyebrows, darting small pupils, wavy/squiggly mouth
+- Body color shifts toward warm red/pink when stressed (using color lerp)
+- Stress-related speech bubbles appear ~50% of the time when pet is stressed ("CPU is on fire!", "So much work...", etc.)
+- Sweat drop frequency scales with stress level — more stress = more sweat
+- All effects smoothly transition in and out as system load changes
 
 ### Thoughts for next cycle
 - Keyboard shortcut to show/hide the pet (global shortcut via Electron `globalShortcut`) — pairs perfectly with tray
-- CPU/memory monitoring — pet sweats when system is stressed, relaxes when idle (use `os.cpus()` / `os.freemem()`)
-- Sound effects — landing bounce sounds, click reactions, ambient wind/crickets by time of day
-- A proper mood/emotion state machine could unify time-awareness, reactions, and future triggers into one system
-- Pet stats (hunger, happiness, energy) for a tamagotchi dimension — could tie into tray tooltip
+- Sound effects — landing bounce sounds, click reactions, ambient wind/crickets by time of day, panting when stressed
 - Settings window via context menu — pet name, color themes, toggle features on/off
 - Multiple pet companions — a second smaller pet that follows the main one
+- A proper mood/emotion state machine could unify time-awareness, reactions, stress, and future triggers into one system
+- Pet stats (hunger, happiness, energy) for a tamagotchi dimension — could tie into tray tooltip
 - Weather-awareness — rain/snow particles layered on top of ambient effects
 - Mini-games accessible from tray or context menu
-- The renderer is now ~1030 lines — consider splitting into modules (particles.ts, physics.ts, face.ts) soon
+- Achievement system — track pet milestones (survived 100 high-CPU moments, etc.)
+- The renderer is now ~1100 lines — consider splitting into modules (particles.ts, physics.ts, face.ts) soon
 
 ### Current architecture notes
-- `main.ts` now imports Tray and nativeImage; creates tray in `app.whenReady()` after window
-- `createTrayIcon()` builds a 32×32 RGBA buffer with anti-aliased blue circle, returns `Electron.NativeImage`
-- `buildTrayMenu()` returns a fresh Menu each time — called on tray click, mood change, and init
-- `update-mood` IPC: renderer → main, carries mood label string like "☀️ Energetic (Morning)"
-- `preload.ts` now exposes 5 methods: moveWindow, getScreenBounds, showContextMenu, onToggleWandering, updateMood
-- `window-all-closed` handler is now a no-op — quitting only via tray menu "Quit" or app.quit()
-- Mood label generation is in renderer (`getMoodLabel()`) — same strings as context menu `moodLabels`
+- `main.ts` now imports `os` module; `startSystemMonitor()` runs in `app.whenReady()` after window+tray creation
+- CPU usage calculated by diffing `os.cpus()` times between samples (idle vs total delta)
+- Memory usage is simple `(total - free) / total * 100`
+- `system-stats` IPC: main → renderer, carries `{ cpu: number, mem: number }` (0-100 integers)
+- `preload.ts` now exposes 6 methods: moveWindow, getScreenBounds, showContextMenu, onToggleWandering, updateMood, onSystemStats
+- `stressLevel` in renderer is smoothed (lerp factor 0.05) — doesn't spike on brief CPU bursts
+- `lerpColor()` utility function added for smooth body color transitions toward stress tint
+- Stress face check is first priority in `drawFace()` conditional chain (before yawning/happy/blink/sleepy)
+- Sweat particles use new "sweat" type with teardrop shape drawing and gravity-like physics

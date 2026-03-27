@@ -3,6 +3,19 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.10.0] — 2026-03-27 — CPU/Memory Monitoring
+
+### Added
+- System resource awareness — Tamashii now monitors your CPU and memory usage in real time
+- **Sweat drops** when the system is under load — teardrop-shaped particles fall from the pet's head
+- **Stressed expression** — worried eyebrows, darting pupils, and a wavy worried mouth
+- **Body color shift** — the pet gradually turns warm pink/red as stress increases
+- **Stress speech bubbles** — the pet says things like "CPU is on fire!" and "Need a break..." when working hard
+- Stress response scales smoothly with system load — light load shows subtle concern, heavy load shows full panic
+- All effects transition smoothly as system load changes — no jarring state switches
+
+**Why this feature:** The pet was aware of time and responded to clicks, but was oblivious to what was happening on the system it lives on. CPU/memory monitoring makes the pet feel like a true desktop companion — it shares your computer's experience. When you're compiling a big project or running heavy tasks, your pet sweats alongside you. When things calm down, it relaxes. It's the most "desktop" a desktop pet can get.
+
 ## [v0.9.0] — 2026-03-27 — System Tray Integration
 
 ### Added
