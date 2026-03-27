@@ -3,34 +3,38 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.7.0 — Gravity & Bounce Physics (2026-03-26)
+## Last completed: v0.8.0 — Ambient Particle Effects (2026-03-27)
 
 ### What was done
-- Added gravity physics: when dragged up and released, the pet falls back to the bottom of the screen
-- Bounce mechanics with damping — pet bounces with decreasing energy until it settles
-- Landing squish effect proportional to impact speed (combines with existing click squish)
-- Dust particle puffs spawn on hard landings, with physics (slow down, settle)
-- Extended the Particle type to include "dust" alongside "heart" and "zzz"
-- Grabbing the pet mid-fall cancels the fall immediately
-- `totalSquish` combines `squishAmount` (click) and `landingSquish` (gravity) for the draw transform
+- Added four new ambient particle types, one for each time of day
+- Morning: golden sparkles with 4-pointed star shape that twinkle and drift upward with sine-wave sway
+- Afternoon: soft pollen motes with gentle glow halos that float lazily on the breeze
+- Evening: fireflies with pulsing bioluminescent glow and erratic wandering physics
+- Night: tiny twinkling stars that shimmer in place (stationary, complement existing zzz particles)
+- Each type has unique drawing code (sparkle rotation, firefly triple-layer glow, star twinkle)
+- Each type has unique physics in the particle update loop
+- Added `ambientSpawnTimer` to control spawn intervals per time of day
+- Extended the Particle `type` union to include "sparkle" | "pollen" | "firefly" | "star"
 
 ### Thoughts for next cycle
-- CPU/memory monitoring is a strong candidate — pet sweats when system is stressed, relaxes when idle
-- Particle variety by time of day: sparkles in morning, fireflies at evening, stars at night
+- System tray integration — minimize to tray, show/hide shortcut, tray icon with menu
+- Keyboard shortcut to show/hide the pet (global shortcut via Electron, pairs well with tray)
+- CPU/memory monitoring — pet sweats when system is stressed, relaxes when idle
 - A proper mood/emotion state machine could unify time-awareness, reactions, and future triggers
-- Pet stats (hunger, happiness, energy) for a tamagotchi dimension — could tie into gravity (heavy when full?)
+- Pet stats (hunger, happiness, energy) for a tamagotchi dimension
 - Settings window via the context menu — pet name, color themes, toggle features
-- System tray integration — minimize to tray, show/hide shortcut
-- The renderer is now ~800 lines — consider splitting into modules (particles.ts, physics.ts, face.ts) soon
 - Sound effects on bounce landing would pair perfectly with the gravity feature
-- Keyboard shortcut to show/hide the pet (global shortcut via Electron)
+- The renderer is now ~950 lines — consider splitting into modules (particles.ts, physics.ts, face.ts) soon
+- Weather-awareness could add rain/snow particles that layer on top of ambient effects
+- Multiple pet companions — a second smaller pet that follows the main one
 
 ### Current architecture notes
-- Gravity state: `isFalling`, `velocityY`, `groundY`, `landingSquish` — all in renderer.ts
-- `groundY` is calculated from screen bounds on drag release (screenHeight - 200 - GROUND_MARGIN)
-- `GRAVITY = 0.6`, `BOUNCE_DAMPING = 0.45` — tuned for satisfying bouncy feel
-- Landing squish decays at 0.85 per frame, separate from click squish (0.88 decay)
-- `totalSquish` caps at 1.2 to prevent over-stretching when click + landing overlap
-- Dust particles have their own physics: gravity pull (0.03), horizontal friction (0.96)
-- Falling is cancelled on mousedown (grab interrupts fall) and triggered on mouseup after drag
-- preload.ts still exposes 4 methods — no IPC changes needed for gravity (uses existing moveWindow + getScreenBounds)
+- Ambient particles use `ambientSpawnTimer` — single timer, reset differently per time of day
+- Spawn intervals: morning ~40-70f, afternoon ~60-100f, evening ~80-140f, night ~100-160f
+- Sparkles: 4-pointed star shape drawn with 8-vertex polygon, rotate over time, golden (#FFD700)
+- Pollen: simple circle with larger soft glow halo, warm color (#FFFACD), drifts right and down
+- Fireflies: 3-layer rendering (outer glow, inner glow, core), pulse with sin²(life*0.15), green-yellow
+- Stars: 4-pointed star like sparkle but different color (#E8E8FF), stay stationary, twinkle with sin²
+- Particle type union is now 7 members: heart, zzz, dust, sparkle, pollen, firefly, star
+- preload.ts still exposes 4 methods — no IPC changes needed for ambient particles
+- Night spawns both zzz (from existing code) and star particles (from new ambient code)

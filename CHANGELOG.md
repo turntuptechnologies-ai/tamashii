@@ -3,6 +3,19 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.8.0] — 2026-03-27 — Ambient Particle Effects
+
+### Added
+- Time-of-day ambient particles that create a living atmosphere around the pet
+- **Morning:** Golden sparkles drift upward with a gentle sway, catching the light
+- **Afternoon:** Soft pollen motes float lazily through the air with a warm glow
+- **Evening:** Fireflies wander erratically with pulsing green-yellow bioluminescence
+- **Night:** Tiny twinkling stars appear and shimmer in place (alongside existing zzz particles)
+- Each particle type has unique physics: sparkles sway, pollen drifts, fireflies wander randomly, stars stay still
+- Particles spawn at natural intervals — not too many, just enough for atmosphere
+
+**Why this feature:** The pet had personality, movement, and physics — but the space around it felt empty. Ambient particles give each time of day a distinct visual mood, making the pet's world feel alive and atmospheric. Morning feels bright and magical, evening feels warm and cozy, and night feels peaceful and starlit.
+
 ## [v0.7.0] — 2026-03-26 — Gravity & Bounce Physics
 
 ### Added

@@ -50,11 +50,12 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star";
 }
 
 const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
+let ambientSpawnTimer = 0;
 
 // --- Speech Bubble ---
 interface SpeechBubble {
@@ -456,6 +457,94 @@ function drawDust(x: number, y: number, size: number, alpha: number): void {
   ctx.restore();
 }
 
+// --- Sparkle Drawing (morning) ---
+function drawSparkle(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(life * 0.3)); // twinkle
+  ctx.translate(x, y);
+  ctx.rotate(life * 0.05);
+  // 4-pointed star
+  const outer = size;
+  const inner = size * 0.3;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const angle = (i * Math.PI) / 4;
+    if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+    else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "#FFD700";
+  ctx.fill();
+  ctx.restore();
+}
+
+// --- Pollen Drawing (afternoon) ---
+function drawPollen(x: number, y: number, size: number, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.4;
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFFACD";
+  ctx.fill();
+  // Soft glow
+  ctx.beginPath();
+  ctx.arc(x, y, size * 2, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255, 250, 205, ${alpha * 0.15})`;
+  ctx.fill();
+  ctx.restore();
+}
+
+// --- Firefly Drawing (evening) ---
+function drawFirefly(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  const pulse = 0.4 + 0.6 * Math.sin(life * 0.15) ** 2; // soft pulsing glow
+  ctx.globalAlpha = alpha * pulse;
+  // Outer glow
+  ctx.beginPath();
+  ctx.arc(x, y, size * 3, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200, 255, 100, ${alpha * pulse * 0.2})`;
+  ctx.fill();
+  // Inner glow
+  ctx.beginPath();
+  ctx.arc(x, y, size * 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(220, 255, 150, ${alpha * pulse * 0.4})`;
+  ctx.fill();
+  // Core
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.7, 0, Math.PI * 2);
+  ctx.fillStyle = "#EEFFAA";
+  ctx.fill();
+  ctx.restore();
+}
+
+// --- Star Drawing (night) ---
+function drawStar(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  const twinkle = 0.3 + 0.7 * Math.sin(life * 0.2) ** 2;
+  ctx.globalAlpha = alpha * twinkle;
+  ctx.translate(x, y);
+  // Tiny 4-pointed star
+  const outer = size * 0.8;
+  const inner = size * 0.2;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const angle = (i * Math.PI) / 4 - Math.PI / 2;
+    if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+    else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "#E8E8FF";
+  ctx.fill();
+  // Soft glow around
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200, 200, 255, ${alpha * twinkle * 0.15})`;
+  ctx.fill();
+  ctx.restore();
+}
+
 // --- Speech Bubble Drawing ---
 function drawSpeechBubble(cx: number, petTopY: number): void {
   if (!speechBubble) return;
@@ -617,6 +706,72 @@ function update(): void {
     }
   }
 
+  // Ambient particle spawning (time-of-day effects)
+  ambientSpawnTimer++;
+  const cx2 = canvas.width / 2;
+  const cy2 = canvas.height / 2;
+  if (currentTimeOfDay === "morning") {
+    // Golden sparkles — every ~40-70 frames
+    if (ambientSpawnTimer > 40 + Math.random() * 30) {
+      ambientSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 120,
+        y: cy2 + (Math.random() - 0.5) * 80,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -(0.2 + Math.random() * 0.3),
+        life: 80 + Math.random() * 40,
+        maxLife: 80 + Math.random() * 40,
+        size: 3 + Math.random() * 3,
+        type: "sparkle",
+      });
+    }
+  } else if (currentTimeOfDay === "afternoon") {
+    // Floating pollen — every ~60-100 frames
+    if (ambientSpawnTimer > 60 + Math.random() * 40) {
+      ambientSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 140,
+        y: cy2 - 40 - Math.random() * 30,
+        vx: 0.1 + Math.random() * 0.2,
+        vy: 0.1 + Math.random() * 0.15,
+        life: 120 + Math.random() * 60,
+        maxLife: 120 + Math.random() * 60,
+        size: 1.5 + Math.random() * 1.5,
+        type: "pollen",
+      });
+    }
+  } else if (currentTimeOfDay === "evening") {
+    // Fireflies — every ~80-140 frames
+    if (ambientSpawnTimer > 80 + Math.random() * 60) {
+      ambientSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 150,
+        y: cy2 + (Math.random() - 0.5) * 100,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.3,
+        life: 150 + Math.random() * 80,
+        maxLife: 150 + Math.random() * 80,
+        size: 2 + Math.random() * 2,
+        type: "firefly",
+      });
+    }
+  } else if (currentTimeOfDay === "night") {
+    // Twinkling stars — every ~100-160 frames
+    if (ambientSpawnTimer > 100 + Math.random() * 60) {
+      ambientSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 160,
+        y: cy2 - 20 - Math.random() * 60,
+        vx: 0,
+        vy: 0,
+        life: 180 + Math.random() * 120,
+        maxLife: 180 + Math.random() * 120,
+        size: 2 + Math.random() * 2.5,
+        type: "star",
+      });
+    }
+  }
+
   // Speech bubble logic
   if (speechBubble) {
     speechBubble.life--;
@@ -646,6 +801,21 @@ function update(): void {
       // Dust puffs slow down and settle
       p.vy += 0.03;
       p.vx *= 0.96;
+    } else if (p.type === "sparkle") {
+      // Sparkles drift upward with gentle sway
+      p.vx = Math.sin(p.life * 0.08) * 0.3;
+    } else if (p.type === "pollen") {
+      // Pollen drifts lazily with sine wave
+      p.vx = Math.sin(p.life * 0.04) * 0.2 + 0.1;
+      p.vy = Math.sin(p.life * 0.06) * 0.1 + 0.05;
+    } else if (p.type === "firefly") {
+      // Fireflies wander erratically
+      p.vx += (Math.random() - 0.5) * 0.08;
+      p.vy += (Math.random() - 0.5) * 0.06;
+      p.vx *= 0.98;
+      p.vy *= 0.98;
+    } else if (p.type === "star") {
+      // Stars stay still — they just twinkle in place
     }
     p.vx *= 0.99;
     p.life--;
@@ -822,6 +992,14 @@ function draw(): void {
       drawZzz(p.x, p.y, p.size, alpha);
     } else if (p.type === "dust") {
       drawDust(p.x, p.y, p.size, alpha);
+    } else if (p.type === "sparkle") {
+      drawSparkle(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "pollen") {
+      drawPollen(p.x, p.y, p.size, alpha);
+    } else if (p.type === "firefly") {
+      drawFirefly(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "star") {
+      drawStar(p.x, p.y, p.size, alpha, p.life);
     }
   }
 
