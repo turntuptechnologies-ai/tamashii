@@ -19,4 +19,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => {
     ipcRenderer.on("system-stats", (_event, stats) => callback(stats));
   },
+  onShortcutToggled: (callback: (shown: boolean) => void) => {
+    ipcRenderer.on("shortcut-toggled", (_event, shown) => callback(shown));
+  },
 });

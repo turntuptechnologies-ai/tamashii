@@ -7,6 +7,7 @@ declare global {
       onToggleWandering: (callback: () => void) => void;
       updateMood: (mood: string) => void;
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
+      onShortcutToggled: (callback: (shown: boolean) => void) => void;
     };
   }
 }
@@ -168,6 +169,42 @@ const stressMessages = [
   "Need a break...",
   "Everything's busy!",
 ];
+
+const shortcutGreetings = [
+  "I'm back!",
+  "You called?",
+  "Miss me? ♥",
+  "Here I am!",
+  "Ta-da~!",
+  "Reporting in!",
+];
+
+// When pet is shown via keyboard shortcut, greet with a speech bubble + happy reaction
+window.tamashii.onShortcutToggled((shown) => {
+  if (shown) {
+    const msg = shortcutGreetings[Math.floor(Math.random() * shortcutGreetings.length)];
+    speechBubble = { text: msg, life: 150, maxLife: 150 };
+    // Happy reaction
+    squishAmount = 0.7;
+    isHappy = true;
+    happyTimer = 45;
+    // Spawn a few hearts
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    for (let i = 0; i < 3; i++) {
+      particles.push({
+        x: cx + (Math.random() - 0.5) * 30,
+        y: cy - 10,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -(1.2 + Math.random() * 1),
+        life: 50 + Math.random() * 20,
+        maxLife: 50 + Math.random() * 20,
+        size: 5 + Math.random() * 3,
+        type: "heart",
+      });
+    }
+  }
+});
 
 function spawnSpeechBubble(): void {
   // Stress messages override normal ones ~50% of the time when stressed

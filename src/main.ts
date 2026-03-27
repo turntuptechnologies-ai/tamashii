@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog } from "electron";
+import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog, globalShortcut } from "electron";
 import * as path from "path";
 import * as os from "os";
 
@@ -78,7 +78,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.10.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.11.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -128,13 +128,9 @@ function buildTrayMenu(): Menu {
     { type: "separator" },
     {
       label: mainWindow?.isVisible() ? "Hide Pet" : "Show Pet",
+      accelerator: TOGGLE_SHORTCUT,
       click: () => {
-        if (mainWindow?.isVisible()) {
-          mainWindow.hide();
-        } else {
-          mainWindow?.show();
-          mainWindow?.focus();
-        }
+        togglePetVisibility();
       },
     },
     { type: "separator" },
@@ -147,7 +143,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.10.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.11.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
@@ -166,13 +162,7 @@ function createTray(): void {
 
   // Click tray icon to toggle visibility
   tray.on("click", () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow?.show();
-      mainWindow?.focus();
-    }
-    tray?.setContextMenu(buildTrayMenu());
+    togglePetVisibility();
   });
 }
 
@@ -229,10 +219,40 @@ function startSystemMonitor(): void {
   }, 3000);
 }
 
+// --- Global Keyboard Shortcut ---
+const TOGGLE_SHORTCUT = "CmdOrCtrl+Shift+T";
+
+function togglePetVisibility(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+    // Notify renderer that pet was shown via shortcut
+    mainWindow.webContents.send("shortcut-toggled", true);
+  }
+  tray?.setContextMenu(buildTrayMenu());
+}
+
+function registerGlobalShortcut(): void {
+  const registered = globalShortcut.register(TOGGLE_SHORTCUT, () => {
+    togglePetVisibility();
+  });
+  if (!registered) {
+    console.warn(`Failed to register global shortcut: ${TOGGLE_SHORTCUT}`);
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
   startSystemMonitor();
+  registerGlobalShortcut();
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {

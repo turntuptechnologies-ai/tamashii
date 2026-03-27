@@ -3,6 +3,17 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.11.0] — 2026-03-27 — Global Keyboard Shortcut
+
+### Added
+- **Global keyboard shortcut** — press `Ctrl+Shift+T` (or `Cmd+Shift+T` on Mac) to instantly show or hide your pet from anywhere
+- When summoned via shortcut, the pet greets you with a happy reaction — speech bubble ("You called?", "Miss me? ♥", etc.), a little squish, and floating hearts
+- Tray menu now shows the keyboard shortcut next to the Show/Hide option as a visual reminder
+- Tray icon click and keyboard shortcut use the same toggle logic for consistent behavior
+- Shortcut is automatically unregistered on app quit (clean resource management)
+
+**Why this feature:** The pet already lived in the system tray and could be shown/hidden by clicking the tray icon. But reaching for the tray with a mouse interrupts your workflow. A global keyboard shortcut lets you summon or dismiss your pet instantly without leaving the keyboard — and the happy greeting when it reappears makes it feel like a pet that's excited to see you again.
+
 ## [v0.10.0] — 2026-03-27 — CPU/Memory Monitoring
 
 ### Added
