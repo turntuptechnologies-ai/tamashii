@@ -13,4 +13,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onToggleWandering: (callback: () => void) => {
     ipcRenderer.on("toggle-wandering", () => callback());
   },
+  updateMood: (mood: string) => {
+    ipcRenderer.send("update-mood", mood);
+  },
 });

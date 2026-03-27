@@ -5,6 +5,7 @@ declare global {
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
       showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean }) => Promise<void>;
       onToggleWandering: (callback: () => void) => void;
+      updateMood: (mood: string) => void;
     };
   }
 }
@@ -24,8 +25,27 @@ function getTimeOfDay(): TimeOfDay {
 }
 
 let currentTimeOfDay: TimeOfDay = getTimeOfDay();
+
+function getMoodLabel(tod: TimeOfDay): string {
+  switch (tod) {
+    case "morning": return "☀️ Energetic (Morning)";
+    case "afternoon": return "🌤️ Content (Afternoon)";
+    case "evening": return "🌅 Winding Down (Evening)";
+    case "night": return "🌙 Sleepy (Night)";
+  }
+}
+
+// Report initial mood to tray
+window.tamashii.updateMood(getMoodLabel(currentTimeOfDay));
+
 // Re-check time every 60 seconds
-setInterval(() => { currentTimeOfDay = getTimeOfDay(); }, 60000);
+setInterval(() => {
+  const newTime = getTimeOfDay();
+  if (newTime !== currentTimeOfDay) {
+    currentTimeOfDay = newTime;
+    window.tamashii.updateMood(getMoodLabel(currentTimeOfDay));
+  }
+}, 60000);
 
 // --- State ---
 let frame = 0;

@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.9.0] — 2026-03-27 — System Tray Integration
+
+### Added
+- System tray icon — Tamashii now lives in your system tray with a blue circle icon matching the pet's body color
+- Tray context menu with mood display, show/hide toggle, about dialog, and quit
+- Click the tray icon to toggle pet visibility (show/hide)
+- Closing the window hides the pet to tray instead of quitting — your pet is always there
+- Mood updates live in the tray menu as the time of day changes
+- Renderer reports mood changes to the main process via IPC so the tray stays in sync
+
+**Why this feature:** The pet had personality, movement, physics, and atmosphere — but no persistent desktop presence. If you accidentally closed it or wanted it out of the way temporarily, it was gone. System tray integration gives the pet a permanent home: it's always one click away, and the tray menu provides a quick glance at its mood without needing to find the window.
+
 ## [v0.8.0] — 2026-03-27 — Ambient Particle Effects
 
 ### Added
