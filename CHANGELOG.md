@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.12.0] — 2026-03-28 — Double-Click Spin Trick
+
+### Added
+- **Double-click spin trick** — double-click the pet and it does a full 360° backflip!
+- Smooth eased rotation with a little hop at the peak — the pet lifts off the ground mid-spin
+- Sparkle burst radiates outward in all directions when the spin starts
+- Excited speech bubbles: "Wheee~!", "Watch this!", "Ta-da~!", "Spin spin!", "I'm dizzy!", "Again again!"
+- Landing squish when the spin completes for a satisfying finish
+- Single clicks still work normally (squish + hearts) — the double-click is a distinct interaction
+
+**Why this feature:** The pet responded to single clicks with a happy squish, but there was no way to make it do tricks. Double-click adds a second layer of interaction — it feels like teaching your pet a trick. The backflip is pure joy: you double-click, it launches into a spin with sparkles, and lands with a little bounce. It makes you want to do it again.
+
 ## [v0.11.0] — 2026-03-27 — Global Keyboard Shortcut
 
 ### Added

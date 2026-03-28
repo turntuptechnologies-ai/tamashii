@@ -64,6 +64,14 @@ let squishAmount = 0; // 0 = normal, positive = squished
 let isHappy = false;
 let happyTimer = 0;
 
+// --- Spin Trick (double-click) ---
+let isSpinning = false;
+let spinProgress = 0; // 0 to 1
+const SPIN_DURATION = 40; // frames for a full spin
+let spinFrame = 0;
+let lastClickTime = 0;
+const DOUBLE_CLICK_THRESHOLD = 400; // ms
+
 interface Particle {
   x: number;
   y: number;
@@ -281,8 +289,57 @@ window.tamashii.onToggleWandering(() => {
   }
 });
 
+const spinMessages = [
+  "Wheee~!",
+  "Watch this!",
+  "Ta-da~!",
+  "Spin spin!",
+  "I'm dizzy!",
+  "Again again!",
+];
+
+function startSpin(): void {
+  isSpinning = true;
+  spinProgress = 0;
+  spinFrame = 0;
+  isHappy = true;
+  happyTimer = SPIN_DURATION + 20;
+  squishAmount = 0.5;
+
+  // Speech bubble
+  const msg = spinMessages[Math.floor(Math.random() * spinMessages.length)];
+  speechBubble = { text: msg, life: 120, maxLife: 120 };
+
+  // Burst of sparkles around the pet
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 20,
+      y: cy + Math.sin(angle) * 15,
+      vx: Math.cos(angle) * 1.5,
+      vy: Math.sin(angle) * 1.2,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 3 + Math.random() * 3,
+      type: "sparkle",
+    });
+  }
+}
+
 function onPetClicked(): void {
-  // Trigger squish
+  const now = Date.now();
+  const timeSinceLastClick = now - lastClickTime;
+  lastClickTime = now;
+
+  // Double-click detection — trigger spin trick
+  if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && !isSpinning) {
+    startSpin();
+    return;
+  }
+
+  // Regular single click — squish + hearts
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
@@ -852,6 +909,19 @@ function update(): void {
     if (squishAmount < 0.01) squishAmount = 0;
   }
 
+  // Spin trick update
+  if (isSpinning) {
+    spinFrame++;
+    spinProgress = spinFrame / SPIN_DURATION;
+    if (spinProgress >= 1) {
+      isSpinning = false;
+      spinProgress = 0;
+      spinFrame = 0;
+      // Landing squish after spin
+      squishAmount = 0.6;
+    }
+  }
+
   // Spawn zzz particles when sleepy
   if (currentTimeOfDay === "night") {
     zzzSpawnTimer++;
@@ -1163,18 +1233,30 @@ function draw(): void {
   ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
   ctx.fill();
 
-  // Apply squish + wander lean transform
+  // Apply squish + wander lean + spin transform
   ctx.save();
   const feetY = canvas.height / 2 + size * 0.35;
-  if (totalSquish > 0) {
+  if (totalSquish > 0 && !isSpinning) {
     const scaleX = 1 + totalSquish * 0.15;
     const scaleY = 1 - totalSquish * 0.15;
     ctx.translate(cx, feetY);
     ctx.scale(scaleX, scaleY);
     ctx.translate(-cx, -feetY);
   }
+  // Spin trick — full 360° backflip rotation around center
+  if (isSpinning) {
+    const spinAngle = spinProgress * Math.PI * 2;
+    // Ease-in-out: slow start and end, fast in the middle
+    const eased = 0.5 - 0.5 * Math.cos(spinProgress * Math.PI);
+    const easedAngle = eased * Math.PI * 2;
+    // Slight vertical hop during spin (parabolic arc)
+    const hopHeight = Math.sin(spinProgress * Math.PI) * 15;
+    ctx.translate(cx, cy - hopHeight);
+    ctx.rotate(easedAngle);
+    ctx.translate(-cx, -cy);
+  }
   // Lean tilt when wandering (rotate around feet)
-  if (Math.abs(wanderLean) > 0.01) {
+  if (Math.abs(wanderLean) > 0.01 && !isSpinning) {
     ctx.translate(cx, feetY);
     ctx.rotate(wanderLean * 0.06); // subtle tilt, ~3.4 degrees max
     ctx.translate(-cx, -feetY);
