@@ -25,4 +25,10 @@ contextBridge.exposeInMainWorld("tamashii", {
   updateAchievements: (data: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] }) => {
     ipcRenderer.send("update-achievements", data);
   },
+  loadSaveData: (): Promise<unknown> => {
+    return ipcRenderer.invoke("load-save-data");
+  },
+  saveData: (data: unknown) => {
+    ipcRenderer.send("save-data", data);
+  },
 });

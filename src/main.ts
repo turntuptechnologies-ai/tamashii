@@ -1,6 +1,7 @@
 import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog, globalShortcut } from "electron";
 import * as path from "path";
 import * as os from "os";
+import * as fs from "fs";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -95,7 +96,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.14.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.15.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -172,7 +173,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.14.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.15.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
@@ -278,6 +279,33 @@ function registerGlobalShortcut(): void {
     console.warn(`Failed to register global shortcut: ${TOGGLE_SHORTCUT}`);
   }
 }
+
+// --- Persistent Save Data ---
+function getSavePath(): string {
+  return path.join(app.getPath("userData"), "tamashii-save.json");
+}
+
+ipcMain.handle("load-save-data", () => {
+  const savePath = getSavePath();
+  try {
+    if (fs.existsSync(savePath)) {
+      const raw = fs.readFileSync(savePath, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.warn("Failed to load save data:", err);
+  }
+  return null;
+});
+
+ipcMain.on("save-data", (_event, data: unknown) => {
+  const savePath = getSavePath();
+  try {
+    fs.writeFileSync(savePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to save data:", err);
+  }
+});
 
 app.whenReady().then(() => {
   createWindow();

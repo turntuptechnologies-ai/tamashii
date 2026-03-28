@@ -3,6 +3,19 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.15.0] — 2026-03-28 — Persistent Memory
+
+### Added
+- **Persistent save system** — your pet now remembers you between sessions
+- Click count, spin count, bounce count, stress survival count, and total session time are saved automatically
+- **Achievements persist** — unlocked achievements are saved and restored when you relaunch
+- Time-based achievements (Old Friend, Best Friends) now accumulate across sessions, not just the current one
+- Auto-saves every ~10 seconds and on window close — no progress is ever lost
+- **Welcome back greeting** — returning players get a "I remember you! ♥" speech bubble with a happy reaction
+- Save file stored in Electron's user data directory (`tamashii-save.json`)
+
+**Why this feature:** The pet had a rich achievement system and tracked all kinds of interactions — but everything vanished the moment you closed the app. That made achievements feel hollow: why click 500 times if the counter resets? Persistent memory gives every interaction lasting meaning. Your pet genuinely remembers you. The "I remember you!" greeting when you come back makes it feel like a real companion that was waiting for you.
+
 ## [v0.14.0] — 2026-03-28 — Butterfly Companion
 
 ### Added

@@ -9,6 +9,8 @@ declare global {
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
       onShortcutToggled: (callback: (shown: boolean) => void) => void;
       updateAchievements: (data: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] }) => void;
+      loadSaveData: () => Promise<unknown>;
+      saveData: (data: unknown) => void;
     };
   }
 }
@@ -450,6 +452,75 @@ function reportAchievements(): void {
   const unlocked = getUnlockedAchievements();
   window.tamashii.updateAchievements({ progress, unlocked });
 }
+
+// --- Persistent Save/Load ---
+interface SaveData {
+  totalClicks: number;
+  totalSpins: number;
+  totalBounces: number;
+  stressSurvivedCount: number;
+  totalSessionTime: number; // accumulated ms across all sessions
+  unlockedAchievements: string[]; // achievement IDs
+  version: number;
+}
+
+let totalSessionTime = 0; // accumulated from previous sessions
+let saveTimer = 0;
+const SAVE_INTERVAL = 600; // save every ~10 seconds (600 frames at 60fps)
+
+function buildSaveData(): SaveData {
+  const currentSessionMs = Date.now() - sessionStartTime;
+  return {
+    totalClicks,
+    totalSpins,
+    totalBounces,
+    stressSurvivedCount,
+    totalSessionTime: totalSessionTime + currentSessionMs,
+    unlockedAchievements: achievements.filter(a => a.unlocked).map(a => a.id),
+    version: 1,
+  };
+}
+
+function applySaveData(data: SaveData): void {
+  totalClicks = data.totalClicks || 0;
+  totalSpins = data.totalSpins || 0;
+  totalBounces = data.totalBounces || 0;
+  stressSurvivedCount = data.stressSurvivedCount || 0;
+  totalSessionTime = data.totalSessionTime || 0;
+
+  // Restore unlocked achievements
+  if (data.unlockedAchievements) {
+    for (const id of data.unlockedAchievements) {
+      const a = achievements.find(ach => ach.id === id);
+      if (a) a.unlocked = true;
+    }
+  }
+
+  // Update session start so time-based achievements account for accumulated time
+  sessionStartTime = Date.now() - totalSessionTime;
+
+  // Sync achievement state to main process
+  reportAchievements();
+}
+
+function saveGame(): void {
+  window.tamashii.saveData(buildSaveData());
+}
+
+// Load on startup
+window.tamashii.loadSaveData().then((raw) => {
+  if (raw && typeof raw === "object") {
+    applySaveData(raw as SaveData);
+    // Welcome back message if returning player
+    const data = raw as SaveData;
+    if (data.totalClicks > 0 || data.totalSpins > 0) {
+      speechBubble = { text: "I remember you! ♥", life: 180, maxLife: 180 };
+      squishAmount = 0.5;
+      isHappy = true;
+      happyTimer = 60;
+    }
+  }
+});
 
 function startSpin(): void {
   totalSpins++;
@@ -1361,6 +1432,13 @@ function update(): void {
     checkAchievements();
   }
 
+  // Auto-save periodically
+  saveTimer++;
+  if (saveTimer >= SAVE_INTERVAL) {
+    saveTimer = 0;
+    saveGame();
+  }
+
   // Spawn sweat particles when stressed
   if (isStressed && !isDragging) {
     sweatSpawnTimer++;
@@ -1682,5 +1760,10 @@ function drawButterfly(): void {
 
   ctx.restore();
 }
+
+// Save when window is about to close
+window.addEventListener("beforeunload", () => {
+  saveGame();
+});
 
 export {};
