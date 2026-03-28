@@ -1393,6 +1393,9 @@ function update(): void {
     if (bounceOffset > amplitude) bounceDirection = -1;
     if (bounceOffset < -amplitude) bounceDirection = 1;
   }
+
+  // Butterfly companion
+  updateButterfly();
 }
 
 function draw(): void {
@@ -1466,6 +1469,9 @@ function draw(): void {
     }
   }
 
+  // Butterfly companion (drawn above particles, below speech bubble)
+  drawButterfly();
+
   // Achievement celebration glow
   if (achievementCelebrating) {
     const glowAlpha = achievementCelebrationTimer / 60;
@@ -1493,5 +1499,188 @@ loop();
 
 // Report initial achievement state
 reportAchievements();
+
+// --- Butterfly Companion ---
+interface Butterfly {
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  wingAngle: number;    // 0-1 for wing flap cycle
+  wingSpeed: number;
+  state: "flying" | "resting" | "approaching";
+  stateTimer: number;
+  restTimer: number;
+  hue: number;          // color hue (degrees)
+  size: number;
+  wobblePhase: number;
+}
+
+const butterfly: Butterfly = {
+  x: canvas.width / 2 + 30,
+  y: canvas.height / 2 - 40,
+  targetX: canvas.width / 2 + 30,
+  targetY: canvas.height / 2 - 40,
+  wingAngle: 0,
+  wingSpeed: 0.15,
+  state: "flying",
+  stateTimer: 120 + Math.floor(Math.random() * 180),
+  restTimer: 0,
+  hue: 280, // purple-ish
+  size: 6,
+  wobblePhase: Math.random() * Math.PI * 2,
+};
+
+function updateButterfly(): void {
+  const petCx = canvas.width / 2;
+  const petCy = canvas.height / 2 + bounceOffset;
+
+  // Wing flapping
+  const flapSpeed = butterfly.state === "resting" ? 0.02 : butterfly.wingSpeed;
+  butterfly.wingAngle += flapSpeed;
+  if (butterfly.wingAngle > 1) butterfly.wingAngle -= 1;
+
+  // Wobble phase for gentle oscillation
+  butterfly.wobblePhase += 0.04;
+
+  butterfly.stateTimer--;
+
+  // Time-of-day behavior
+  const isNightTime = currentTimeOfDay === "night";
+  const activityMult = isNightTime ? 0.3 : currentTimeOfDay === "morning" ? 1.2 : 1.0;
+
+  if (butterfly.state === "flying") {
+    // Pick a new wander target near the pet
+    if (butterfly.stateTimer <= 0 || distTo(butterfly.x, butterfly.y, butterfly.targetX, butterfly.targetY) < 5) {
+      // Chance to land on the pet
+      const restChance = isNightTime ? 0.6 : 0.2;
+      if (Math.random() < restChance) {
+        butterfly.state = "approaching";
+        // Land on top of pet's head
+        butterfly.targetX = petCx + (Math.random() - 0.5) * 20;
+        butterfly.targetY = petCy - 35;
+        butterfly.stateTimer = 200;
+      } else {
+        // New flying target
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30 + Math.random() * 50;
+        butterfly.targetX = petCx + Math.cos(angle) * dist;
+        butterfly.targetY = petCy - 20 + Math.sin(angle) * dist * 0.5;
+        // Keep within canvas bounds
+        butterfly.targetX = Math.max(10, Math.min(canvas.width - 10, butterfly.targetX));
+        butterfly.targetY = Math.max(10, Math.min(canvas.height - 30, butterfly.targetY));
+        butterfly.stateTimer = 60 + Math.floor(Math.random() * 120 * activityMult);
+      }
+    }
+
+    // Move toward target with gentle sine wobble
+    const dx = butterfly.targetX - butterfly.x;
+    const dy = butterfly.targetY - butterfly.y;
+    const speed = 0.8 * activityMult;
+    butterfly.x += dx * 0.03 * speed;
+    butterfly.y += dy * 0.03 * speed + Math.sin(butterfly.wobblePhase) * 0.5;
+    butterfly.wingSpeed = 0.12 + activityMult * 0.05;
+
+  } else if (butterfly.state === "approaching") {
+    // Fly toward landing spot
+    const dx = butterfly.targetX - butterfly.x;
+    const dy = butterfly.targetY - butterfly.y;
+    butterfly.x += dx * 0.06;
+    butterfly.y += dy * 0.06;
+    butterfly.wingSpeed = 0.1;
+
+    if (distTo(butterfly.x, butterfly.y, butterfly.targetX, butterfly.targetY) < 3 || butterfly.stateTimer <= 0) {
+      butterfly.state = "resting";
+      butterfly.x = butterfly.targetX;
+      butterfly.y = butterfly.targetY;
+      // Rest for 3-8 seconds (longer at night)
+      const restDuration = isNightTime ? 300 + Math.random() * 300 : 180 + Math.random() * 300;
+      butterfly.restTimer = Math.floor(restDuration);
+      butterfly.stateTimer = butterfly.restTimer;
+    }
+
+  } else if (butterfly.state === "resting") {
+    // Sit on the pet's head, follow bounce
+    butterfly.x = petCx + (butterfly.targetX - petCx) * 0.3;
+    butterfly.y = petCy - 35 + Math.sin(butterfly.wobblePhase * 0.5) * 0.5;
+
+    if (butterfly.stateTimer <= 0 || isDragging || isSpinning) {
+      // Take off!
+      butterfly.state = "flying";
+      butterfly.stateTimer = 90 + Math.floor(Math.random() * 120);
+      butterfly.targetY = butterfly.y - 20;
+    }
+  }
+}
+
+function distTo(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+function drawButterfly(): void {
+  const { x, y, wingAngle, hue, size, state } = butterfly;
+  const wingOpen = Math.abs(Math.sin(wingAngle * Math.PI * 2)); // 0-1
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Slight tilt based on movement direction
+  if (state !== "resting") {
+    const tilt = (butterfly.targetX - x) * 0.005;
+    ctx.rotate(Math.max(-0.3, Math.min(0.3, tilt)));
+  }
+
+  // Wings — two pairs, mirrored
+  const wingSpan = size * (0.6 + wingOpen * 1.2);
+  const wingH = size * (0.4 + wingOpen * 0.6);
+
+  // Upper wings
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * wingSpan * 0.5, -wingH * 0.2, wingSpan * 0.55, wingH * 0.7, side * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${hue}, 70%, 65%, ${0.7 + wingOpen * 0.2})`;
+    ctx.fill();
+    ctx.strokeStyle = `hsla(${hue}, 60%, 45%, 0.5)`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Wing pattern dot
+    ctx.beginPath();
+    ctx.arc(side * wingSpan * 0.45, -wingH * 0.15, size * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${(hue + 40) % 360}, 80%, 80%, ${0.5 + wingOpen * 0.3})`;
+    ctx.fill();
+  }
+
+  // Lower wings (smaller)
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(side * wingSpan * 0.35, wingH * 0.3, wingSpan * 0.35, wingH * 0.5, side * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${(hue + 20) % 360}, 65%, 60%, ${0.6 + wingOpen * 0.2})`;
+    ctx.fill();
+  }
+
+  // Body (tiny oval)
+  ctx.beginPath();
+  ctx.ellipse(0, 0, size * 0.15, size * 0.4, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `hsl(${hue}, 40%, 30%)`;
+  ctx.fill();
+
+  // Antennae
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, -size * 0.3);
+    ctx.quadraticCurveTo(side * size * 0.3, -size * 0.8, side * size * 0.4, -size * 0.9);
+    ctx.strokeStyle = `hsl(${hue}, 40%, 30%)`;
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    // Antenna tip
+    ctx.beginPath();
+    ctx.arc(side * size * 0.4, -size * 0.9, 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = `hsl(${hue}, 40%, 30%)`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 
 export {};

@@ -3,6 +3,21 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.14.0] — 2026-03-28 — Butterfly Companion
+
+### Added
+- **Butterfly companion** — a tiny purple butterfly that flutters around your pet, keeping it company
+- The butterfly has animated wings that flap open and closed with smooth sine-wave motion
+- **Three behavior states:** flying (wandering near the pet), approaching (heading to land), and resting (sitting on the pet's head)
+- The butterfly picks random points near the pet and drifts toward them with a gentle bobbing flight path
+- Occasionally lands on the pet's head and rests there, following the pet's idle bounce
+- **Time-of-day behavior:** more active and faster in the morning, calmer in the afternoon, rests more often at night
+- Gets startled and takes off if you drag or spin the pet while it's resting
+- Detailed wing rendering with upper and lower wing pairs, wing pattern dots, body, and curly antennae
+- Wings use HSL colors with subtle translucency that shifts as they open and close
+
+**Why this feature:** The pet had a rich world — particles, weather, physics, achievements — but it was always alone. A butterfly companion adds a second living presence that makes the scene feel more alive. It's the kind of thing you notice in the corner of your eye: a tiny purple flutter near your pet's head. And when it lands and rests, it feels like your pet made a friend.
+
 ## [v0.13.0] — 2026-03-28 — Achievement System
 
 ### Added
