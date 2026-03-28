@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.13.0] — 2026-03-28 — Achievement System
+
+### Added
+- **Achievement system** — 12 achievements that unlock as you interact with your pet
+- Milestones tracked: clicks, spins, gravity bounces, high-stress survival, and session time
+- **Celebration animation** on unlock — golden glow, sparkle burst, heart shower, and a unique speech bubble
+- **Achievements in context menu** — right-click to see your progress (unlocked/total) with a submenu listing earned achievements
+- **Achievements in tray menu** — quick glance at your collection from the system tray
+- Achievements include: First Pat, First Trick, Popular Pet, Spin Master, Click Frenzy, Tornado, Bouncy Ball, Stress Survivor, Old Friend, Best Friends, Mega Fan, and Sky Diver
+
+**Why this feature:** The pet had many ways to interact — clicking, spinning, dropping, surviving stress — but none of it was tracked or rewarded. An achievement system gives every interaction meaning. Now there's a reason to click 100 times, to drop the pet again and again, to leave it running for hours. Each unlock is a little celebration that makes you smile. The pet remembers what you've done together.
+
 ## [v0.12.0] — 2026-03-28 — Double-Click Spin Trick
 
 ### Added

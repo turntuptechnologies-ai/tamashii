@@ -8,6 +8,7 @@ declare global {
       updateMood: (mood: string) => void;
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
       onShortcutToggled: (callback: (shown: boolean) => void) => void;
+      updateAchievements: (data: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] }) => void;
     };
   }
 }
@@ -298,7 +299,160 @@ const spinMessages = [
   "Again again!",
 ];
 
+// --- Achievement System ---
+interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockMessage: string;
+  condition: () => boolean;
+  unlocked: boolean;
+}
+
+let totalClicks = 0;
+let totalSpins = 0;
+let totalBounces = 0; // gravity bounces
+let stressSurvivedCount = 0; // times stress went above 0.7
+let wasHighStress = false;
+let sessionStartTime = Date.now();
+let achievementCelebrating = false;
+let achievementCelebrationTimer = 0;
+
+const achievements: Achievement[] = [
+  {
+    id: "first_pat", name: "First Pat", description: "Click the pet for the first time",
+    icon: "👆", unlockMessage: "My first pat! ♥",
+    condition: () => totalClicks >= 1, unlocked: false,
+  },
+  {
+    id: "first_trick", name: "First Trick", description: "Make the pet do a spin",
+    icon: "🌀", unlockMessage: "I learned a trick!",
+    condition: () => totalSpins >= 1, unlocked: false,
+  },
+  {
+    id: "popular", name: "Popular Pet", description: "Click the pet 25 times",
+    icon: "⭐", unlockMessage: "I'm so popular!",
+    condition: () => totalClicks >= 25, unlocked: false,
+  },
+  {
+    id: "spin_master", name: "Spin Master", description: "Do 10 spins",
+    icon: "💫", unlockMessage: "Spin champion!",
+    condition: () => totalSpins >= 10, unlocked: false,
+  },
+  {
+    id: "clicker", name: "Click Frenzy", description: "Click the pet 100 times",
+    icon: "🔥", unlockMessage: "100 clicks! I'm loved!",
+    condition: () => totalClicks >= 100, unlocked: false,
+  },
+  {
+    id: "spinner", name: "Tornado", description: "Do 50 spins",
+    icon: "🌪️", unlockMessage: "50 spins! So dizzy~",
+    condition: () => totalSpins >= 50, unlocked: false,
+  },
+  {
+    id: "bouncy", name: "Bouncy Ball", description: "Bounce from gravity 10 times",
+    icon: "🏀", unlockMessage: "Boing boing boing!",
+    condition: () => totalBounces >= 10, unlocked: false,
+  },
+  {
+    id: "stress_survivor", name: "Stress Survivor", description: "Survive 5 high-stress moments",
+    icon: "💪", unlockMessage: "I can handle anything!",
+    condition: () => stressSurvivedCount >= 5, unlocked: false,
+  },
+  {
+    id: "veteran", name: "Old Friend", description: "Keep the pet open for 30 minutes",
+    icon: "🕰️", unlockMessage: "We've been together so long!",
+    condition: () => (Date.now() - sessionStartTime) >= 30 * 60 * 1000, unlocked: false,
+  },
+  {
+    id: "dedicated", name: "Best Friends", description: "Keep the pet open for 2 hours",
+    icon: "💕", unlockMessage: "Best friends forever!",
+    condition: () => (Date.now() - sessionStartTime) >= 2 * 60 * 60 * 1000, unlocked: false,
+  },
+  {
+    id: "mega_clicker", name: "Mega Fan", description: "Click the pet 500 times",
+    icon: "👑", unlockMessage: "500 clicks! I'm royalty!",
+    condition: () => totalClicks >= 500, unlocked: false,
+  },
+  {
+    id: "super_bouncy", name: "Sky Diver", description: "Bounce from gravity 50 times",
+    icon: "🪂", unlockMessage: "I love flying!",
+    condition: () => totalBounces >= 50, unlocked: false,
+  },
+];
+
+function checkAchievements(): void {
+  for (const a of achievements) {
+    if (!a.unlocked && a.condition()) {
+      a.unlocked = true;
+      celebrateAchievement(a);
+    }
+  }
+}
+
+function celebrateAchievement(a: Achievement): void {
+  // Show achievement speech bubble
+  speechBubble = { text: `${a.icon} ${a.unlockMessage}`, life: 240, maxLife: 240 };
+
+  // Big sparkle + heart burst
+  achievementCelebrating = true;
+  achievementCelebrationTimer = 60;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 15,
+      y: cy + Math.sin(angle) * 10,
+      vx: Math.cos(angle) * 2,
+      vy: Math.sin(angle) * 1.5,
+      life: 60 + Math.random() * 30,
+      maxLife: 60 + Math.random() * 30,
+      size: 4 + Math.random() * 3,
+      type: "sparkle",
+    });
+  }
+  for (let i = 0; i < 5; i++) {
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 40,
+      y: cy - 10,
+      vx: (Math.random() - 0.5) * 2.5,
+      vy: -(2 + Math.random() * 1.5),
+      life: 70 + Math.random() * 30,
+      maxLife: 70 + Math.random() * 30,
+      size: 7 + Math.random() * 4,
+      type: "heart",
+    });
+  }
+
+  // Happy reaction
+  squishAmount = 0.8;
+  isHappy = true;
+  happyTimer = 80;
+
+  // Report to main process for context menu
+  reportAchievements();
+}
+
+function getUnlockedAchievements(): { id: string; name: string; icon: string; description: string }[] {
+  return achievements.filter(a => a.unlocked).map(a => ({
+    id: a.id, name: a.name, icon: a.icon, description: a.description,
+  }));
+}
+
+function getAchievementProgress(): { unlocked: number; total: number } {
+  return { unlocked: achievements.filter(a => a.unlocked).length, total: achievements.length };
+}
+
+function reportAchievements(): void {
+  const progress = getAchievementProgress();
+  const unlocked = getUnlockedAchievements();
+  window.tamashii.updateAchievements({ progress, unlocked });
+}
+
 function startSpin(): void {
+  totalSpins++;
   isSpinning = true;
   spinProgress = 0;
   spinFrame = 0;
@@ -340,6 +494,7 @@ function onPetClicked(): void {
   }
 
   // Regular single click — squish + hearts
+  totalClicks++;
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
@@ -1142,6 +1297,7 @@ function update(): void {
         velocityY = 0;
       } else {
         // Bounce! Reverse velocity with damping
+        totalBounces++;
         velocityY = -velocityY * BOUNCE_DAMPING;
 
         // Landing squish proportional to impact speed
@@ -1183,6 +1339,27 @@ function update(): void {
   // Smooth transition (slow ramp up, slow ramp down)
   stressLevel += (rawStress - stressLevel) * 0.05;
   isStressed = stressLevel > 0.4;
+
+  // Track high-stress survival for achievements
+  if (stressLevel > 0.7 && !wasHighStress) {
+    wasHighStress = true;
+  } else if (stressLevel < 0.3 && wasHighStress) {
+    wasHighStress = false;
+    stressSurvivedCount++;
+  }
+
+  // Achievement celebration timer
+  if (achievementCelebrating) {
+    achievementCelebrationTimer--;
+    if (achievementCelebrationTimer <= 0) {
+      achievementCelebrating = false;
+    }
+  }
+
+  // Check achievements every 30 frames (~0.5s)
+  if (frame % 30 === 0) {
+    checkAchievements();
+  }
 
   // Spawn sweat particles when stressed
   if (isStressed && !isDragging) {
@@ -1289,6 +1466,19 @@ function draw(): void {
     }
   }
 
+  // Achievement celebration glow
+  if (achievementCelebrating) {
+    const glowAlpha = achievementCelebrationTimer / 60;
+    const glowRadius = 55 + (1 - glowAlpha) * 20;
+    ctx.save();
+    ctx.globalAlpha = glowAlpha * 0.3;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 5, glowRadius, 0, Math.PI * 2);
+    ctx.fillStyle = "#FFD700";
+    ctx.fill();
+    ctx.restore();
+  }
+
   // Speech bubble (above everything)
   drawSpeechBubble(cx, cy - size * 0.4);
 }
@@ -1300,5 +1490,8 @@ function loop(): void {
 }
 
 loop();
+
+// Report initial achievement state
+reportAchievements();
 
 export {};

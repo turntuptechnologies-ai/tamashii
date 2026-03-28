@@ -22,4 +22,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onShortcutToggled: (callback: (shown: boolean) => void) => {
     ipcRenderer.on("shortcut-toggled", (_event, shown) => callback(shown));
   },
+  updateAchievements: (data: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] }) => {
+    ipcRenderer.send("update-achievements", data);
+  },
 });

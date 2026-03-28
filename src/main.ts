@@ -5,6 +5,10 @@ import * as os from "os";
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let currentMood = "☀️ Energetic (Morning)";
+let achievementData: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] } = {
+  progress: { unlocked: 0, total: 12 },
+  unlocked: [],
+};
 
 function createWindow(): void {
   const { width: screenWidth, height: screenHeight } =
@@ -63,6 +67,14 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
   };
   const moodLabel = moodLabels[timeOfDay] || "Unknown";
 
+  // Build achievements submenu
+  const achievementItems: Electron.MenuItemConstructorOptions[] = achievementData.unlocked.length > 0
+    ? achievementData.unlocked.map(a => ({
+        label: `${a.icon} ${a.name} — ${a.description}`,
+        enabled: false,
+      }))
+    : [{ label: "No achievements yet — keep playing!", enabled: false }];
+
   const template: Electron.MenuItemConstructorOptions[] = [
     { label: `Mood: ${moodLabel}`, enabled: false },
     { type: "separator" },
@@ -72,13 +84,18 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
     },
     { type: "separator" },
     {
+      label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
+      submenu: achievementItems,
+    },
+    { type: "separator" },
+    {
       label: "About Tamashii",
       click: () => {
         dialog.showMessageBox(mainWindow!, {
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.12.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.13.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -123,6 +140,13 @@ function createTrayIcon(): Electron.NativeImage {
 }
 
 function buildTrayMenu(): Menu {
+  const trayAchievementItems: Electron.MenuItemConstructorOptions[] = achievementData.unlocked.length > 0
+    ? achievementData.unlocked.map(a => ({
+        label: `${a.icon} ${a.name}`,
+        enabled: false,
+      }))
+    : [{ label: "None yet — keep playing!", enabled: false }];
+
   return Menu.buildFromTemplate([
     { label: `Mood: ${currentMood}`, enabled: false },
     { type: "separator" },
@@ -135,6 +159,11 @@ function buildTrayMenu(): Menu {
     },
     { type: "separator" },
     {
+      label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
+      submenu: trayAchievementItems,
+    },
+    { type: "separator" },
+    {
       label: "About Tamashii",
       click: () => {
         if (mainWindow) {
@@ -143,7 +172,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.12.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.13.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
@@ -169,6 +198,12 @@ function createTray(): void {
 // IPC: renderer reports mood changes so tray menu stays updated
 ipcMain.on("update-mood", (_event, mood: string) => {
   currentMood = mood;
+  tray?.setContextMenu(buildTrayMenu());
+});
+
+// IPC: renderer reports achievement updates
+ipcMain.on("update-achievements", (_event, data: typeof achievementData) => {
+  achievementData = data;
   tray?.setContextMenu(buildTrayMenu());
 });
 
