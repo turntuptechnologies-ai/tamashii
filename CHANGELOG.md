@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.19.0] — 2026-03-29 — Star Catcher Mini-Game
+
+### Added
+- **Star Catcher mini-game** — your pet's first game! Right-click and choose "Play Star Catcher" to start
+- **Falling stars** — golden stars rain down from above for 30 seconds — click them to catch!
+- **Increasing difficulty** — stars fall faster and spawn more frequently as the timer counts down
+- **Combo system** — catch consecutive stars without missing for a combo multiplier display; milestone callouts at 5x and 10x
+- **Score HUD** — a clean heads-up display shows your current score, time remaining (with color-coded bar), and active combo
+- **High score persistence** — your best score is saved to disk and remembered across sessions
+- **Sound effects** — a bright twinkle when you catch a star, and a triumphant fanfare when the game ends
+- **Pet reactions** — the pet announces the game start, cheers at combo milestones, and gives a personalized score report at the end
+- **Celebration sparkles** — a burst of sparkles erupts when the game ends, proportional to your score
+- **New record announcement** — beat your high score and the pet proudly proclaims it
+
+**Why this feature:** The pet had personality, a name, accessories, and a whole world of reactions — but nothing to *do* together. A mini-game transforms the pet from something you observe into something you play with. Catching stars is simple enough to pick up instantly but the ramping difficulty and combo system give it satisfying depth. It's the first step toward the pet being not just a companion, but an entertainer.
+
 ## [v0.18.0] — 2026-03-29 — Accessories
 
 ### Added

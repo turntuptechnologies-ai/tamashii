@@ -15,6 +15,7 @@ declare global {
       updateAchievements: (data: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] }) => void;
       loadSaveData: () => Promise<unknown>;
       saveData: (data: unknown) => void;
+      onStartMinigame: (callback: () => void) => void;
     };
   }
 }
@@ -90,6 +91,20 @@ function playGreetingSound(): void {
   // Cheerful two-note chirp
   playTone(660, 0.1, "sine", 0.08);
   setTimeout(() => playTone(880, 0.15, "sine", 0.08), 80);
+}
+
+function playStarCatchSound(): void {
+  // Bright twinkle — quick ascending sparkle
+  playTone(1200, 0.08, "sine", 0.1);
+  setTimeout(() => playTone(1600, 0.1, "sine", 0.08), 50);
+}
+
+function playMinigameEndSound(): void {
+  // Fanfare — descending then rising resolution
+  playTone(784, 0.12, "sine", 0.1);  // G5
+  setTimeout(() => playTone(659, 0.12, "sine", 0.1), 120);  // E5
+  setTimeout(() => playTone(784, 0.12, "sine", 0.1), 240);  // G5
+  setTimeout(() => playTone(1047, 0.3, "sine", 0.12), 360); // C6
 }
 
 // --- Time of Day ---
@@ -321,6 +336,15 @@ let lastX = 0;
 let lastY = 0;
 
 canvas.addEventListener("mousedown", (e) => {
+  // During mini-game, check for star clicks before drag
+  if (minigameActive) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickMinigameStar(clickX, clickY)) {
+      return; // Caught a star, don't start drag
+    }
+  }
   isDragging = true;
   dragMoved = false;
   isFalling = false; // Cancel any active fall when grabbed
@@ -433,6 +457,270 @@ window.tamashii.onPromptName(async () => {
       happyTimer = 60;
     }
   }
+});
+
+// --- Star Catcher Mini-Game ---
+interface FallingStar {
+  x: number;
+  y: number;
+  vy: number;
+  size: number;
+  hue: number;
+  twinkle: number; // phase for twinkle animation
+  caught: boolean;
+}
+
+let minigameActive = false;
+let minigameScore = 0;
+let minigameTimeLeft = 0; // frames remaining (30 seconds = 1800 frames)
+let minigameStars: FallingStar[] = [];
+let minigameSpawnTimer = 0;
+let minigameHighScore = 0;
+let minigameCombo = 0; // consecutive catches without a miss
+let minigameBestCombo = 0;
+const MINIGAME_DURATION = 1800; // 30 seconds at 60fps
+
+function startMinigame(): void {
+  if (minigameActive) return;
+  minigameActive = true;
+  minigameScore = 0;
+  minigameTimeLeft = MINIGAME_DURATION;
+  minigameStars = [];
+  minigameSpawnTimer = 0;
+  minigameCombo = 0;
+  minigameBestCombo = 0;
+  speechBubble = { text: "Catch the stars!", life: 120, maxLife: 120 };
+  playGreetingSound();
+  squishAmount = 0.5;
+  isHappy = true;
+  happyTimer = 60;
+}
+
+function endMinigame(): void {
+  minigameActive = false;
+  minigameStars = [];
+  const isNewRecord = minigameScore > minigameHighScore;
+  if (isNewRecord) {
+    minigameHighScore = minigameScore;
+  }
+  saveGame();
+
+  // Celebration reaction
+  playMinigameEndSound();
+  squishAmount = 0.8;
+  isHappy = true;
+  happyTimer = 90;
+
+  // Score-based speech
+  let msg: string;
+  if (minigameScore === 0) {
+    msg = "Maybe next time...";
+  } else if (minigameScore < 5) {
+    msg = `${minigameScore} stars! Not bad~`;
+  } else if (minigameScore < 15) {
+    msg = `${minigameScore} stars! Great job!`;
+  } else {
+    msg = `${minigameScore} stars! Amazing!!`;
+  }
+  if (isNewRecord && minigameScore > 0) {
+    msg = `New record: ${minigameScore}! ⭐`;
+  }
+  speechBubble = { text: msg, life: 240, maxLife: 240 };
+
+  // Celebration sparkles
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < Math.min(minigameScore, 12); i++) {
+    const angle = (i / Math.min(minigameScore, 12)) * Math.PI * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 25,
+      y: cy + Math.sin(angle) * 20,
+      vx: Math.cos(angle) * 2,
+      vy: Math.sin(angle) * 1.5 - 1,
+      life: 60 + Math.random() * 30,
+      maxLife: 60 + Math.random() * 30,
+      size: 3 + Math.random() * 3,
+      type: "sparkle",
+    });
+  }
+}
+
+function updateMinigame(): void {
+  if (!minigameActive) return;
+
+  minigameTimeLeft--;
+  if (minigameTimeLeft <= 0) {
+    endMinigame();
+    return;
+  }
+
+  // Spawn stars — rate increases over time
+  minigameSpawnTimer++;
+  const elapsed = MINIGAME_DURATION - minigameTimeLeft;
+  const difficulty = Math.min(elapsed / MINIGAME_DURATION, 1); // 0 to 1
+  const spawnInterval = Math.max(15, 45 - difficulty * 25); // starts at ~45, ends at ~20 frames
+  if (minigameSpawnTimer >= spawnInterval) {
+    minigameSpawnTimer = 0;
+    const starX = 10 + Math.random() * (canvas.width - 20);
+    minigameStars.push({
+      x: starX,
+      y: -10,
+      vy: 1.0 + difficulty * 1.5 + Math.random() * 0.5, // faster as game progresses
+      size: 8 + Math.random() * 6,
+      hue: 40 + Math.random() * 30, // golden hues
+      twinkle: Math.random() * Math.PI * 2,
+      caught: false,
+    });
+  }
+
+  // Update falling stars
+  for (let i = minigameStars.length - 1; i >= 0; i--) {
+    const star = minigameStars[i];
+    star.y += star.vy;
+    star.twinkle += 0.15;
+
+    // Remove stars that fall off screen (missed)
+    if (star.y > canvas.height + 10) {
+      minigameStars.splice(i, 1);
+      minigameCombo = 0; // reset combo on miss
+    }
+  }
+}
+
+function tryClickMinigameStar(clickX: number, clickY: number): boolean {
+  if (!minigameActive) return false;
+
+  // Check stars from top (most recently spawned) to catch the topmost one
+  for (let i = minigameStars.length - 1; i >= 0; i--) {
+    const star = minigameStars[i];
+    const dx = clickX - star.x;
+    const dy = clickY - star.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const hitRadius = star.size + 8; // generous hit area
+
+    if (dist <= hitRadius) {
+      // Caught!
+      minigameScore++;
+      minigameCombo++;
+      if (minigameCombo > minigameBestCombo) minigameBestCombo = minigameCombo;
+      playStarCatchSound();
+
+      // Sparkle burst at catch position
+      for (let j = 0; j < 4; j++) {
+        const angle = (j / 4) * Math.PI * 2 + Math.random() * 0.5;
+        particles.push({
+          x: star.x,
+          y: star.y,
+          vx: Math.cos(angle) * 1.5,
+          vy: Math.sin(angle) * 1.5 - 0.5,
+          life: 30 + Math.random() * 15,
+          maxLife: 30 + Math.random() * 15,
+          size: 2 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+
+      // Combo speech bubbles at milestones
+      if (minigameCombo === 5) {
+        speechBubble = { text: "5 combo!", life: 60, maxLife: 60 };
+      } else if (minigameCombo === 10) {
+        speechBubble = { text: "10 combo! On fire!", life: 60, maxLife: 60 };
+      }
+
+      minigameStars.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+function drawMinigame(): void {
+  if (!minigameActive) return;
+
+  // Draw falling stars
+  for (const star of minigameStars) {
+    const twinkleScale = 0.85 + 0.15 * Math.sin(star.twinkle);
+    const s = star.size * twinkleScale;
+    ctx.save();
+    ctx.translate(star.x, star.y);
+
+    // Glow
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${star.hue}, 90%, 70%, 0.25)`;
+    ctx.fill();
+
+    // Star shape (5 points)
+    ctx.beginPath();
+    for (let p = 0; p < 5; p++) {
+      const outerAngle = (p / 5) * Math.PI * 2 - Math.PI / 2;
+      const innerAngle = outerAngle + Math.PI / 5;
+      const ox = Math.cos(outerAngle) * s;
+      const oy = Math.sin(outerAngle) * s;
+      const ix = Math.cos(innerAngle) * s * 0.4;
+      const iy = Math.sin(innerAngle) * s * 0.4;
+      if (p === 0) ctx.moveTo(ox, oy);
+      else ctx.lineTo(ox, oy);
+      ctx.lineTo(ix, iy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = `hsl(${star.hue}, 95%, 65%)`;
+    ctx.fill();
+    ctx.strokeStyle = `hsl(${star.hue}, 80%, 45%)`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // HUD — score and timer
+  const timeSeconds = Math.ceil(minigameTimeLeft / 60);
+  const barWidth = canvas.width - 20;
+  const barX = 10;
+  const barY = 8;
+
+  // Timer bar background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+  ctx.beginPath();
+  ctx.roundRect(barX, barY, barWidth, 6, 3);
+  ctx.fill();
+
+  // Timer bar fill
+  const fillRatio = minigameTimeLeft / MINIGAME_DURATION;
+  const barHue = fillRatio > 0.3 ? 50 : 0; // golden, turns red when low
+  ctx.fillStyle = `hsl(${barHue}, 90%, 60%)`;
+  ctx.beginPath();
+  ctx.roundRect(barX, barY, barWidth * fillRatio, 6, 3);
+  ctx.fill();
+
+  // Score text
+  ctx.save();
+  ctx.font = "bold 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.fillText(`⭐ ${minigameScore}`, canvas.width / 2 + 1, 30 + 1);
+  ctx.fillStyle = "#FFD700";
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
+  ctx.lineWidth = 2.5;
+  ctx.strokeText(`⭐ ${minigameScore}`, canvas.width / 2, 30);
+  ctx.fillText(`⭐ ${minigameScore}`, canvas.width / 2, 30);
+
+  // Timer text (small)
+  ctx.font = "10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.fillStyle = fillRatio > 0.3 ? "rgba(80, 60, 0, 0.7)" : "rgba(180, 30, 30, 0.8)";
+  ctx.fillText(`${timeSeconds}s`, canvas.width / 2, 44);
+
+  // Combo indicator
+  if (minigameCombo >= 3) {
+    ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#FF6B35";
+    ctx.fillText(`${minigameCombo}x combo!`, canvas.width / 2, 56);
+  }
+  ctx.restore();
+}
+
+window.tamashii.onStartMinigame(() => {
+  startMinigame();
 });
 
 const spinMessages = [
@@ -608,6 +896,7 @@ interface SaveData {
   soundEnabled: boolean;
   petName: string;
   accessory: string;
+  minigameHighScore: number;
   version: number;
 }
 
@@ -627,6 +916,7 @@ function buildSaveData(): SaveData {
     soundEnabled,
     petName,
     accessory: currentAccessory,
+    minigameHighScore,
     version: 1,
   };
 }
@@ -651,6 +941,11 @@ function applySaveData(data: SaveData): void {
   // Restore accessory
   if (data.accessory) {
     currentAccessory = data.accessory as AccessoryType;
+  }
+
+  // Restore mini-game high score
+  if (data.minigameHighScore) {
+    minigameHighScore = data.minigameHighScore;
   }
 
   // Restore unlocked achievements
@@ -1644,6 +1939,9 @@ function update(): void {
 
   // Butterfly companion
   updateButterfly();
+
+  // Mini-game
+  updateMinigame();
 }
 
 function drawAccessory(cx: number, cy: number, size: number): void {
@@ -2046,6 +2344,9 @@ function draw(): void {
     ctx.fill();
     ctx.restore();
   }
+
+  // Mini-game stars and HUD (above pet, below speech bubble)
+  drawMinigame();
 
   // Speech bubble (above everything)
   drawSpeechBubble(cx, cy - size * 0.4);

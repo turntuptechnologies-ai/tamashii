@@ -43,4 +43,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   saveData: (data: unknown) => {
     ipcRenderer.send("save-data", data);
   },
+  onStartMinigame: (callback: () => void) => {
+    ipcRenderer.on("start-minigame", () => callback());
+  },
 });
