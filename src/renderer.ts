@@ -3,7 +3,9 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string }) => Promise<void>;
+      promptPetName: (currentName: string) => Promise<string | null>;
+      onPromptName: (callback: () => void) => void;
       onToggleWandering: (callback: () => void) => void;
       onToggleSound: (callback: () => void) => void;
       updateMood: (mood: string) => void;
@@ -293,7 +295,21 @@ function spawnSpeechBubble(): void {
   // Stress messages override normal ones ~50% of the time when stressed
   const useStress = isStressed && Math.random() < 0.5;
   const messages = useStress ? stressMessages : getTimeMessages();
-  const text = messages[Math.floor(Math.random() * messages.length)];
+  let text = messages[Math.floor(Math.random() * messages.length)];
+
+  // ~25% chance to use a name-aware message if the pet has a name
+  if (petName && !useStress && Math.random() < 0.25) {
+    const nameMessages = [
+      `I'm ${petName}!`,
+      `${petName} is happy~`,
+      `${petName} loves you!`,
+      `Call me ${petName}! ♥`,
+      `${petName} reporting in!`,
+      `Being ${petName} is great!`,
+    ];
+    text = nameMessages[Math.floor(Math.random() * nameMessages.length)];
+  }
+
   speechBubble = { text, life: 180, maxLife: 180 }; // ~3 seconds
 }
 
@@ -353,6 +369,7 @@ canvas.addEventListener("contextmenu", (e) => {
     timeOfDay: currentTimeOfDay,
     wanderingEnabled,
     soundEnabled,
+    petName,
   });
 });
 
@@ -370,6 +387,25 @@ window.tamashii.onToggleSound(() => {
   soundEnabled = !soundEnabled;
   if (soundEnabled) {
     playClickSound(); // Confirm sound is on
+  }
+});
+
+// --- Pet Name ---
+let petName = "";
+
+window.tamashii.onPromptName(async () => {
+  const result = await window.tamashii.promptPetName(petName);
+  if (result !== null) {
+    const oldName = petName;
+    petName = result;
+    saveGame();
+    if (petName) {
+      speechBubble = { text: oldName ? `Call me ${petName} now!` : `I'm ${petName}! Nice to meet you!`, life: 200, maxLife: 200 };
+      playGreetingSound();
+      squishAmount = 0.7;
+      isHappy = true;
+      happyTimer = 60;
+    }
   }
 });
 
@@ -544,6 +580,7 @@ interface SaveData {
   totalSessionTime: number; // accumulated ms across all sessions
   unlockedAchievements: string[]; // achievement IDs
   soundEnabled: boolean;
+  petName: string;
   version: number;
 }
 
@@ -561,6 +598,7 @@ function buildSaveData(): SaveData {
     totalSessionTime: totalSessionTime + currentSessionMs,
     unlockedAchievements: achievements.filter(a => a.unlocked).map(a => a.id),
     soundEnabled,
+    petName,
     version: 1,
   };
 }
@@ -575,6 +613,11 @@ function applySaveData(data: SaveData): void {
   // Restore sound preference
   if (typeof data.soundEnabled === "boolean") {
     soundEnabled = data.soundEnabled;
+  }
+
+  // Restore pet name
+  if (data.petName) {
+    petName = data.petName;
   }
 
   // Restore unlocked achievements
@@ -603,7 +646,8 @@ window.tamashii.loadSaveData().then((raw) => {
     // Welcome back message if returning player
     const data = raw as SaveData;
     if (data.totalClicks > 0 || data.totalSpins > 0) {
-      speechBubble = { text: "I remember you! ♥", life: 180, maxLife: 180 };
+      const greeting = petName ? `Hi! It's me, ${petName}! ♥` : "I remember you! ♥";
+      speechBubble = { text: greeting, life: 180, maxLife: 180 };
       squishAmount = 0.5;
       isHappy = true;
       happyTimer = 60;

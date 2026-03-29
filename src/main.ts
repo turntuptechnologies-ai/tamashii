@@ -56,9 +56,62 @@ ipcMain.handle("get-screen-bounds", () => {
   return { screenWidth, screenHeight, windowX, windowY };
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean }) => {
+ipcMain.handle("prompt-pet-name", async (_event, currentName: string) => {
+  if (!mainWindow) return null;
+  // Use a simple BrowserWindow-based prompt since Electron doesn't have a native input dialog
+  return new Promise<string | null>((resolve) => {
+    const promptWin = new BrowserWindow({
+      width: 320,
+      height: 180,
+      parent: mainWindow!,
+      modal: true,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    const escapedName = currentName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    const html = `<!DOCTYPE html><html><head><style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: rgba(255,255,255,0.97); border-radius: 12px; border: 1px solid #ddd; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; padding: 20px; }
+      h3 { color: #333; margin-bottom: 12px; font-size: 14px; }
+      input { width: 200px; padding: 8px 12px; border: 2px solid #5B8DEE; border-radius: 8px; font-size: 14px; outline: none; text-align: center; }
+      input:focus { border-color: #3A6DD1; box-shadow: 0 0 0 3px rgba(91,141,238,0.2); }
+      .btns { margin-top: 12px; display: flex; gap: 8px; }
+      button { padding: 6px 18px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+      .ok { background: #5B8DEE; color: white; } .ok:hover { background: #4A7DD8; }
+      .cancel { background: #eee; color: #666; } .cancel:hover { background: #ddd; }
+    </style></head><body>
+      <h3>Name your pet</h3>
+      <input id="n" maxlength="20" value="${escapedName}" placeholder="Enter a name..." autofocus />
+      <div class="btns"><button class="cancel" onclick="window.close()">Cancel</button><button class="ok" id="ok">OK</button></div>
+      <script>
+        const inp = document.getElementById('n');
+        inp.select();
+        document.getElementById('ok').onclick = () => { document.title = 'NAME:' + inp.value.trim(); window.close(); };
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('ok').click(); if (e.key === 'Escape') window.close(); });
+      </script>
+    </body></html>`;
+    promptWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+    promptWin.on("page-title-updated", (_e, title) => {
+      if (title.startsWith("NAME:")) {
+        const name = title.slice(5);
+        resolve(name || null);
+      }
+    });
+    promptWin.on("closed", () => {
+      resolve(null);
+    });
+  });
+});
+
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled, soundEnabled } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled, petName } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -87,6 +140,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
       label: soundEnabled ? "🔊 Disable Sounds" : "🔇 Enable Sounds",
       click: () => { mainWindow?.webContents.send("toggle-sound"); },
     },
+    {
+      label: petName ? `✏️ Rename Pet (${petName})` : "✏️ Name Your Pet",
+      click: () => { mainWindow?.webContents.send("prompt-name"); },
+    },
     { type: "separator" },
     {
       label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
@@ -100,7 +157,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.16.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.17.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -177,7 +234,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.16.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.17.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }

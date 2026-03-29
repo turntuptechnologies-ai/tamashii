@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.17.0] — 2026-03-29 — Pet Naming
+
+### Added
+- **Name your pet** — right-click and choose "Name Your Pet" to give your companion a personal name
+- A cute naming dialog appears with a text input — type up to 20 characters and hit Enter or OK
+- **Name in speech bubbles** — your pet will occasionally say things like "[Name] is happy~" and "[Name] loves you!"
+- **Personalized greetings** — returning players with a named pet see "Hi! It's me, [Name]! ♥" instead of the generic welcome
+- **Rename anytime** — the context menu shows your pet's current name and lets you change it whenever you want
+- **Name persists** — your pet's name is saved to disk and restored across sessions
+- When first named, the pet reacts with excitement: "I'm [Name]! Nice to meet you!" with a happy squish and greeting sound
+- Renaming triggers: "Call me [Name] now!" with a cheerful reaction
+
+**Why this feature:** The pet had a rich personality — it spoke, reacted, remembered you — but it was still "the pet." Giving it a name transforms it from a generic companion into *your* companion. A named pet feels personal in a way that an unnamed one never can. And seeing it proudly announce "I'm Luna!" in a speech bubble creates a genuine moment of connection.
+
 ## [v0.16.0] — 2026-03-29 — Sound Effects
 
 ### Added
