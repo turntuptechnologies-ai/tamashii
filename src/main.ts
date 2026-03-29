@@ -56,9 +56,9 @@ ipcMain.handle("get-screen-bounds", () => {
   return { screenWidth, screenHeight, windowX, windowY };
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean }) => {
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -83,6 +83,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
       label: wanderingEnabled ? "🚶 Disable Wandering" : "🧍 Enable Wandering",
       click: () => { mainWindow?.webContents.send("toggle-wandering"); },
     },
+    {
+      label: soundEnabled ? "🔊 Disable Sounds" : "🔇 Enable Sounds",
+      click: () => { mainWindow?.webContents.send("toggle-sound"); },
+    },
     { type: "separator" },
     {
       label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
@@ -96,7 +100,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.15.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.16.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -173,7 +177,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.15.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.16.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }

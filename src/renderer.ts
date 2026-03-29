@@ -3,8 +3,9 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean }) => Promise<void>;
       onToggleWandering: (callback: () => void) => void;
+      onToggleSound: (callback: () => void) => void;
       updateMood: (mood: string) => void;
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
       onShortcutToggled: (callback: (shown: boolean) => void) => void;
@@ -17,6 +18,76 @@ declare global {
 
 const canvas = document.getElementById("pet") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
+
+// --- Sound Effects (Web Audio API) ---
+let soundEnabled = true;
+const audioCtx = new AudioContext();
+
+function playTone(freq: number, duration: number, type: OscillatorType = "sine", volume = 0.15, detune = 0): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  osc.detune.value = detune;
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playClickSound(): void {
+  // Cute pop — short high tone
+  playTone(880, 0.08, "sine", 0.12);
+  playTone(1320, 0.06, "sine", 0.06);
+}
+
+function playSpinSound(): void {
+  // Rising whoosh — ascending frequency sweep
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.4);
+}
+
+function playBounceSound(impact: number): void {
+  // Soft thud — low frequency, louder with more impact
+  const vol = Math.min(0.12, impact * 0.015);
+  playTone(120 + impact * 8, 0.12, "sine", vol);
+  playTone(80, 0.08, "triangle", vol * 0.5);
+}
+
+function playAchievementSound(): void {
+  // Triumphant chime — ascending arpeggio
+  playTone(523, 0.15, "sine", 0.1);  // C5
+  setTimeout(() => playTone(659, 0.15, "sine", 0.1), 100);  // E5
+  setTimeout(() => playTone(784, 0.15, "sine", 0.1), 200);  // G5
+  setTimeout(() => playTone(1047, 0.3, "sine", 0.12), 300); // C6
+}
+
+function playButterflyLandSound(): void {
+  // Gentle flutter — very soft high tinkle
+  playTone(1800, 0.06, "sine", 0.04);
+  setTimeout(() => playTone(2200, 0.05, "sine", 0.03), 40);
+}
+
+function playGreetingSound(): void {
+  // Cheerful two-note chirp
+  playTone(660, 0.1, "sine", 0.08);
+  setTimeout(() => playTone(880, 0.15, "sine", 0.08), 80);
+}
 
 // --- Time of Day ---
 type TimeOfDay = "morning" | "afternoon" | "evening" | "night";
@@ -195,6 +266,7 @@ window.tamashii.onShortcutToggled((shown) => {
   if (shown) {
     const msg = shortcutGreetings[Math.floor(Math.random() * shortcutGreetings.length)];
     speechBubble = { text: msg, life: 150, maxLife: 150 };
+    playGreetingSound();
     // Happy reaction
     squishAmount = 0.7;
     isHappy = true;
@@ -280,6 +352,7 @@ canvas.addEventListener("contextmenu", (e) => {
   window.tamashii.showContextMenu({
     timeOfDay: currentTimeOfDay,
     wanderingEnabled,
+    soundEnabled,
   });
 });
 
@@ -289,6 +362,14 @@ window.tamashii.onToggleWandering(() => {
   if (!wanderingEnabled) {
     wanderState = "pausing";
     wanderTimer = 60;
+  }
+});
+
+// Listen for toggle-sound from main process
+window.tamashii.onToggleSound(() => {
+  soundEnabled = !soundEnabled;
+  if (soundEnabled) {
+    playClickSound(); // Confirm sound is on
   }
 });
 
@@ -395,6 +476,7 @@ function checkAchievements(): void {
 
 function celebrateAchievement(a: Achievement): void {
   // Show achievement speech bubble
+  playAchievementSound();
   speechBubble = { text: `${a.icon} ${a.unlockMessage}`, life: 240, maxLife: 240 };
 
   // Big sparkle + heart burst
@@ -461,6 +543,7 @@ interface SaveData {
   stressSurvivedCount: number;
   totalSessionTime: number; // accumulated ms across all sessions
   unlockedAchievements: string[]; // achievement IDs
+  soundEnabled: boolean;
   version: number;
 }
 
@@ -477,6 +560,7 @@ function buildSaveData(): SaveData {
     stressSurvivedCount,
     totalSessionTime: totalSessionTime + currentSessionMs,
     unlockedAchievements: achievements.filter(a => a.unlocked).map(a => a.id),
+    soundEnabled,
     version: 1,
   };
 }
@@ -487,6 +571,11 @@ function applySaveData(data: SaveData): void {
   totalBounces = data.totalBounces || 0;
   stressSurvivedCount = data.stressSurvivedCount || 0;
   totalSessionTime = data.totalSessionTime || 0;
+
+  // Restore sound preference
+  if (typeof data.soundEnabled === "boolean") {
+    soundEnabled = data.soundEnabled;
+  }
 
   // Restore unlocked achievements
   if (data.unlockedAchievements) {
@@ -524,6 +613,7 @@ window.tamashii.loadSaveData().then((raw) => {
 
 function startSpin(): void {
   totalSpins++;
+  playSpinSound();
   isSpinning = true;
   spinProgress = 0;
   spinFrame = 0;
@@ -566,6 +656,7 @@ function onPetClicked(): void {
 
   // Regular single click — squish + hearts
   totalClicks++;
+  playClickSound();
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
@@ -1369,6 +1460,8 @@ function update(): void {
       } else {
         // Bounce! Reverse velocity with damping
         totalBounces++;
+        const preBounceSpeed = Math.abs(velocityY) / BOUNCE_DAMPING;
+        playBounceSound(preBounceSpeed);
         velocityY = -velocityY * BOUNCE_DAMPING;
 
         // Landing squish proportional to impact speed
@@ -1671,6 +1764,7 @@ function updateButterfly(): void {
       butterfly.state = "resting";
       butterfly.x = butterfly.targetX;
       butterfly.y = butterfly.targetY;
+      playButterflyLandSound();
       // Rest for 3-8 seconds (longer at night)
       const restDuration = isNightTime ? 300 + Math.random() * 300 : 180 + Math.random() * 300;
       butterfly.restTimer = Math.floor(restDuration);

@@ -3,6 +3,21 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.16.0] — 2026-03-29 — Sound Effects
+
+### Added
+- **Sound effects** — your pet now has a voice! All sounds are generated programmatically using the Web Audio API (no external audio files needed)
+- **Click pop** — a cute, short pop when you pat the pet
+- **Spin whoosh** — a rising frequency sweep when the pet does a backflip trick
+- **Bounce thud** — a soft, low thud when the pet hits the ground after falling, scaled to impact force
+- **Achievement chime** — a triumphant ascending arpeggio (C-E-G-C) when you unlock an achievement
+- **Butterfly landing tinkle** — a very gentle, almost-imperceptible high tinkle when the butterfly lands on the pet's head
+- **Greeting chirp** — a cheerful two-note chirp when the pet appears via keyboard shortcut
+- **Sound toggle** — right-click the pet to enable/disable sounds; preference is saved persistently across sessions
+- All sounds are deliberately soft and unobtrusive — they enhance without annoying
+
+**Why this feature:** The pet had incredibly rich visual feedback — squish animations, particles, sparkles, expressions — but it was completely silent. Sound is one of the most powerful ways to make something feel alive. A tiny pop when you click, a whoosh when it spins, a chime when you earn an achievement — these audio cues create an emotional connection that visuals alone can't achieve. And because the sounds are generated with Web Audio API, the app stays lightweight with zero external dependencies.
+
 ## [v0.15.0] — 2026-03-28 — Persistent Memory
 
 ### Added
