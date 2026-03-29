@@ -3,6 +3,24 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.18.0] — 2026-03-29 — Accessories
+
+### Added
+- **Accessories** — dress up your pet with 8 wearable accessories, chosen from the right-click context menu
+- **Crown** — a golden crown with colored jewels, fit for royalty
+- **Bow** — a cute pink ribbon bow with trailing tails
+- **Glasses** — round spectacles with lens shine for a scholarly look
+- **Flower** — a delicate pink flower tucked behind the ear with a tiny leaf
+- **Party Hat** — a striped cone hat with a yellow pom-pom on top
+- **Cat Ears** — pointy ears with pink inner ear detail
+- **Top Hat** — a dapper dark hat with a burgundy band
+- **Star Headband** — a springy headband with a bouncing golden star
+- **Accessory reactions** — putting on an accessory makes the pet exclaim "How do I look?" or "So stylish~!" with a happy squish
+- **Persistent choice** — your selected accessory is saved to disk and restored across sessions
+- Radio-button menu lets you switch accessories or remove them with "None"
+
+**Why this feature:** The pet had a name but no look. Naming gave it an identity — accessories give it style. Choosing a crown or cat ears or glasses makes the pet feel uniquely yours. Combined with the name, your pet is now fully personalized: it's not just any pet, it's *your* Luna wearing a party hat.
+
 ## [v0.17.0] — 2026-03-29 — Pet Naming
 
 ### Added

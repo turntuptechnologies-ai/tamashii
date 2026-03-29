@@ -3,11 +3,12 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string }) => Promise<void>;
       promptPetName: (currentName: string) => Promise<string | null>;
       onPromptName: (callback: () => void) => void;
       onToggleWandering: (callback: () => void) => void;
       onToggleSound: (callback: () => void) => void;
+      onSetAccessory: (callback: (accessory: string) => void) => void;
       updateMood: (mood: string) => void;
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
       onShortcutToggled: (callback: (shown: boolean) => void) => void;
@@ -370,6 +371,7 @@ canvas.addEventListener("contextmenu", (e) => {
     wanderingEnabled,
     soundEnabled,
     petName,
+    accessory: currentAccessory,
   });
 });
 
@@ -392,6 +394,30 @@ window.tamashii.onToggleSound(() => {
 
 // --- Pet Name ---
 let petName = "";
+
+// --- Accessories ---
+type AccessoryType = "none" | "crown" | "bow" | "glasses" | "flower" | "party_hat" | "cat_ears" | "top_hat" | "headband_star";
+let currentAccessory: AccessoryType = "none";
+
+window.tamashii.onSetAccessory((accessory: string) => {
+  currentAccessory = accessory as AccessoryType;
+  saveGame();
+  // Happy reaction when putting on an accessory
+  if (currentAccessory !== "none") {
+    const accessoryMessages = [
+      "How do I look?",
+      "So stylish~!",
+      "I love it! ♥",
+      "Fashion icon!",
+      "Looking good!",
+    ];
+    speechBubble = { text: accessoryMessages[Math.floor(Math.random() * accessoryMessages.length)], life: 180, maxLife: 180 };
+    playGreetingSound();
+    squishAmount = 0.5;
+    isHappy = true;
+    happyTimer = 45;
+  }
+});
 
 window.tamashii.onPromptName(async () => {
   const result = await window.tamashii.promptPetName(petName);
@@ -581,6 +607,7 @@ interface SaveData {
   unlockedAchievements: string[]; // achievement IDs
   soundEnabled: boolean;
   petName: string;
+  accessory: string;
   version: number;
 }
 
@@ -599,6 +626,7 @@ function buildSaveData(): SaveData {
     unlockedAchievements: achievements.filter(a => a.unlocked).map(a => a.id),
     soundEnabled,
     petName,
+    accessory: currentAccessory,
     version: 1,
   };
 }
@@ -618,6 +646,11 @@ function applySaveData(data: SaveData): void {
   // Restore pet name
   if (data.petName) {
     petName = data.petName;
+  }
+
+  // Restore accessory
+  if (data.accessory) {
+    currentAccessory = data.accessory as AccessoryType;
   }
 
   // Restore unlocked achievements
@@ -1613,6 +1646,319 @@ function update(): void {
   updateButterfly();
 }
 
+function drawAccessory(cx: number, cy: number, size: number): void {
+  if (currentAccessory === "none") return;
+
+  const headY = cy - size * 0.2; // top of head area
+
+  ctx.save();
+  switch (currentAccessory) {
+    case "crown": {
+      // Golden crown sitting on top of head
+      const crownY = headY - 22;
+      const crownW = 28;
+      const crownH = 16;
+      // Base
+      ctx.beginPath();
+      ctx.rect(cx - crownW / 2, crownY, crownW, crownH * 0.4);
+      ctx.fillStyle = "#FFD700";
+      ctx.fill();
+      ctx.strokeStyle = "#DAA520";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Points
+      ctx.beginPath();
+      ctx.moveTo(cx - crownW / 2, crownY);
+      ctx.lineTo(cx - crownW / 2 + 2, crownY - crownH * 0.6);
+      ctx.lineTo(cx - crownW / 4, crownY - crownH * 0.2);
+      ctx.lineTo(cx, crownY - crownH);
+      ctx.lineTo(cx + crownW / 4, crownY - crownH * 0.2);
+      ctx.lineTo(cx + crownW / 2 - 2, crownY - crownH * 0.6);
+      ctx.lineTo(cx + crownW / 2, crownY);
+      ctx.closePath();
+      ctx.fillStyle = "#FFD700";
+      ctx.fill();
+      ctx.strokeStyle = "#DAA520";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Jewels
+      ctx.beginPath();
+      ctx.arc(cx, crownY - crownH * 0.6, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF4444";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx - crownW / 4, crownY - 1, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#44AAFF";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + crownW / 4, crownY - 1, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#44FF88";
+      ctx.fill();
+      break;
+    }
+    case "bow": {
+      // Cute pink bow on top of head
+      const bowY = headY - 18;
+      const bowSize = 12;
+      // Left loop
+      ctx.beginPath();
+      ctx.ellipse(cx - bowSize * 0.7, bowY, bowSize * 0.7, bowSize * 0.4, -0.3, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF69B4";
+      ctx.fill();
+      ctx.strokeStyle = "#FF1493";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Right loop
+      ctx.beginPath();
+      ctx.ellipse(cx + bowSize * 0.7, bowY, bowSize * 0.7, bowSize * 0.4, 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF69B4";
+      ctx.fill();
+      ctx.strokeStyle = "#FF1493";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Center knot
+      ctx.beginPath();
+      ctx.arc(cx, bowY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF1493";
+      ctx.fill();
+      // Ribbon tails
+      ctx.beginPath();
+      ctx.moveTo(cx - 2, bowY + 2);
+      ctx.quadraticCurveTo(cx - 5, bowY + 10, cx - 3, bowY + 14);
+      ctx.strokeStyle = "#FF69B4";
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + 2, bowY + 2);
+      ctx.quadraticCurveTo(cx + 5, bowY + 10, cx + 3, bowY + 14);
+      ctx.stroke();
+      break;
+    }
+    case "glasses": {
+      // Round glasses on the face
+      const glassY = cy - 5;
+      const glassR = 10;
+      const spacing = 14;
+      // Left lens
+      ctx.beginPath();
+      ctx.arc(cx - spacing, glassY, glassR, 0, Math.PI * 2);
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Right lens
+      ctx.beginPath();
+      ctx.arc(cx + spacing, glassY, glassR, 0, Math.PI * 2);
+      ctx.stroke();
+      // Bridge
+      ctx.beginPath();
+      ctx.moveTo(cx - spacing + glassR, glassY);
+      ctx.lineTo(cx + spacing - glassR, glassY);
+      ctx.stroke();
+      // Earpieces (small lines going outward)
+      ctx.beginPath();
+      ctx.moveTo(cx - spacing - glassR, glassY);
+      ctx.lineTo(cx - spacing - glassR - 6, glassY - 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + spacing + glassR, glassY);
+      ctx.lineTo(cx + spacing + glassR + 6, glassY - 2);
+      ctx.stroke();
+      // Lens shine
+      ctx.beginPath();
+      ctx.arc(cx - spacing + 3, glassY - 3, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + spacing + 3, glassY - 3, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "flower": {
+      // Flower tucked on the side of the head
+      const flowerX = cx + 25;
+      const flowerY = headY - 12;
+      const petalR = 5;
+      // Petals
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.ellipse(
+          flowerX + Math.cos(angle) * petalR,
+          flowerY + Math.sin(angle) * petalR,
+          petalR * 0.8, petalR * 0.5,
+          angle, 0, Math.PI * 2
+        );
+        ctx.fillStyle = "#FF8888";
+        ctx.fill();
+        ctx.strokeStyle = "#FF6666";
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+      // Center
+      ctx.beginPath();
+      ctx.arc(flowerX, flowerY, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFDD44";
+      ctx.fill();
+      // Stem peeking down
+      ctx.beginPath();
+      ctx.moveTo(flowerX, flowerY + petalR);
+      ctx.quadraticCurveTo(flowerX + 3, flowerY + petalR + 8, flowerX + 1, flowerY + petalR + 12);
+      ctx.strokeStyle = "#66AA44";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Tiny leaf
+      ctx.beginPath();
+      ctx.ellipse(flowerX + 4, flowerY + petalR + 6, 3, 1.5, 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#66AA44";
+      ctx.fill();
+      break;
+    }
+    case "party_hat": {
+      // Cone-shaped party hat with stripes
+      const hatY = headY - 20;
+      const hatW = 22;
+      const hatH = 28;
+      // Cone
+      ctx.beginPath();
+      ctx.moveTo(cx, hatY - hatH);
+      ctx.lineTo(cx - hatW / 2, hatY);
+      ctx.lineTo(cx + hatW / 2, hatY);
+      ctx.closePath();
+      ctx.fillStyle = "#FF6699";
+      ctx.fill();
+      ctx.strokeStyle = "#DD4477";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Stripes
+      for (let i = 1; i < 4; i++) {
+        const t = i / 4;
+        const stripeY = hatY - hatH * t;
+        const stripeW = hatW * (1 - t) / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - stripeW, stripeY);
+        ctx.lineTo(cx + stripeW, stripeY);
+        ctx.strokeStyle = "#FFDD44";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      // Pom-pom on top
+      ctx.beginPath();
+      ctx.arc(cx, hatY - hatH, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFDD44";
+      ctx.fill();
+      // Elastic band
+      ctx.beginPath();
+      ctx.ellipse(cx, hatY, hatW / 2, 3, 0, 0, Math.PI);
+      ctx.strokeStyle = "#DD4477";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      break;
+    }
+    case "cat_ears": {
+      // Cat ears on top of head
+      const earY = headY - 18;
+      const earSpacing = 18;
+      const earH = 18;
+      for (const side of [-1, 1]) {
+        const earX = cx + side * earSpacing;
+        // Outer ear
+        ctx.beginPath();
+        ctx.moveTo(earX - 8, earY + earH * 0.3);
+        ctx.lineTo(earX + side * 2, earY - earH);
+        ctx.lineTo(earX + 8, earY + earH * 0.3);
+        ctx.closePath();
+        ctx.fillStyle = "#555566";
+        ctx.fill();
+        ctx.strokeStyle = "#333344";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Inner ear (pink)
+        ctx.beginPath();
+        ctx.moveTo(earX - 4, earY + earH * 0.2);
+        ctx.lineTo(earX + side * 1.5, earY - earH * 0.6);
+        ctx.lineTo(earX + 4, earY + earH * 0.2);
+        ctx.closePath();
+        ctx.fillStyle = "#FFAABB";
+        ctx.fill();
+      }
+      break;
+    }
+    case "top_hat": {
+      // Dapper top hat
+      const hatY = headY - 20;
+      const brimW = 32;
+      const topW = 20;
+      const hatH = 24;
+      // Brim
+      ctx.beginPath();
+      ctx.ellipse(cx, hatY, brimW / 2, 4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#222233";
+      ctx.fill();
+      ctx.strokeStyle = "#111122";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Cylinder
+      ctx.beginPath();
+      ctx.rect(cx - topW / 2, hatY - hatH, topW, hatH);
+      ctx.fillStyle = "#222233";
+      ctx.fill();
+      ctx.strokeStyle = "#111122";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Top ellipse
+      ctx.beginPath();
+      ctx.ellipse(cx, hatY - hatH, topW / 2, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#333344";
+      ctx.fill();
+      ctx.stroke();
+      // Band
+      ctx.beginPath();
+      ctx.rect(cx - topW / 2, hatY - 6, topW, 4);
+      ctx.fillStyle = "#884444";
+      ctx.fill();
+      break;
+    }
+    case "headband_star": {
+      // Headband with a bouncing star
+      const bandY = headY - 16;
+      // Headband arc
+      ctx.beginPath();
+      ctx.ellipse(cx, bandY + 4, 28, 6, 0, Math.PI, Math.PI * 2);
+      ctx.strokeStyle = "#FFAA00";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // Antenna wire
+      const bobble = Math.sin(frame * 0.1) * 3;
+      ctx.beginPath();
+      ctx.moveTo(cx, bandY);
+      ctx.quadraticCurveTo(cx + 3, bandY - 12 + bobble, cx, bandY - 20 + bobble);
+      ctx.strokeStyle = "#FFAA00";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Star on top
+      const starX = cx;
+      const starY = bandY - 20 + bobble;
+      const starR = 5;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? starR : starR * 0.4;
+        const angle = (i * Math.PI) / 5 - Math.PI / 2;
+        if (i === 0) ctx.moveTo(starX + Math.cos(angle) * r, starY + Math.sin(angle) * r);
+        else ctx.lineTo(starX + Math.cos(angle) * r, starY + Math.sin(angle) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#FFDD00";
+      ctx.fill();
+      ctx.strokeStyle = "#FFAA00";
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
 function draw(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1660,6 +2006,7 @@ function draw(): void {
   drawFeet(cx, cy, size);
   drawBody(cx, cy, size);
   drawFace(cx, cy, size);
+  drawAccessory(cx, cy, size);
   ctx.restore();
 
   // Draw particles on top (not affected by squish)

@@ -3,35 +3,34 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.17.0 — Pet Naming (2026-03-29)
+## Last completed: v0.18.0 — Accessories (2026-03-29)
 
 ### What was done
-- Added pet naming feature — users can name their pet via the right-click context menu
-- Custom naming dialog using a modal BrowserWindow (no native input dialog in Electron)
-- Name stored in SaveData and persisted across sessions
-- Named pets use personalized speech bubbles ~25% of the time ("Luna is happy~", "I'm Luna!", etc.)
-- Welcome back greeting is personalized: "Hi! It's me, Luna! ♥"
-- Pet reacts with excitement when first named or renamed (speech bubble, squish, greeting sound)
-- Context menu shows current name: "✏️ Rename Pet (Luna)" or "✏️ Name Your Pet" if unnamed
-- Added `promptPetName` and `onPromptName` to preload bridge (now 13 methods)
-- Added `prompt-pet-name` IPC handler in main.ts and `prompt-name` IPC channel (main -> renderer)
+- Added 8 wearable accessories: crown, bow, glasses, flower, party hat, cat ears, top hat, star headband
+- Accessories selected via right-click context menu "Accessories" submenu with radio buttons
+- Each accessory is hand-drawn on the Canvas, positioned on the pet's head/face
+- Putting on an accessory triggers a happy reaction with speech bubble ("How do I look?", "So stylish~!")
+- Star headband has a bouncing animation (sine wave) for extra charm
+- Accessory choice saved in SaveData and restored across sessions
+- Added `onSetAccessory` to preload bridge (now 14 methods)
+- Added `set-accessory` IPC channel (main -> renderer)
 
 ### Thoughts for next cycle
-- **Settings window** — dedicated settings UI (BrowserWindow) for: sound on/off, wandering on/off, pet name, volume slider; opens from context menu. The naming dialog pattern from this cycle could be reused for a richer settings panel.
-- **Pet customization** — accessories (hats, bows, glasses) rendered on top of the pet, toggled from context menu, stored in save file. The pet now has a name — giving it a look would complete the personalization.
-- **Mini-games** — catch falling stars, clicking speed challenge — scores saved persistently
-- **Combo system** — triple-click for mega trick, hold-click charge-up with visual buildup and unique sound
+- **Mini-games** — catch falling stars, clicking speed challenge, memory game — scores saved persistently. The pet has personality, a name, a look — now it needs something to *do*. Mini-games add a whole new interaction dimension.
+- **Settings window** — dedicated settings UI (BrowserWindow) for: sound on/off, wandering on/off, pet name, volume slider, accessory picker with visual preview. Would consolidate the growing context menu.
+- **Combo system** — triple-click for mega trick, hold-click charge-up with visual buildup and unique sound. Adds depth to the clicking interaction.
+- **Pet stats (hunger, happiness, energy)** — tamagotchi dimension with visible stat bars, decaying over time. Makes the pet feel more alive and needy.
 - **Butterfly interaction** — click the butterfly to scatter it; more butterflies unlocked by achievements
-- **Pet stats (hunger, happiness, energy)** — tamagotchi dimension with visible stat bars, decaying over time
-- **Volume control** — let users adjust sound volume (currently hardcoded)
 - **Weather awareness** — fetch local weather data and reflect it visually (rain, sun, snow around the pet)
-- **Notification integration** — pet reacts to system notifications
 - **Multiple pet companions** — unlock additional pet types or friends
+- **Accessory combos** — allow wearing multiple accessories at once (hat + glasses), or unlock special accessories via achievements
+- **Notification integration** — pet reacts to system notifications
 
 ### Current architecture notes
-- Naming dialog: modal BrowserWindow with inline HTML, communicates name back via page title change ("NAME:Luna")
-- `petName` is a module-level string in renderer, saved in `SaveData.petName`
-- preload.ts now exposes 13 methods
-- Renderer is now ~1900 lines — module splitting would help maintainability
-- main.ts context menu receives `petName` in menuData, shows it in the rename menu item
-- The BrowserWindow-based dialog pattern could be reused for a settings window
+- `currentAccessory` is a module-level string (AccessoryType union) in renderer, saved in `SaveData.accessory`
+- `drawAccessory()` runs inside the squish/spin transform context (between drawFace and ctx.restore)
+- preload.ts now exposes 14 methods
+- Renderer is now ~2100 lines — module splitting is increasingly desirable
+- main.ts context menu receives `accessory` in menuData, builds a radio-button submenu
+- The glasses accessory renders on the face (eye-level), not on top of the head like other accessories
+- The star headband has frame-based animation (sine bobble) — it moves even when the pet is idle
