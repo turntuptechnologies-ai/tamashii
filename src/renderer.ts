@@ -142,6 +142,53 @@ function playComboMilestoneSound(): void {
   setTimeout(() => playTone(1320, 0.2, "sine", 0.14), 180);
 }
 
+function startChargeSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Continuous rising tone that builds as charge increases
+  chargeSoundOsc = audioCtx.createOscillator();
+  chargeSoundGain = audioCtx.createGain();
+  chargeSoundOsc.type = "sine";
+  chargeSoundOsc.frequency.value = 200;
+  chargeSoundGain.gain.value = 0;
+  chargeSoundOsc.connect(chargeSoundGain);
+  chargeSoundGain.connect(audioCtx.destination);
+  chargeSoundOsc.start();
+}
+
+function updateChargeSound(level: number): void {
+  if (!chargeSoundOsc || !chargeSoundGain) return;
+  // Pitch rises from 200Hz to 800Hz, volume rises from 0 to 0.08
+  chargeSoundOsc.frequency.value = 200 + level * 600;
+  chargeSoundGain.gain.value = Math.min(level * 0.08, 0.08);
+}
+
+function stopChargeSound(): void {
+  if (chargeSoundOsc) {
+    try { chargeSoundOsc.stop(); } catch (_e) { /* already stopped */ }
+    chargeSoundOsc = null;
+  }
+  if (chargeSoundGain) {
+    chargeSoundGain = null;
+  }
+}
+
+function playChargeReleaseSound(level: number): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Big satisfying release — ascending burst proportional to charge level
+  const baseFreq = 400 + level * 400;
+  playTone(baseFreq, 0.15, "sine", 0.12);
+  setTimeout(() => playTone(baseFreq * 1.25, 0.12, "sine", 0.1), 60);
+  setTimeout(() => playTone(baseFreq * 1.5, 0.12, "sine", 0.1), 120);
+  if (level > 0.5) {
+    setTimeout(() => playTone(baseFreq * 2, 0.2, "sine", 0.12), 180);
+  }
+  if (level > 0.8) {
+    setTimeout(() => playTone(baseFreq * 2.5, 0.25, "sine", 0.1), 240);
+  }
+}
+
 // --- Time of Day ---
 type TimeOfDay = "morning" | "afternoon" | "evening" | "night";
 
@@ -209,6 +256,19 @@ let comboDisplayValue = 0;    // the combo value to display while fading
 let comboShakeAmount = 0;     // screen shake intensity for big combos
 let comboScale = 1;           // scale pulse for combo counter
 
+// --- Hold-Click Charge-Up ---
+let isCharging = false;        // true when mouse is held down without moving
+let chargeStartTime = 0;      // timestamp when charge started
+let chargeLevel = 0;          // 0-1 smoothed charge progress
+let chargeReleased = false;   // true briefly after charge release for explosion
+let chargeReleaseLevel = 0;   // the charge level at time of release
+let chargeVibrate = 0;        // vibration intensity during charge
+let chargeRingPulse = 0;      // ring animation phase
+const CHARGE_MIN_TIME = 600;  // ms before charge starts registering (to not conflict with normal click)
+const CHARGE_MAX_TIME = 4000; // ms for full charge
+let chargeSoundOsc: OscillatorNode | null = null;
+let chargeSoundGain: GainNode | null = null;
+
 interface Particle {
   x: number;
   y: number;
@@ -217,7 +277,8 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl" | "confetti";
+  color?: string; // optional color for confetti
 }
 
 const particles: Particle[] = [];
@@ -397,6 +458,10 @@ canvas.addEventListener("mousedown", (e) => {
   velocityY = 0;
   lastX = e.screenX;
   lastY = e.screenY;
+  // Start charge-up timer (only triggers if held without moving)
+  chargeStartTime = Date.now();
+  isCharging = false;
+  chargeLevel = 0;
 });
 
 window.addEventListener("mousemove", (e) => {
@@ -405,6 +470,12 @@ window.addEventListener("mousemove", (e) => {
   const dy = e.screenY - lastY;
   if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
     dragMoved = true;
+    // Cancel charge-up if dragging
+    if (isCharging) {
+      isCharging = false;
+      chargeLevel = 0;
+      stopChargeSound();
+    }
   }
   lastX = e.screenX;
   lastY = e.screenY;
@@ -413,14 +484,127 @@ window.addEventListener("mousemove", (e) => {
 
 window.addEventListener("mouseup", () => {
   if (isDragging && !dragMoved) {
-    onPetClicked();
+    if (isCharging && chargeLevel > 0.05) {
+      // Release the charge!
+      releaseCharge();
+    } else {
+      onPetClicked();
+    }
   }
   if (isDragging && dragMoved) {
     // Start falling — check if pet is above ground
     startFalling();
   }
+  // Cancel any active charge
+  if (isCharging) {
+    isCharging = false;
+    stopChargeSound();
+  }
   isDragging = false;
 });
+
+function releaseCharge(): void {
+  chargeReleaseLevel = chargeLevel;
+  chargeReleased = true;
+  isCharging = false;
+  stopChargeSound();
+  playChargeReleaseSound(chargeReleaseLevel);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // Determine charge tier
+  let msg: string;
+  let confettiCount: number;
+  let sparkleCount: number;
+  let heartCount: number;
+
+  if (chargeReleaseLevel > 0.8) {
+    // Full charge — massive celebration
+    msg = "SUPER BLAST!!! ✨";
+    confettiCount = 30;
+    sparkleCount = 16;
+    heartCount = 8;
+    petHappiness = Math.min(100, petHappiness + 15);
+  } else if (chargeReleaseLevel > 0.5) {
+    // Medium charge — good burst
+    msg = "Ka-BOOM~! 💥";
+    confettiCount = 18;
+    sparkleCount = 10;
+    heartCount = 5;
+    petHappiness = Math.min(100, petHappiness + 8);
+  } else if (chargeReleaseLevel > 0.2) {
+    // Small charge — modest pop
+    msg = "Pop~!";
+    confettiCount = 8;
+    sparkleCount = 5;
+    heartCount = 3;
+    petHappiness = Math.min(100, petHappiness + 3);
+  } else {
+    // Tiny charge — little puff
+    msg = "Pff~";
+    confettiCount = 3;
+    sparkleCount = 2;
+    heartCount = 1;
+    petHappiness = Math.min(100, petHappiness + 1);
+  }
+
+  speechBubble = { text: msg, life: 150, maxLife: 150 };
+  squishAmount = 0.5 + chargeReleaseLevel * 0.5;
+  isHappy = true;
+  happyTimer = 60 + Math.floor(chargeReleaseLevel * 60);
+
+  // Spawn confetti — colorful rectangles in all directions
+  const confettiColors = ["#FF4488", "#44BBFF", "#FFDD44", "#44FF88", "#FF8844", "#AA66FF", "#FF6666", "#66DDAA"];
+  for (let i = 0; i < confettiCount; i++) {
+    const angle = (i / confettiCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const speed = 2 + Math.random() * 3 * chargeReleaseLevel;
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 20,
+      y: cy + (Math.random() - 0.5) * 15,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1.5,
+      life: 60 + Math.random() * 40,
+      maxLife: 60 + Math.random() * 40,
+      size: 3 + Math.random() * 3,
+      type: "confetti",
+      color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+    });
+  }
+
+  // Spawn sparkles in a ring
+  for (let i = 0; i < sparkleCount; i++) {
+    const angle = (i / sparkleCount) * Math.PI * 2;
+    const speed = 1.5 + Math.random() * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 20,
+      y: cy + Math.sin(angle) * 15,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 3 + Math.random() * 4,
+      type: "sparkle",
+    });
+  }
+
+  // Hearts floating up
+  for (let i = 0; i < heartCount; i++) {
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 50,
+      y: cy - 10,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -(2 + Math.random() * 2),
+      life: 70 + Math.random() * 30,
+      maxLife: 70 + Math.random() * 30,
+      size: 7 + Math.random() * 5,
+      type: "heart",
+    });
+  }
+
+  chargeLevel = 0;
+  chargeVibrate = 0;
+}
 
 function startFalling(): void {
   window.tamashii.getScreenBounds().then((bounds) => {
@@ -1876,6 +2060,82 @@ function drawGrowl(x: number, y: number, size: number, alpha: number, life: numb
   ctx.restore();
 }
 
+// --- Confetti Drawing ---
+function drawConfetti(x: number, y: number, size: number, alpha: number, life: number, color: string): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  // Tumbling rotation based on life
+  ctx.rotate(life * 0.2);
+  // Rectangular confetti piece
+  ctx.fillStyle = color;
+  ctx.fillRect(-size * 0.6, -size * 0.3, size * 1.2, size * 0.6);
+  ctx.restore();
+}
+
+// --- Charge Ring Drawing ---
+function drawChargeRing(cx: number, cy: number, size: number): void {
+  if (!isCharging || chargeLevel <= 0) return;
+
+  ctx.save();
+
+  // Vibration offset
+  const vibeX = chargeVibrate > 0 ? (Math.random() - 0.5) * chargeVibrate : 0;
+  const vibeY = chargeVibrate > 0 ? (Math.random() - 0.5) * chargeVibrate : 0;
+
+  const ringCx = cx + vibeX;
+  const ringCy = cy + vibeY;
+
+  // Base ring radius — grows with charge
+  const baseRadius = size * 0.5 + chargeLevel * size * 0.15;
+  const pulseRadius = baseRadius + Math.sin(chargeRingPulse) * 3;
+
+  // Ring color shifts from soft blue to bright gold to white at max
+  let ringColor: string;
+  let glowAlpha: number;
+  if (chargeLevel < 0.3) {
+    ringColor = `rgba(100, 180, 255, ${0.3 + chargeLevel})`;
+    glowAlpha = 0.1 + chargeLevel * 0.3;
+  } else if (chargeLevel < 0.7) {
+    ringColor = `rgba(255, 200, 50, ${0.4 + chargeLevel * 0.4})`;
+    glowAlpha = 0.2 + chargeLevel * 0.3;
+  } else {
+    ringColor = `rgba(255, 255, 200, ${0.6 + chargeLevel * 0.3})`;
+    glowAlpha = 0.3 + chargeLevel * 0.3;
+  }
+
+  // Outer glow
+  ctx.beginPath();
+  ctx.arc(ringCx, ringCy + 5, pulseRadius + 8, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255, 220, 100, ${glowAlpha * 0.3})`;
+  ctx.fill();
+
+  // Charge ring arc (fills up clockwise as charge builds)
+  ctx.beginPath();
+  ctx.arc(ringCx, ringCy + 5, pulseRadius, -Math.PI / 2, -Math.PI / 2 + chargeLevel * Math.PI * 2);
+  ctx.strokeStyle = ringColor;
+  ctx.lineWidth = 3 + chargeLevel * 2;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // Small energy sparks around the ring at higher charges
+  if (chargeLevel > 0.3) {
+    const sparkCount = Math.floor(chargeLevel * 6);
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = chargeRingPulse * 0.5 + (i / sparkCount) * Math.PI * 2;
+      const sparkR = pulseRadius + 3 + Math.sin(chargeRingPulse * 2 + i) * 4;
+      const sparkX = ringCx + Math.cos(angle) * sparkR;
+      const sparkY = ringCy + 5 + Math.sin(angle) * sparkR;
+      ctx.beginPath();
+      ctx.arc(sparkX, sparkY, 1.5 + chargeLevel, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 200, ${0.4 + chargeLevel * 0.4})`;
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
 // --- Speech Bubble Drawing ---
 function drawSpeechBubble(cx: number, petTopY: number): void {
   if (!speechBubble) return;
@@ -2076,6 +2336,42 @@ function update(): void {
     if (comboShakeAmount < 0.1) comboShakeAmount = 0;
   }
 
+  // Hold-click charge-up logic
+  if (isDragging && !dragMoved && !minigameActive && !isSpinning) {
+    const holdTime = Date.now() - chargeStartTime;
+    if (holdTime >= CHARGE_MIN_TIME) {
+      if (!isCharging) {
+        isCharging = true;
+        startChargeSound();
+      }
+      // Calculate charge level (0 to 1)
+      const chargeTime = holdTime - CHARGE_MIN_TIME;
+      chargeLevel = Math.min(chargeTime / (CHARGE_MAX_TIME - CHARGE_MIN_TIME), 1);
+      chargeVibrate = chargeLevel * 3; // vibration intensity scales with charge
+      chargeRingPulse += 0.1 + chargeLevel * 0.15; // ring animation speeds up
+      updateChargeSound(chargeLevel);
+
+      // Speech bubbles at charge thresholds
+      if (chargeLevel > 0.2 && chargeLevel < 0.25 && !speechBubble) {
+        speechBubble = { text: "Charging~!", life: 60, maxLife: 60 };
+      } else if (chargeLevel > 0.5 && chargeLevel < 0.55 && !speechBubble) {
+        speechBubble = { text: "More power...!", life: 60, maxLife: 60 };
+      } else if (chargeLevel >= 0.99 && !speechBubble) {
+        speechBubble = { text: "MAX CHARGE!! ✨", life: 60, maxLife: 60 };
+      }
+    }
+  } else if (!isDragging && isCharging) {
+    // Mouse released outside mouseup (safety cleanup)
+    isCharging = false;
+    chargeLevel = 0;
+    stopChargeSound();
+  }
+
+  // Charge release flash decay
+  if (chargeReleased) {
+    chargeReleased = false;
+  }
+
   // Spin trick update
   if (isSpinning) {
     spinFrame++;
@@ -2227,6 +2523,11 @@ function update(): void {
       // Stomach growl squiggles — wobble side to side as they drift out
       p.vy += Math.sin(p.life * 0.4) * 0.08;
       p.vx *= 0.97;
+    } else if (p.type === "confetti") {
+      // Confetti — tumbles with gravity and flutter
+      p.vy += 0.06; // gravity
+      p.vx += Math.sin(p.life * 0.2) * 0.08; // flutter side to side
+      p.vx *= 0.98;
     }
     p.vx *= 0.99;
     p.life--;
@@ -2858,6 +3159,9 @@ function draw(): void {
   ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
   ctx.fill();
 
+  // Charge-up ring (drawn behind the pet body)
+  drawChargeRing(cx, cy, size);
+
   // Apply squish + wander lean + spin transform
   ctx.save();
   const feetY = canvas.height / 2 + size * 0.35;
@@ -2900,6 +3204,13 @@ function draw(): void {
     }
   }
 
+  // Charge vibration — pet shakes as it charges up
+  if (isCharging && chargeVibrate > 0) {
+    const vx = (Math.random() - 0.5) * chargeVibrate * 2;
+    const vy = (Math.random() - 0.5) * chargeVibrate * 2;
+    ctx.translate(vx, vy);
+  }
+
   drawFeet(cx, cy, size);
   drawBody(cx, cy, size);
   drawFace(cx, cy, size);
@@ -2927,6 +3238,8 @@ function draw(): void {
       drawSweat(p.x, p.y, p.size, alpha);
     } else if (p.type === "growl") {
       drawGrowl(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "confetti") {
+      drawConfetti(p.x, p.y, p.size, alpha, p.life, p.color || "#FF4488");
     }
   }
 

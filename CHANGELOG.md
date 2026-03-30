@@ -3,6 +3,27 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.23.0] — 2026-03-30 — Hold-Click Charge-Up
+
+### Added
+- **Hold-click charge-up** — hold the mouse button on your pet to charge up energy, then release for a spectacular explosion of confetti, sparkles, and hearts
+- **Charge ring** — a glowing ring appears around the pet as you hold, filling up clockwise from soft blue to bright gold to brilliant white at max charge
+- **Energy sparks** — small spark particles orbit the ring at higher charge levels, growing more numerous and brighter
+- **Pet vibration** — the pet shakes with increasing intensity as the charge builds, communicating the pent-up energy
+- **Rising charge sound** — a continuous tone that rises in pitch and volume as the charge builds, adding satisfying audio feedback
+- **Four charge tiers** — release at different points for different effects:
+  - Tiny (< 20%): a small "Pff~" puff with a few confetti pieces
+  - Small (20-50%): a "Pop~!" with modest confetti and sparkles
+  - Medium (50-80%): a "Ka-BOOM~! 💥" with a generous burst of confetti, sparkles, and hearts
+  - Full (80-100%): a "SUPER BLAST!!! ✨" with massive celebration — 30 confetti pieces, 16 sparkles, 8 hearts
+- **Confetti particles** — new colorful tumbling rectangle particles in 8 vibrant colors that flutter and fall with gravity
+- **Charge speech bubbles** — the pet announces "Charging~!", "More power...!", and "MAX CHARGE!! ✨" as you hold
+- **Release sound** — a satisfying ascending burst sound that scales with charge level
+- **Happiness boost** — releasing a charge gives happiness proportional to the charge level (up to +15 at full charge)
+- **Smart conflict avoidance** — charging only starts after 600ms hold (won't trigger on normal clicks or double-clicks), and cancels if you start dragging
+
+**Why this feature:** The pet had clicks, double-clicks, and combos — but no way to build up anticipation. The hold-click charge-up transforms a simple hold into a mini event. Watching the ring fill, feeling the pet shake, hearing the tone rise — and then the explosive release of confetti and sparkles — it's deeply satisfying. It's the difference between popping a balloon and inflating one yourself before popping it. The buildup makes the payoff better. And with four charge tiers, there's reason to experiment: sometimes a quick pop is fun, sometimes you want to go all the way to SUPER BLAST.
+
 ## [v0.22.0] — 2026-03-30 — Click Combo System
 
 ### Added
