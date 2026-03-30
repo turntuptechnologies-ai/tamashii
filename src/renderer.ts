@@ -187,7 +187,7 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl";
 }
 
 const particles: Particle[] = [];
@@ -200,6 +200,7 @@ let memUsage = 0;
 let stressLevel = 0; // 0-1 smoothed stress indicator
 let sweatSpawnTimer = 0;
 let isStressed = false; // true when stress > 0.5
+let growlSpawnTimer = 0; // stomach growl particle timer
 
 window.tamashii.onSystemStats((stats) => {
   cpuUsage = stats.cpu;
@@ -1283,6 +1284,15 @@ function getBodyColors(): { body: string; stroke: string; belly: string; foot: s
     colors.belly = lerpColor(colors.belly, "#DDAABB", t);
     colors.foot = lerpColor(colors.foot, "#BB6677", t);
   }
+  // When hungry, desaturate body colors (pet looks washed out / pale)
+  if (petHunger < 40) {
+    const t = Math.min((40 - petHunger) / 40, 0.5); // max 50% desaturation
+    const gray = "#8899AA";
+    colors.body = lerpColor(colors.body, gray, t);
+    colors.stroke = lerpColor(colors.stroke, "#667788", t);
+    colors.belly = lerpColor(colors.belly, "#AABBCC", t);
+    colors.foot = lerpColor(colors.foot, "#778899", t);
+  }
   return colors;
 }
 
@@ -1338,6 +1348,10 @@ function drawFace(cx: number, cy: number, size: number): void {
   const eyeY = cy - 5;
   const eyeSpacing = size * 0.15;
 
+  // Determine stat-driven visual states
+  const isSadFromStats = !isHappy && petHappiness < 25;
+  const isDrainedFromStats = !isHappy && !isYawning && petEnergy < 20;
+
   if (isStressed && !isHappy && !isYawning) {
     // Stressed eyes — small, worried, with raised inner brows
     for (const side of [-1, 1]) {
@@ -1364,6 +1378,59 @@ function drawFace(cx: number, cy: number, size: number): void {
       ctx.quadraticCurveTo(ex, eyeY - 14 - stressLevel * 3, ex + side * 9, eyeY - 10 + 3);
       ctx.strokeStyle = "#1a1a2e";
       ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  } else if (isDrainedFromStats && !isYawning) {
+    // Drained eyes — heavily drooping lids, almost falling asleep
+    const drainLevel = 1 - petEnergy / 20; // 0-1 (1 = most drained)
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      const droopiness = 0.5 + drainLevel * 0.3;
+      // Eye white (very narrow due to heavy lids)
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 2, 8, 9 * (1 - droopiness), 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Pupil (tiny, looking down)
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 3, 3, 4 * (1 - droopiness * 0.6), 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fill();
+      // Heavy eyelid line
+      ctx.beginPath();
+      ctx.moveTo(ex - 9, eyeY - 1 + droopiness * 5);
+      ctx.quadraticCurveTo(ex, eyeY - 5 + droopiness * 9, ex + 9, eyeY - 1 + droopiness * 5);
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  } else if (isSadFromStats && !isYawning) {
+    // Sad eyes — downturned, with subtle frown brows
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      // Eye white (slightly droopy)
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 1, 8, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Pupil (looking down)
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 3, 4, 4.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fill();
+      // Eye shine (smaller)
+      ctx.beginPath();
+      ctx.ellipse(ex + 2, eyeY + 1, 1.5, 1.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      // Sad brow — outer end droops down
+      ctx.beginPath();
+      ctx.moveTo(ex - side * 9, eyeY - 11);
+      ctx.quadraticCurveTo(ex, eyeY - 13, ex + side * 9, eyeY - 8);
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 1.8;
       ctx.lineCap = "round";
       ctx.stroke();
     }
@@ -1449,6 +1516,23 @@ function drawFace(cx: number, cy: number, size: number): void {
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.stroke();
+  } else if (isSadFromStats && !isYawning) {
+    // Sad mouth — small downturned frown
+    ctx.beginPath();
+    ctx.arc(cx, cy + 15, 6, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.strokeStyle = "#1a1a2e";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  } else if (isDrainedFromStats && !isYawning) {
+    // Exhausted mouth — flat, slightly drooped line
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy + 11);
+    ctx.quadraticCurveTo(cx, cy + 13, cx + 5, cy + 11);
+    ctx.strokeStyle = "#1a1a2e";
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+    ctx.stroke();
   } else if (isYawning) {
     // Yawn mouth — open oval
     const yawnSize = Math.sin(yawnProgress * Math.PI) * 8;
@@ -1479,9 +1563,11 @@ function drawFace(cx: number, cy: number, size: number): void {
     ctx.stroke();
   }
 
-  // Cheeks (blush — brighter when happy, dimmer at night)
+  // Cheeks (blush — brighter when happy, dimmer at night, faded when sad/drained)
   let blushAlpha = isHappy ? 0.55 : 0.35;
   if (currentTimeOfDay === "night") blushAlpha *= 0.6;
+  if (isSadFromStats) blushAlpha *= 0.4; // barely blushing when sad
+  if (isDrainedFromStats) blushAlpha *= 0.5; // pale when drained
   const blushSize = isHappy ? 7 : 6;
   ctx.beginPath();
   ctx.ellipse(cx - eyeSpacing - 10, cy + 5, blushSize, 4, 0, 0, Math.PI * 2);
@@ -1656,6 +1742,28 @@ function drawSweat(x: number, y: number, size: number, alpha: number): void {
   ctx.restore();
 }
 
+// --- Stomach Growl Drawing ---
+function drawGrowl(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.6;
+  // Squiggly line to represent stomach rumbling
+  ctx.beginPath();
+  const segments = 4;
+  const segLen = size * 0.8;
+  ctx.moveTo(x - segments * segLen / 2, y);
+  for (let i = 0; i < segments; i++) {
+    const sx = x - segments * segLen / 2 + i * segLen;
+    const dir = i % 2 === 0 ? -1 : 1;
+    const wobble = Math.sin(life * 0.3) * 1.5;
+    ctx.quadraticCurveTo(sx + segLen * 0.5, y + dir * (size * 0.5 + wobble), sx + segLen, y);
+  }
+  ctx.strokeStyle = "#DD8844";
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.restore();
+}
+
 // --- Speech Bubble Drawing ---
 function drawSpeechBubble(cx: number, petTopY: number): void {
   if (!speechBubble) return;
@@ -1714,30 +1822,60 @@ function drawSpeechBubble(cx: number, petTopY: number): void {
 
 // --- Animation Loop ---
 function getBounceSpeed(): number {
+  let speed: number;
   switch (currentTimeOfDay) {
-    case "morning": return 0.12;  // Energetic!
-    case "afternoon": return 0.08; // Normal
-    case "evening": return 0.05;  // Winding down
-    case "night": return 0.03;    // Barely moving, sleepy
+    case "morning": speed = 0.12; break;
+    case "afternoon": speed = 0.08; break;
+    case "evening": speed = 0.05; break;
+    case "night": speed = 0.03; break;
   }
+  // Low happiness → sluggish bounce
+  if (petHappiness < 40) {
+    speed *= 0.5 + (petHappiness / 40) * 0.5; // at 0 happiness, half speed
+  }
+  // Low energy → even slower
+  if (petEnergy < 30) {
+    speed *= 0.4 + (petEnergy / 30) * 0.6;
+  }
+  return speed;
 }
 
 function getBounceAmplitude(): number {
+  let amp: number;
   switch (currentTimeOfDay) {
-    case "morning": return 4;
-    case "afternoon": return 3;
-    case "evening": return 2;
-    case "night": return 1.5;
+    case "morning": amp = 4; break;
+    case "afternoon": amp = 3; break;
+    case "evening": amp = 2; break;
+    case "night": amp = 1.5; break;
   }
+  // Low happiness → smaller bounce (droopier)
+  if (petHappiness < 40) {
+    amp *= 0.5 + (petHappiness / 40) * 0.5;
+  }
+  // Low energy → minimal bounce
+  if (petEnergy < 30) {
+    amp *= 0.5 + (petEnergy / 30) * 0.5;
+  }
+  return amp;
 }
 
 function getWanderSpeed(): number {
+  let speed: number;
   switch (currentTimeOfDay) {
-    case "morning": return 0.5;    // Energetic exploring
-    case "afternoon": return 0.35; // Casual strolling
-    case "evening": return 0.2;    // Slow shuffle
-    case "night": return 0;        // Too sleepy to wander
+    case "morning": speed = 0.5; break;
+    case "afternoon": speed = 0.35; break;
+    case "evening": speed = 0.2; break;
+    case "night": speed = 0; break;
   }
+  // Low energy → sluggish wandering
+  if (petEnergy < 30 && speed > 0) {
+    speed *= 0.3 + (petEnergy / 30) * 0.7;
+  }
+  // Very low happiness → wanders less eagerly
+  if (petHappiness < 20 && speed > 0) {
+    speed *= 0.5;
+  }
+  return speed;
 }
 
 function update(): void {
@@ -1944,6 +2082,10 @@ function update(): void {
       // Sweat drops fall and accelerate slightly
       p.vy += 0.08;
       p.vx *= 0.97;
+    } else if (p.type === "growl") {
+      // Stomach growl squiggles — wobble side to side as they drift out
+      p.vy += Math.sin(p.life * 0.4) * 0.08;
+      p.vx *= 0.97;
     }
     p.vx *= 0.99;
     p.life--;
@@ -2126,6 +2268,31 @@ function update(): void {
     }
   } else {
     sweatSpawnTimer = 0;
+  }
+
+  // Spawn stomach growl particles when very hungry
+  if (petHunger < 20 && !isDragging && !minigameActive) {
+    growlSpawnTimer++;
+    const growlInterval = Math.max(60, 120 - (20 - petHunger) * 3); // more frequent when hungrier
+    if (growlSpawnTimer > growlInterval) {
+      growlSpawnTimer = 0;
+      const growlCx = canvas.width / 2;
+      const growlCy = canvas.height / 2;
+      // Small squiggly lines emanate from the pet's belly area
+      const side = Math.random() < 0.5 ? -1 : 1;
+      particles.push({
+        x: growlCx + side * (10 + Math.random() * 10),
+        y: growlCy + 15 + Math.random() * 5,
+        vx: side * (0.4 + Math.random() * 0.3),
+        vy: (Math.random() - 0.5) * 0.3,
+        life: 35 + Math.random() * 15,
+        maxLife: 35 + Math.random() * 15,
+        size: 3 + Math.random() * 2,
+        type: "growl",
+      });
+    }
+  } else {
+    growlSpawnTimer = 0;
   }
 
   // Idle bounce (speed and amplitude vary by time of day)
@@ -2502,6 +2669,19 @@ function draw(): void {
     ctx.rotate(wanderLean * 0.06); // subtle tilt, ~3.4 degrees max
     ctx.translate(-cx, -feetY);
   }
+  // Droopy posture when happiness or energy is critically low
+  if (!isSpinning && !isHappy) {
+    const droopFactor = Math.max(
+      petHappiness < 25 ? (25 - petHappiness) / 25 * 0.04 : 0,
+      petEnergy < 20 ? (20 - petEnergy) / 20 * 0.05 : 0,
+    );
+    if (droopFactor > 0.001) {
+      // Slight vertical compression + downward shift — looks like sagging
+      ctx.translate(cx, feetY);
+      ctx.scale(1.0, 1.0 - droopFactor);
+      ctx.translate(-cx, -feetY);
+    }
+  }
 
   drawFeet(cx, cy, size);
   drawBody(cx, cy, size);
@@ -2528,6 +2708,8 @@ function draw(): void {
       drawStar(p.x, p.y, p.size, alpha, p.life);
     } else if (p.type === "sweat") {
       drawSweat(p.x, p.y, p.size, alpha);
+    } else if (p.type === "growl") {
+      drawGrowl(p.x, p.y, p.size, alpha, p.life);
     }
   }
 

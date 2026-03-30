@@ -3,42 +3,39 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.20.0 — Pet Stats (Hunger, Happiness, Energy) (2026-03-30)
+## Last completed: v0.21.0 — Stat-Driven Behavior Changes (2026-03-30)
 
 ### What was done
-- Added three pet stats: Hunger (orange), Happiness (pink), Energy (green) — each 0-100
-- Stats decay over real time: hunger ~1/3min, happiness ~1/5min, energy varies by time of day
-- Energy auto-recharges at night (fits the existing sleep behavior)
-- Clicking boosts happiness (+3), spin tricks (+5), mini-game (+score, up to 20)
-- Added "Feed Pet" context menu item: +25 hunger, cute munch sound, happy reaction
-- Added "Power Nap" context menu item: +20 energy, lullaby sound
-- Tiny stat bars drawn below the pet (hidden during mini-game to avoid clutter)
-- Bars turn red when stat < 25; low-stat speech bubbles trigger at < 25
-- Offline decay applied on load (capped at 8 hours, minimum stat value 5)
-- Stats persist in SaveData with `lastStatSaveTime` for offline calculation
-- Two new sound functions: `playFeedSound()` (munch), `playNapSound()` (lullaby)
-- Added `onFeedPet` and `onPetNap` to preload bridge (now 17 methods)
-- Added `feed-pet` and `pet-nap` IPC channels
+- Stats now visually affect the pet: hunger desaturates colors + stomach growl particles; low happiness shows sad face + droopy posture + slower bounce; low energy shows heavy eyelids + reduced wandering
+- Modified `getBodyColors()` to desaturate when hunger < 40 (lerps toward gray)
+- Modified `getBounceSpeed()` and `getBounceAmplitude()` to scale down with low happiness (< 40) and low energy (< 30)
+- Modified `getWanderSpeed()` to slow with low energy (< 30) and very low happiness (< 20)
+- Added sad expression in `drawFace()`: droopy eyebrows, downward-looking pupils, frown mouth (triggers when happiness < 25)
+- Added drained expression in `drawFace()`: heavily drooping eyelids, barely-open eyes, flat mouth (triggers when energy < 20)
+- Added droopy posture in `draw()`: slight vertical compression when happiness < 25 or energy < 20
+- Added `drawGrowl()` function: squiggly orange lines from belly area when hunger < 20
+- Added "growl" to particle type union, with wobbling physics in update loop
+- Blush fades when sad or drained
+- All effects smoothly scale rather than binary on/off
 
 ### Thoughts for next cycle
-- **Settings window** — dedicated settings UI (BrowserWindow) for: sound on/off, wandering on/off, pet name, volume slider, accessory picker with visual preview, stat display toggle. The context menu is getting crowded (8+ items) and a settings panel would consolidate things nicely.
-- **Stat-driven behavior changes** — low happiness could make the pet visibly droopy (slower bounce, muted colors), low energy could slow wandering speed, low hunger could add stomach-growl particles. Right now stats are informational; making them affect the pet visually would deepen the tamagotchi feel.
-- **More mini-games** — memory game, reaction speed test, or rhythm game. Mini-game infrastructure is solid; new games just need their own update/draw/click logic.
-- **Accessory combos** — wear multiple accessories (hat + glasses), or unlock special accessories via high stats or achievements.
-- **Weather awareness** — fetch local weather and show rain/snow/sun around the pet
-- **Combo system for regular clicks** — triple-click mega trick, hold-click charge-up
-- **Day/night cycle visual background** — subtle gradient behind the pet that changes with time
-- **Notification integration** — pet reacts to system notifications
-- **Lifetime stats screen** — show total clicks, spins, bounces, play time, mini-game high score, feeding count in a separate window
+- **Settings window** — the context menu now has 10+ items. A dedicated settings BrowserWindow would consolidate: sound toggle, volume slider, wandering toggle, pet name, accessory picker with visual preview, stat display toggle. This is the most pressing UX improvement.
+- **More mini-games** — memory match, reaction speed test, or rhythm game. The mini-game infrastructure is solid (startMinigame/endMinigame/updateMinigame/drawMinigame pattern). New games just need their own state and logic.
+- **Combo system for clicks** — triple-click mega trick, hold-click charge-up for a special animation. The double-click spin trick was a hit; more click interactions would add depth.
+- **Weather awareness** — fetch local weather (via a free API) and show rain/snow/sun effects around the pet. Would need a new IPC channel for weather data from main process.
+- **Day/night visual background** — subtle gradient or ambient glow behind the pet that changes with time of day. Currently the window is fully transparent; a very faint circular gradient could add atmosphere.
+- **Lifetime stats screen** — show total clicks, spins, bounces, feeding count, play time, mini-game high score in a separate window. Similar to settings window implementation.
+- **Accessory combos** — wear multiple accessories simultaneously (hat + glasses). Would need to change `currentAccessory` from a single string to an array.
+- **Notification integration** — pet reacts to OS notifications with a startled or curious expression
 
 ### Current architecture notes
-- `petHunger`, `petHappiness`, `petEnergy` are module-level variables in renderer
-- `updatePetStats()` called at end of `update()`, handles real-time decay and low-stat speech
-- `drawStatBars()` called in `draw()` between achievement glow and mini-game HUD (hidden when minigame active)
-- `feedPet()` and `petNap()` are standalone functions triggered by IPC
-- `lastStatDecayTime` tracks the last decay check; `STAT_DECAY_INTERVAL` is 60 seconds
-- SaveData now includes `petHunger`, `petHappiness`, `petEnergy`, `lastStatSaveTime`
-- Offline decay uses `lastStatSaveTime` timestamp; caps at 480 minutes; floors stats at 5
-- preload.ts now exposes 17 methods
-- Renderer is now ~2600 lines — module splitting remains increasingly desirable
-- Context menu has grown significantly: mood, wandering, sounds, name, accessories, feed, nap, mini-game, achievements, about, quit
+- Renderer is now ~2850 lines — module splitting would help significantly
+- `drawFace()` now has 7 expression branches: stressed, drained, sad, yawning, happy, blinking, sleepy, and normal (default)
+- Stat-driven visuals check `petHappiness` and `petEnergy` directly in various functions (getBodyColors, getBounceSpeed, getBounceAmplitude, getWanderSpeed, drawFace, draw)
+- New particle type "growl" added alongside existing 8 types
+- `growlSpawnTimer` variable tracks stomach growl particle spawning
+- `isSadFromStats` and `isDrainedFromStats` are computed inside `drawFace()` as local variables
+- Droopy posture transform is applied in `draw()` after wander lean, before drawing body
+- preload.ts still has 17 methods — no new IPC channels needed for this feature
+- SaveData interface unchanged from v0.20.0
+- Context menu unchanged from v0.20.0

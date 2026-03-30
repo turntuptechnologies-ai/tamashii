@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.21.0] — 2026-03-30 — Stat-Driven Behavior Changes
+
+### Added
+- **Stats now visibly affect the pet** — hunger, happiness, and energy aren't just numbers anymore; they change how the pet looks, moves, and feels
+- **Low hunger (< 40): Desaturated colors** — the pet's body gradually loses its vibrant blue, becoming washed-out and pale as hunger drops
+- **Very low hunger (< 20): Stomach growl particles** — squiggly orange lines emanate from the pet's belly, representing a rumbling tummy
+- **Low happiness (< 25): Sad expression** — downturned eyes with droopy eyebrows, a small frown, and reduced blush; the pet visibly looks sad
+- **Low happiness (< 40): Sluggish movement** — bounce speed and amplitude decrease, wandering slows; a sad pet doesn't want to move much
+- **Low energy (< 20): Heavy-lidded exhaustion** — eyes droop nearly shut with thick eyelids, flat exhausted mouth; the pet is barely awake
+- **Low energy (< 30): Reduced activity** — bounce and wandering speed dramatically decrease; the pet conserves what little energy it has
+- **Droopy posture** — when happiness or energy is critically low, the pet's body visually compresses/sags, looking deflated
+- **Faded blush** — cheek blush fades when the pet is sad or drained, losing that healthy glow
+- **All effects scale smoothly** — no sudden state switches; colors, speed, and expressions transition gradually as stats change
+
+**Why this feature:** The pet stats added last cycle gave the pet needs — but they were purely informational. The numbers went down, bars turned red, and speech bubbles appeared, but the pet itself looked the same whether it was thriving or starving. Now stats have *consequences*. A hungry pet loses its color. A sad pet droops and frowns. A tired pet can barely keep its eyes open. This transforms the stat system from a dashboard you read into emotions you *see*. You don't need to check the bars anymore — you can tell at a glance that your pet needs you. And when you feed it or play with it and watch the color return, the bounce pick up, the smile come back — that's the whole point of a virtual pet.
+
 ## [v0.20.0] — 2026-03-30 — Pet Stats (Hunger, Happiness, Energy)
 
 ### Added
