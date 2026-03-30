@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.20.0] — 2026-03-30 — Pet Stats (Hunger, Happiness, Energy)
+
+### Added
+- **Pet stats system** — your pet now has three vital stats: Hunger, Happiness, and Energy
+- **Stat bars** — three tiny color-coded bars below the pet show current stat levels at a glance
+- **Hunger** (orange bar) — decays over time (~1 point every 3 minutes); feed your pet from the right-click menu
+- **Happiness** (pink bar) — decays slowly over time; boosted by clicking (+3), spin tricks (+5), and mini-games (up to +20)
+- **Energy** (green bar) — drains during the day, automatically recharges at night while the pet sleeps
+- **🍎 Feed Pet** — new context menu option that restores 25 hunger with a cute munch sound and happy reaction
+- **💤 Power Nap** — new context menu option that restores 20 energy with a soothing lullaby sound
+- **Low-stat speech bubbles** — when any stat drops below 25, the pet lets you know: "I'm hungry...", "Play with me?", "So tired..."
+- **Stat bars turn red** when critically low (below 25) as a visual warning
+- **Offline decay** — stats decay realistically while the app is closed (capped at 8 hours to prevent full depletion)
+- **Stats never hit zero** — minimum of 5 ensures the pet is always recoverable
+- **Two new sound effects** — feeding munch and nap lullaby, both generated with Web Audio API
+- **Stats persist** — all three stats are saved to disk and restored across sessions
+
+**Why this feature:** The pet had personality, reactions, a name, accessories, and even a game to play — but it never *needed* you. Adding hunger, happiness, and energy transforms Tamashii from a toy into a tamagotchi. Now your pet gets hungry if you don't feed it, lonely if you don't play with it, and tired as the day goes on. It creates a reason to come back, to check in, to care. The stat bars are deliberately tiny and unobtrusive — they inform without cluttering. This is the most "virtual pet" feature yet.
+
 ## [v0.19.0] — 2026-03-29 — Star Catcher Mini-Game
 
 ### Added

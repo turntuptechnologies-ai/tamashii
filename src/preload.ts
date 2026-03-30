@@ -46,4 +46,10 @@ contextBridge.exposeInMainWorld("tamashii", {
   onStartMinigame: (callback: () => void) => {
     ipcRenderer.on("start-minigame", () => callback());
   },
+  onFeedPet: (callback: () => void) => {
+    ipcRenderer.on("feed-pet", () => callback());
+  },
+  onPetNap: (callback: () => void) => {
+    ipcRenderer.on("pet-nap", () => callback());
+  },
 });

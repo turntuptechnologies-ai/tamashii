@@ -16,6 +16,8 @@ declare global {
       loadSaveData: () => Promise<unknown>;
       saveData: (data: unknown) => void;
       onStartMinigame: (callback: () => void) => void;
+      onFeedPet: (callback: () => void) => void;
+      onPetNap: (callback: () => void) => void;
     };
   }
 }
@@ -105,6 +107,19 @@ function playMinigameEndSound(): void {
   setTimeout(() => playTone(659, 0.12, "sine", 0.1), 120);  // E5
   setTimeout(() => playTone(784, 0.12, "sine", 0.1), 240);  // G5
   setTimeout(() => playTone(1047, 0.3, "sine", 0.12), 360); // C6
+}
+
+function playFeedSound(): void {
+  // Cute munch — three quick soft pops at slightly different pitches
+  playTone(400, 0.06, "sine", 0.08);
+  setTimeout(() => playTone(500, 0.06, "sine", 0.08), 80);
+  setTimeout(() => playTone(450, 0.08, "sine", 0.1), 160);
+}
+
+function playNapSound(): void {
+  // Gentle descending lullaby — soothing two notes
+  playTone(600, 0.15, "sine", 0.06);
+  setTimeout(() => playTone(400, 0.25, "sine", 0.05), 150);
 }
 
 // --- Time of Day ---
@@ -459,6 +474,160 @@ window.tamashii.onPromptName(async () => {
   }
 });
 
+// --- Pet Stats (Hunger, Happiness, Energy) ---
+let petHunger = 80;     // 0-100, decays over time, boosted by feeding
+let petHappiness = 80;  // 0-100, decays over time, boosted by clicks/spins/games
+let petEnergy = 80;     // 0-100, decays during day, recharges at night
+let lastStatDecayTime = Date.now();
+const STAT_DECAY_INTERVAL = 60000; // check decay every 60 seconds
+let lowStatSpeechCooldown = 0; // prevent spam of low-stat messages
+
+const hungryMessages = [
+  "I'm hungry...",
+  "Feed me please~",
+  "My tummy's growling...",
+  "Is it snack time?",
+  "So hungry...",
+];
+
+const sadMessages = [
+  "I'm a little sad...",
+  "Play with me?",
+  "I need attention...",
+  "Feeling lonely...",
+  "Pet me please~",
+];
+
+const tiredMessages = [
+  "So tired...",
+  "I need rest...",
+  "*yaaaawn*",
+  "Running low...",
+  "Sleepy...",
+];
+
+function feedPet(): void {
+  petHunger = Math.min(100, petHunger + 25);
+  playFeedSound();
+  squishAmount = 0.6;
+  isHappy = true;
+  happyTimer = 60;
+  const feedMessages = ["Yummy!", "Nom nom~!", "Delicious! ♥", "Thank you!", "So tasty~!"];
+  speechBubble = { text: feedMessages[Math.floor(Math.random() * feedMessages.length)], life: 150, maxLife: 150 };
+  // Feeding also gives a small happiness boost
+  petHappiness = Math.min(100, petHappiness + 5);
+  saveGame();
+}
+
+function petNap(): void {
+  petEnergy = Math.min(100, petEnergy + 20);
+  playNapSound();
+  squishAmount = 0.3;
+  const napMessages = ["*zzz*... Refreshed!", "Power nap~!", "That was nice...", "Feel better now!"];
+  speechBubble = { text: napMessages[Math.floor(Math.random() * napMessages.length)], life: 150, maxLife: 150 };
+  saveGame();
+}
+
+function updatePetStats(): void {
+  const now = Date.now();
+  const elapsed = now - lastStatDecayTime;
+
+  if (elapsed >= STAT_DECAY_INTERVAL) {
+    const intervals = Math.floor(elapsed / STAT_DECAY_INTERVAL);
+    lastStatDecayTime = now;
+
+    // Hunger decays ~1 point per 3 minutes (1 per 3 intervals)
+    petHunger = Math.max(0, petHunger - intervals * 0.33);
+
+    // Happiness decays ~1 point per 5 minutes (1 per 5 intervals)
+    petHappiness = Math.max(0, petHappiness - intervals * 0.2);
+
+    // Energy: decays during day, recharges at night
+    if (currentTimeOfDay === "night") {
+      petEnergy = Math.min(100, petEnergy + intervals * 0.5); // recharge at night
+    } else if (currentTimeOfDay === "morning") {
+      petEnergy = Math.max(0, petEnergy - intervals * 0.15); // slow drain in morning
+    } else {
+      petEnergy = Math.max(0, petEnergy - intervals * 0.25); // faster drain afternoon/evening
+    }
+  }
+
+  // Low-stat speech bubbles (only when no bubble is showing and cooldown is up)
+  if (!speechBubble && lowStatSpeechCooldown <= 0) {
+    let lowStatMsg: string | null = null;
+    // Prioritize the lowest stat
+    const lowestVal = Math.min(petHunger, petHappiness, petEnergy);
+    if (lowestVal < 25) {
+      if (petHunger <= petHappiness && petHunger <= petEnergy) {
+        lowStatMsg = hungryMessages[Math.floor(Math.random() * hungryMessages.length)];
+      } else if (petHappiness <= petHunger && petHappiness <= petEnergy) {
+        lowStatMsg = sadMessages[Math.floor(Math.random() * sadMessages.length)];
+      } else {
+        lowStatMsg = tiredMessages[Math.floor(Math.random() * tiredMessages.length)];
+      }
+    }
+    if (lowStatMsg && Math.random() < 0.3) { // 30% chance when eligible
+      speechBubble = { text: lowStatMsg, life: 150, maxLife: 150 };
+      lowStatSpeechCooldown = 600; // 10 second cooldown
+    }
+  }
+  if (lowStatSpeechCooldown > 0) lowStatSpeechCooldown--;
+}
+
+function drawStatBars(): void {
+  const barWidth = 40;
+  const barHeight = 4;
+  const barSpacing = 7;
+  const startX = canvas.width / 2 - barWidth / 2;
+  const startY = canvas.height / 2 + 55; // below the pet's feet
+
+  const stats = [
+    { value: petHunger, color: "#FF9944", label: "🍎" },
+    { value: petHappiness, color: "#FF6699", label: "♥" },
+    { value: petEnergy, color: "#66CC66", label: "⚡" },
+  ];
+
+  ctx.save();
+  for (let i = 0; i < stats.length; i++) {
+    const y = startY + i * barSpacing;
+    const stat = stats[i];
+
+    // Background bar
+    ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+    ctx.beginPath();
+    ctx.roundRect(startX, y, barWidth, barHeight, 2);
+    ctx.fill();
+
+    // Fill bar
+    const fillWidth = (stat.value / 100) * barWidth;
+    // Color shifts toward red when low
+    let barColor = stat.color;
+    if (stat.value < 25) {
+      barColor = "#DD4444";
+    } else if (stat.value < 50) {
+      // Blend toward warning
+      const t = (50 - stat.value) / 25;
+      barColor = stat.value < 35 ? "#EE6644" : stat.color;
+    }
+    ctx.fillStyle = barColor;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.roundRect(startX, y, Math.max(fillWidth, 1), barHeight, 2);
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+  }
+  ctx.restore();
+}
+
+// Listen for feed/nap from main process
+window.tamashii.onFeedPet(() => {
+  feedPet();
+});
+
+window.tamashii.onPetNap(() => {
+  petNap();
+});
+
 // --- Star Catcher Mini-Game ---
 interface FallingStar {
   x: number;
@@ -510,6 +679,7 @@ function endMinigame(): void {
   squishAmount = 0.8;
   isHappy = true;
   happyTimer = 90;
+  petHappiness = Math.min(100, petHappiness + Math.min(minigameScore, 20)); // games boost happiness
 
   // Score-based speech
   let msg: string;
@@ -897,6 +1067,10 @@ interface SaveData {
   petName: string;
   accessory: string;
   minigameHighScore: number;
+  petHunger: number;
+  petHappiness: number;
+  petEnergy: number;
+  lastStatSaveTime: number; // timestamp for calculating offline decay
   version: number;
 }
 
@@ -917,6 +1091,10 @@ function buildSaveData(): SaveData {
     petName,
     accessory: currentAccessory,
     minigameHighScore,
+    petHunger,
+    petHappiness,
+    petEnergy,
+    lastStatSaveTime: Date.now(),
     version: 1,
   };
 }
@@ -946,6 +1124,25 @@ function applySaveData(data: SaveData): void {
   // Restore mini-game high score
   if (data.minigameHighScore) {
     minigameHighScore = data.minigameHighScore;
+  }
+
+  // Restore pet stats with offline decay
+  if (typeof data.petHunger === "number") {
+    petHunger = data.petHunger;
+    petHappiness = data.petHappiness || 80;
+    petEnergy = data.petEnergy || 80;
+
+    // Apply offline decay since last save
+    if (data.lastStatSaveTime) {
+      const offlineMinutes = (Date.now() - data.lastStatSaveTime) / 60000;
+      // Cap offline decay so the pet doesn't fully starve while you're away (max ~8 hours worth)
+      const cappedMinutes = Math.min(offlineMinutes, 480);
+      petHunger = Math.max(5, petHunger - cappedMinutes * 0.33);
+      petHappiness = Math.max(5, petHappiness - cappedMinutes * 0.2);
+      // Energy: assume it partially recharged if it was nighttime
+      petEnergy = Math.max(5, petEnergy - cappedMinutes * 0.1);
+    }
+    lastStatDecayTime = Date.now();
   }
 
   // Restore unlocked achievements
@@ -992,6 +1189,7 @@ function startSpin(): void {
   isHappy = true;
   happyTimer = SPIN_DURATION + 20;
   squishAmount = 0.5;
+  petHappiness = Math.min(100, petHappiness + 5); // tricks boost happiness more
 
   // Speech bubble
   const msg = spinMessages[Math.floor(Math.random() * spinMessages.length)];
@@ -1032,6 +1230,7 @@ function onPetClicked(): void {
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
+  petHappiness = Math.min(100, petHappiness + 3); // petting boosts happiness
 
   // Spawn heart particles
   const cx = canvas.width / 2;
@@ -1942,6 +2141,9 @@ function update(): void {
 
   // Mini-game
   updateMinigame();
+
+  // Pet stats decay
+  updatePetStats();
 }
 
 function drawAccessory(cx: number, cy: number, size: number): void {
@@ -2343,6 +2545,11 @@ function draw(): void {
     ctx.fillStyle = "#FFD700";
     ctx.fill();
     ctx.restore();
+  }
+
+  // Pet stat bars (below the pet)
+  if (!minigameActive) {
+    drawStatBars();
   }
 
   // Mini-game stars and HUD (above pet, below speech bubble)
