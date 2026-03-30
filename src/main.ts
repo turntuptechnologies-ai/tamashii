@@ -7,7 +7,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let currentMood = "☀️ Energetic (Morning)";
 let achievementData: { progress: { unlocked: number; total: number }; unlocked: { id: string; name: string; icon: string; description: string }[] } = {
-  progress: { unlocked: 0, total: 12 },
+  progress: { unlocked: 0, total: 14 },
   unlocked: [],
 };
 
@@ -186,7 +186,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.20.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.22.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -263,7 +263,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.20.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.22.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }

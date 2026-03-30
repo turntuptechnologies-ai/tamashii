@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.22.0] — 2026-03-30 — Click Combo System
+
+### Added
+- **Click combo system** — rapid consecutive clicks build up a combo counter that rewards sustained interaction
+- **Combo counter display** — a "Nx" counter appears above the pet when combos reach 3+, with escalating colors (white → yellow → orange → red → pink)
+- **Scale pulse** — the combo counter pulses larger with each click for satisfying visual feedback
+- **Screen shake** — the counter shakes at combo milestones, increasing in intensity with higher combos
+- **Combo milestones** — special celebrations at 5x ("Nice combo~!"), 10x ("MEGA COMBO!!"), 15x ("UNSTOPPABLE!!!"), and 20x ("LEGENDARY!!!! ♥♥♥")
+- **Escalating sparkle bursts** — milestone combos spawn rings of sparkle particles, with more sparkles at higher tiers
+- **Ascending combo sounds** — each combo click plays a tone that rises in pitch; milestone combos trigger a fanfare
+- **More hearts at higher combos** — heart particle count scales up from 5 to 12 as combos grow
+- **Extra happiness** — high combos give bonus happiness beyond the normal per-click boost
+- **Glow effect** — combos of 5+ get a color-matched glow behind the counter
+- **Combo fades gracefully** — when the combo ends (after 1.5 seconds of no clicking), the final count fades out over 1 second
+- **Best combo persistence** — your highest combo ever is saved to disk and remembered across sessions
+- **Two new achievements** — "Combo Starter" (reach 10x) and "Combo Legend" (reach 20x)
+
+**Why this feature:** The pet responded to single clicks with a squish and hearts, and double-clicks with a spin trick — but there was no reward for sustained clicking. The combo system transforms rapid clicking from repetitive into a game. Watching the counter climb, hearing the pitch rise, seeing the colors escalate from white to yellow to orange to pink — it creates a satisfying feedback loop. You find yourself clicking faster and faster, trying to beat your best combo. And the milestone celebrations (sparkle explosions, fanfares, excited speech bubbles) make every 5x/10x/15x/20x feel like an achievement. It's the simplest possible mini-game — just click fast — but the layered feedback makes it surprisingly addictive.
+
 ## [v0.21.0] — 2026-03-30 — Stat-Driven Behavior Changes
 
 ### Added

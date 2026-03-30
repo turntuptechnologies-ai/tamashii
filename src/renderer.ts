@@ -122,6 +122,26 @@ function playNapSound(): void {
   setTimeout(() => playTone(400, 0.25, "sine", 0.05), 150);
 }
 
+function playComboSound(combo: number): void {
+  // Ascending pitch with each combo hit — gets more excited
+  const basePitch = 500 + Math.min(combo * 40, 600);
+  playTone(basePitch, 0.06, "sine", 0.08);
+  if (combo >= 5) {
+    setTimeout(() => playTone(basePitch * 1.25, 0.06, "sine", 0.06), 40);
+  }
+  if (combo >= 10) {
+    setTimeout(() => playTone(basePitch * 1.5, 0.08, "sine", 0.08), 80);
+  }
+}
+
+function playComboMilestoneSound(): void {
+  // Big fanfare for milestone combos
+  playTone(660, 0.1, "sine", 0.12);
+  setTimeout(() => playTone(880, 0.1, "sine", 0.12), 60);
+  setTimeout(() => playTone(1100, 0.1, "sine", 0.12), 120);
+  setTimeout(() => playTone(1320, 0.2, "sine", 0.14), 180);
+}
+
 // --- Time of Day ---
 type TimeOfDay = "morning" | "afternoon" | "evening" | "night";
 
@@ -178,6 +198,16 @@ const SPIN_DURATION = 40; // frames for a full spin
 let spinFrame = 0;
 let lastClickTime = 0;
 const DOUBLE_CLICK_THRESHOLD = 400; // ms
+
+// --- Click Combo System ---
+let comboCount = 0;           // current consecutive click count
+let comboTimer = 0;           // frames since last click (resets combo when too long)
+let bestCombo = 0;            // best combo ever achieved
+const COMBO_TIMEOUT = 90;     // ~1.5 seconds at 60fps before combo resets
+let comboDisplayTimer = 0;    // how long to show the combo counter after it resets
+let comboDisplayValue = 0;    // the combo value to display while fading
+let comboShakeAmount = 0;     // screen shake intensity for big combos
+let comboScale = 1;           // scale pulse for combo counter
 
 interface Particle {
   x: number;
@@ -984,6 +1014,16 @@ const achievements: Achievement[] = [
     icon: "🪂", unlockMessage: "I love flying!",
     condition: () => totalBounces >= 50, unlocked: false,
   },
+  {
+    id: "combo_starter", name: "Combo Starter", description: "Reach a 10x click combo",
+    icon: "⚡", unlockMessage: "MEGA COMBO!!",
+    condition: () => bestCombo >= 10, unlocked: false,
+  },
+  {
+    id: "combo_legend", name: "Combo Legend", description: "Reach a 20x click combo",
+    icon: "🌟", unlockMessage: "LEGENDARY combo!!!",
+    condition: () => bestCombo >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -1072,6 +1112,7 @@ interface SaveData {
   petHappiness: number;
   petEnergy: number;
   lastStatSaveTime: number; // timestamp for calculating offline decay
+  bestCombo: number;
   version: number;
 }
 
@@ -1096,6 +1137,7 @@ function buildSaveData(): SaveData {
     petHappiness,
     petEnergy,
     lastStatSaveTime: Date.now(),
+    bestCombo,
     version: 1,
   };
 }
@@ -1125,6 +1167,11 @@ function applySaveData(data: SaveData): void {
   // Restore mini-game high score
   if (data.minigameHighScore) {
     minigameHighScore = data.minigameHighScore;
+  }
+
+  // Restore best combo
+  if (data.bestCombo) {
+    bestCombo = data.bestCombo;
   }
 
   // Restore pet stats with offline decay
@@ -1225,18 +1272,64 @@ function onPetClicked(): void {
     return;
   }
 
-  // Regular single click — squish + hearts
+  // Regular single click — squish + hearts + combo
   totalClicks++;
-  playClickSound();
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
   petHappiness = Math.min(100, petHappiness + 3); // petting boosts happiness
 
-  // Spawn heart particles
+  // Combo tracking
+  comboCount++;
+  comboTimer = 0;
+  comboScale = 1.5; // pulse the counter
+
+  if (comboCount >= 3) {
+    playComboSound(comboCount);
+  } else {
+    playClickSound();
+  }
+
+  // Combo milestones
+  if (comboCount === 5) {
+    speechBubble = { text: "Nice combo~!", life: 120, maxLife: 120 };
+    spawnComboSparkles(8);
+    comboShakeAmount = 2;
+  } else if (comboCount === 10) {
+    speechBubble = { text: "MEGA COMBO!!", life: 150, maxLife: 150 };
+    playComboMilestoneSound();
+    spawnComboSparkles(16);
+    petHappiness = Math.min(100, petHappiness + 5);
+    comboShakeAmount = 4;
+  } else if (comboCount === 15) {
+    speechBubble = { text: "UNSTOPPABLE!!!", life: 150, maxLife: 150 };
+    playComboMilestoneSound();
+    spawnComboSparkles(24);
+    petHappiness = Math.min(100, petHappiness + 8);
+    comboShakeAmount = 6;
+  } else if (comboCount === 20) {
+    speechBubble = { text: "LEGENDARY!!!! ♥♥♥", life: 180, maxLife: 180 };
+    playComboMilestoneSound();
+    spawnComboSparkles(32);
+    petHappiness = Math.min(100, petHappiness + 10);
+    comboShakeAmount = 8;
+  } else if (comboCount > 20 && comboCount % 10 === 0) {
+    speechBubble = { text: `${comboCount}x COMBO!!!`, life: 150, maxLife: 150 };
+    playComboMilestoneSound();
+    spawnComboSparkles(24);
+    comboShakeAmount = 6;
+  }
+
+  // Update best combo
+  if (comboCount > bestCombo) {
+    bestCombo = comboCount;
+  }
+
+  // Spawn heart particles (more hearts at higher combos)
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
-  for (let i = 0; i < 5; i++) {
+  const heartCount = Math.min(5 + Math.floor(comboCount / 3), 12);
+  for (let i = 0; i < heartCount; i++) {
     particles.push({
       x: cx + (Math.random() - 0.5) * 40,
       y: cy - 10,
@@ -1246,6 +1339,25 @@ function onPetClicked(): void {
       maxLife: 60 + Math.random() * 30,
       size: 6 + Math.random() * 4,
       type: "heart",
+    });
+  }
+}
+
+function spawnComboSparkles(count: number): void {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+    const speed = 1.5 + Math.random() * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 15,
+      y: cy + Math.sin(angle) * 10,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 40 + Math.random() * 30,
+      maxLife: 40 + Math.random() * 30,
+      size: 3 + Math.random() * 4,
+      type: "sparkle",
     });
   }
 }
@@ -1933,6 +2045,35 @@ function update(): void {
   if (squishAmount > 0) {
     squishAmount *= 0.88;
     if (squishAmount < 0.01) squishAmount = 0;
+  }
+
+  // Combo timer — reset combo after timeout
+  if (comboCount > 0) {
+    comboTimer++;
+    if (comboTimer >= COMBO_TIMEOUT) {
+      // Combo ended — show final count briefly
+      if (comboCount >= 3) {
+        comboDisplayValue = comboCount;
+        comboDisplayTimer = 60; // show for ~1 second
+      }
+      comboCount = 0;
+      comboTimer = 0;
+    }
+  }
+  if (comboDisplayTimer > 0) {
+    comboDisplayTimer--;
+  }
+
+  // Combo counter scale pulse decay
+  if (comboScale > 1) {
+    comboScale *= 0.9;
+    if (comboScale < 1.02) comboScale = 1;
+  }
+
+  // Combo screen shake decay
+  if (comboShakeAmount > 0) {
+    comboShakeAmount *= 0.85;
+    if (comboShakeAmount < 0.1) comboShakeAmount = 0;
   }
 
   // Spin trick update
@@ -2626,6 +2767,82 @@ function drawAccessory(cx: number, cy: number, size: number): void {
   ctx.restore();
 }
 
+function drawComboCounter(cx: number, y: number): void {
+  // Show active combo (3+) or fading final count
+  let displayCount = 0;
+  let alpha = 1;
+
+  if (comboCount >= 3) {
+    displayCount = comboCount;
+    alpha = 1;
+  } else if (comboDisplayTimer > 0 && comboDisplayValue >= 3) {
+    displayCount = comboDisplayValue;
+    alpha = comboDisplayTimer / 60;
+  }
+
+  if (displayCount === 0) return;
+
+  ctx.save();
+
+  // Shake effect for big combos
+  const shakeX = comboShakeAmount > 0 ? (Math.random() - 0.5) * comboShakeAmount * 2 : 0;
+  const shakeY = comboShakeAmount > 0 ? (Math.random() - 0.5) * comboShakeAmount * 2 : 0;
+
+  const drawX = cx + shakeX;
+  const drawY = y + shakeY;
+
+  // Scale pulse
+  const scale = comboCount >= 3 ? comboScale : 1;
+  ctx.translate(drawX, drawY);
+  ctx.scale(scale, scale);
+
+  // Color escalation based on combo count
+  let color: string;
+  let glowColor: string;
+  if (displayCount >= 20) {
+    color = "#FF2266";      // legendary pink-red
+    glowColor = "rgba(255, 34, 102, ";
+  } else if (displayCount >= 15) {
+    color = "#FF4400";      // unstoppable orange-red
+    glowColor = "rgba(255, 68, 0, ";
+  } else if (displayCount >= 10) {
+    color = "#FF8800";      // mega orange
+    glowColor = "rgba(255, 136, 0, ";
+  } else if (displayCount >= 5) {
+    color = "#FFCC00";      // nice yellow
+    glowColor = "rgba(255, 204, 0, ";
+  } else {
+    color = "#FFFFFF";      // basic white
+    glowColor = "rgba(255, 255, 255, ";
+  }
+
+  ctx.globalAlpha = alpha;
+
+  // Glow behind text for high combos
+  if (displayCount >= 5) {
+    ctx.beginPath();
+    ctx.arc(0, 0, 18 + displayCount * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = glowColor + (0.15 * alpha) + ")";
+    ctx.fill();
+  }
+
+  // Counter text
+  const fontSize = Math.min(14 + displayCount * 0.5, 22);
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Text outline for readability
+  ctx.strokeStyle = "rgba(0, 0, 0, " + (0.5 * alpha) + ")";
+  ctx.lineWidth = 3;
+  ctx.strokeText(`${displayCount}x`, 0, 0);
+
+  ctx.fillStyle = color;
+  ctx.fillText(`${displayCount}x`, 0, 0);
+
+  ctx.restore();
+}
+
 function draw(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -2736,6 +2953,9 @@ function draw(): void {
 
   // Mini-game stars and HUD (above pet, below speech bubble)
   drawMinigame();
+
+  // Combo counter (above pet, near speech bubble area)
+  drawComboCounter(cx, cy - size * 0.55);
 
   // Speech bubble (above everything)
   drawSpeechBubble(cx, cy - size * 0.4);
