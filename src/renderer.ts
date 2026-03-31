@@ -2132,6 +2132,51 @@ function drawConfetti(x: number, y: number, size: number, alpha: number, life: n
   ctx.restore();
 }
 
+// --- Ambient Background Glow ---
+function drawAmbientGlow(cx: number, cy: number): void {
+  // Subtle radial gradient behind the pet that shifts with time of day
+  const glowRadius = 110;
+  let r: number, g: number, b: number, alpha: number;
+  // Pulse gently with a slow sine wave for a living, breathing feel
+  const breathe = 0.85 + 0.15 * Math.sin(frame * 0.015);
+
+  switch (currentTimeOfDay) {
+    case "morning":
+      // Warm golden glow — sunrise warmth
+      r = 255; g = 220; b = 120; alpha = 0.12 * breathe;
+      break;
+    case "afternoon":
+      // Soft warm white — gentle daylight
+      r = 255; g = 245; b = 200; alpha = 0.08 * breathe;
+      break;
+    case "evening":
+      // Amber/orange — sunset warmth
+      r = 255; g = 170; b = 80; alpha = 0.10 * breathe;
+      break;
+    case "night":
+      // Cool blue/purple — moonlight
+      r = 130; g = 160; b = 255; alpha = 0.10 * breathe;
+      break;
+  }
+
+  // Mood modulates glow: happy pet glows brighter, sad pet is dimmer
+  if (petHappiness > 70) {
+    alpha *= 1.0 + (petHappiness - 70) / 30 * 0.3; // up to 30% brighter when very happy
+  } else if (petHappiness < 30) {
+    alpha *= 0.5 + (petHappiness / 30) * 0.5; // dims when sad
+  }
+
+  const gradient = ctx.createRadialGradient(cx, cy + 5, 0, cx, cy + 5, glowRadius);
+  gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+  gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${alpha * 0.4})`);
+  gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy + 5, glowRadius, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+}
+
 // --- Charge Ring Drawing ---
 function drawChargeRing(cx: number, cy: number, size: number): void {
   if (!isCharging || chargeLevel <= 0) return;
@@ -3234,6 +3279,9 @@ function draw(): void {
   const cx = canvas.width / 2;
   const cy = canvas.height / 2 + bounceOffset;
   const size = 120;
+
+  // Ambient background glow (behind everything — subtle time-of-day atmosphere)
+  drawAmbientGlow(cx, cy);
 
   // Shadow (wider when squished — combine click squish and landing squish)
   const totalSquish = Math.min(squishAmount + landingSquish, 1.2);

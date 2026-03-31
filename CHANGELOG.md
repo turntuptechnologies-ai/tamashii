@@ -3,6 +3,21 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.25.0] — 2026-03-31 — Ambient Background Glow
+
+### Added
+- **Time-of-day ambient glow** — a soft, subtle radial gradient now glows behind the pet, shifting color with the time of day
+- **Morning glow** — warm golden light, like the first rays of sunrise warming the pet
+- **Afternoon glow** — gentle warm white, a soft daylight presence
+- **Evening glow** — amber/orange warmth, sunset tones wrapping around the pet
+- **Night glow** — cool blue/purple moonlight, creating a serene nocturnal atmosphere
+- **Living light** — the glow breathes slowly with a gentle sine-wave pulse, making it feel organic rather than static
+- **Mood-responsive brightness** — happy pets (happiness > 70) glow up to 30% brighter; sad pets (happiness < 30) have a dimmer, more muted glow
+- **Layered transparency** — the gradient fades from center to edge with three stops, creating a natural soft-focus halo effect
+- **Zero clutter** — the glow is deliberately very subtle (8-12% opacity) so it enhances atmosphere without distracting from the pet
+
+**Why this feature:** The pet had a rich world of animations, reactions, and personality — but it floated in empty transparent space. The ambient glow gives each time of day a visual presence you can *feel* even before consciously noticing it. Morning feels warm and inviting. Night feels cool and peaceful. And because the glow breathes and responds to the pet's mood, it becomes another layer of emotional expression. A happy pet literally brightens the space around it. A sad pet dims. It's the difference between a pet on a screen and a pet that inhabits a world.
+
 ## [v0.24.0] — 2026-03-31 — Idle Animations
 
 ### Added
