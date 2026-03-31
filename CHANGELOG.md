@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.27.0] — 2026-03-31 — 🧬 Pet Footprints (Mutation)
+
+### Added
+- **Paw print footprints** — the pet now leaves tiny paw prints on the ground as it walks across the screen
+- **Alternating paws** — footprints alternate left and right, creating a natural walking pattern
+- **Paw print design** — each print has one oval pad and three small toe beans, drawn in a soft blue-grey matching the pet's color
+- **Drift physics** — footprints drift in the opposite direction of walking, creating the illusion of being "left behind" on the desktop as the pet moves forward
+- **Graceful fading** — prints start at 35% opacity and fade out over ~3 seconds, disappearing like footprints in sand
+- **Walk-speed pacing** — a new print appears every ~0.3 seconds while walking, matching a natural stride rhythm
+- **Canvas-aware** — prints that drift off-canvas are skipped for rendering efficiency
+- **Clean lifecycle** — footprints are automatically cleaned up when their life expires
+
+**🧬 Mutation:** This feature ignores the previous cycle's suggestions entirely. Instead of a settings window, mini-games, or weather awareness, the pet got something no one asked for — tiny paw prints that trail behind it as it walks. It's a purely cosmetic detail, but it's the kind of small touch that makes the pet feel physically present on your desktop. When you see those tiny fading prints trailing behind your wandering pet, it stops being a floating sprite and becomes something that walks across your screen with weight and intention.
+
 ## [v0.26.0] — 2026-03-31 — Mood Particle Trails
 
 ### Added

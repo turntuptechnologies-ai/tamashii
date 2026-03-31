@@ -353,6 +353,20 @@ let sadCloudX = 0;           // cloud x position (follows pet)
 let sadCloudY = 0;           // cloud y position (above pet)
 let sadRainTimer = 0;        // spawn timer for raindrops
 
+// --- Pet Footprints ---
+interface Footprint {
+  x: number;       // canvas x position
+  y: number;       // canvas y position
+  life: number;    // remaining life (frames)
+  maxLife: number;
+  isLeft: boolean; // alternating left/right paw
+  drift: number;   // accumulated x drift (simulates being "left behind")
+}
+
+const footprints: Footprint[] = [];
+let footprintTimer = 0;    // spawn timer
+let footprintLeft = true;  // alternates between left and right paw
+
 window.tamashii.onSystemStats((stats) => {
   cpuUsage = stats.cpu;
   memUsage = stats.mem;
@@ -2217,6 +2231,44 @@ function drawSadCloud(x: number, y: number): void {
 }
 
 // --- Ambient Background Glow ---
+function drawFootprints(): void {
+  for (const fp of footprints) {
+    const alpha = (fp.life / fp.maxLife) * 0.35; // max 35% opacity, fading out
+    const x = fp.x + fp.drift;
+    const y = fp.y;
+    // Skip if off-canvas
+    if (x < -10 || x > canvas.width + 10) continue;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    // Mirror left paw
+    if (fp.isLeft) ctx.scale(-1, 1);
+
+    // Draw a tiny paw print: one oval pad + three small toe beans
+    ctx.fillStyle = "rgba(100, 130, 180, 0.6)"; // soft blue-grey to match pet
+
+    // Main pad (oval)
+    ctx.beginPath();
+    ctx.ellipse(0, 1.5, 3.2, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Toe beans (three small circles above the pad)
+    const toePositions = [
+      { tx: -2.2, ty: -2 },
+      { tx: 0, ty: -3 },
+      { tx: 2.2, ty: -2 },
+    ];
+    for (const toe of toePositions) {
+      ctx.beginPath();
+      ctx.arc(toe.tx, toe.ty, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
 function drawAmbientGlow(cx: number, cy: number): void {
   // Subtle radial gradient behind the pet that shifts with time of day
   const glowRadius = 110;
@@ -2794,6 +2846,25 @@ function update(): void {
         wanderDirection = -1;
       }
 
+      // Spawn footprints while walking
+      footprintTimer++;
+      if (footprintTimer >= 18) { // one footprint every ~18 frames (~0.3s)
+        footprintTimer = 0;
+        const petCx = canvas.width / 2;
+        const petCy = canvas.height / 2 + bounceOffset;
+        const footY = petCy + 52; // near the pet's feet
+        const pawOffset = footprintLeft ? -6 : 6; // left/right paw offset
+        footprints.push({
+          x: petCx + pawOffset,
+          y: footY,
+          life: 180, // ~3 seconds at 60fps
+          maxLife: 180,
+          isLeft: footprintLeft,
+          drift: 0,
+        });
+        footprintLeft = !footprintLeft;
+      }
+
       if (wanderTimer <= 0) {
         wanderState = "pausing";
         // Pause for 4-10 seconds
@@ -2806,6 +2877,20 @@ function update(): void {
     if (isDragging) {
       wanderState = "pausing";
       wanderTimer = 120; // Short pause after being dropped
+    }
+  }
+
+  // --- Footprint update ---
+  const currentWanderSpeed = getWanderSpeed();
+  for (let i = footprints.length - 1; i >= 0; i--) {
+    const fp = footprints[i];
+    fp.life--;
+    // Drift footprints opposite to walk direction so they appear left behind
+    if (wanderState === "walking" && wanderingEnabled) {
+      fp.drift -= wanderDirection * currentWanderSpeed;
+    }
+    if (fp.life <= 0) {
+      footprints.splice(i, 1);
     }
   }
 
@@ -3434,6 +3519,9 @@ function draw(): void {
 
   // Ambient background glow (behind everything — subtle time-of-day atmosphere)
   drawAmbientGlow(cx, cy);
+
+  // Footprints (on the ground, behind everything else)
+  drawFootprints();
 
   // Shadow (wider when squished — combine click squish and landing squish)
   const totalSquish = Math.min(squishAmount + landingSquish, 1.2);

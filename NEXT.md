@@ -3,17 +3,18 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.26.0 — Mood Particle Trails (2026-03-31)
+## Last completed: v0.27.0 — 🧬 Pet Footprints (Mutation) (2026-03-31)
 
 ### What was done
-- Added happy sparkle trails: rainbow-hued four-pointed stars trail behind the pet while wandering when happiness > 70
-- Added sad rain cloud: a small grey cloud hovers above the pet with falling raindrop particles when happiness < 30
-- Two new particle types: `happy_trail` (sparkle with hue-shifting colors and glow) and `raindrop` (blue teardrop shape with highlight)
-- `drawHappyTrail()`, `drawRaindrop()`, `drawSadCloud()` drawing functions added
-- Mood trail spawning logic added in `update()` after the stomach growl section
-- State variables: `happyTrailTimer`, `sadCloudActive`, `sadCloudX`, `sadCloudY`, `sadRainTimer`
-- Cloud follows pet with smooth interpolation and gentle sine-wave horizontal drift
-- Sparkle trail is direction-aware (spawns behind pet relative to walk direction)
+- Added paw print footprints that appear behind the pet as it walks
+- New `Footprint` interface with position, life, drift, and left/right paw tracking
+- `footprints[]` array managed separately from the particle system (footprints are static ground marks, not physics particles)
+- `drawFootprints()` renders tiny paw prints: one oval pad + three toe beans in soft blue-grey
+- Footprints spawn every ~18 frames while `wanderState === "walking"`, alternating left/right paw
+- Drift mechanic: footprints shift opposite to `wanderDirection * wanderSpeed` each frame, so they appear to be left behind as the window moves
+- Footprints drawn after ambient glow, before shadow — they sit on the ground layer
+- 180-frame (~3s) lifespan with linear alpha fade from 35% to 0%
+- This was a 🧬 Mutation — completely ignored NEXT.md suggestions
 
 ### Thoughts for next cycle
 - **Settings window** — still the most pressing UX improvement. The context menu has 10+ items. A dedicated settings BrowserWindow would consolidate: sound toggle, volume slider, wandering toggle, pet name, accessory picker with visual preview, stat display toggle.
@@ -25,15 +26,14 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Notification integration** — pet reacts to OS notifications with a startled or curious expression.
 - **Multiple pet companions** — spawn a second smaller pet that interacts with the main one.
 - **Day/night transition animation** — smooth visual transition when time of day changes (sunrise/sunset effects).
+- **Footprint enhancements** — different footprint colors or shapes based on mood, wet footprints during rain, glowing footprints at night.
 
 ### Current architecture notes
-- Renderer is now ~3710 lines — module splitting would help significantly
-- Two new particle types added to the Particle interface: `raindrop` and `happy_trail`
-- Mood trail state variables are grouped with the growl timer section
-- `drawSadCloud()` is called in `draw()` after particle rendering, before the butterfly
-- Happy trail sparkles use HSL colors shifting through the spectrum based on particle life
-- Raindrops use a teardrop shape with quadratic curves
-- The sad cloud is made of overlapping circles with a darker underside ellipse
+- Renderer is now ~3760 lines — module splitting would help significantly
+- Footprints use a separate `Footprint` interface and `footprints[]` array, NOT the particle system — they're static ground marks
+- `drawFootprints()` is called in `draw()` after ambient glow, before shadow
+- Footprint spawning happens inside the `wanderState === "walking"` block in `update()`
+- Footprint drift update happens in its own "Footprint update" section between wandering and gravity
 - preload.ts still has 17 methods — no new IPC channels needed
-- SaveData interface is unchanged — mood trails have no persistent state
+- SaveData interface is unchanged — footprints have no persistent state
 - Total achievements still 14 (no new achievements added this cycle)
