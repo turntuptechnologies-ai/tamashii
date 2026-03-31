@@ -256,6 +256,59 @@ let comboDisplayValue = 0;    // the combo value to display while fading
 let comboShakeAmount = 0;     // screen shake intensity for big combos
 let comboScale = 1;           // scale pulse for combo counter
 
+// --- Idle Animations ---
+type IdleAnimation = "none" | "stretch" | "look_around" | "wiggle" | "curious_peek" | "hop";
+let idleAnim: IdleAnimation = "none";
+let idleAnimProgress = 0;       // 0 to 1
+let idleAnimTimer = 0;          // frames until next idle anim check
+let lastInteractionTime = 0;    // timestamp of last user interaction
+const IDLE_ANIM_COOLDOWN = 420; // ~7 seconds between idle anim attempts
+const IDLE_ANIM_IDLE_THRESHOLD = 5000; // 5 seconds of no interaction before idle anims start
+let idleLookDirection = 1;      // -1 or 1 for look_around direction
+let idlePeekDirection = 1;      // -1 or 1 for curious_peek direction
+
+const idleAnimMessages: Record<string, string[]> = {
+  stretch: ["*streeetch*", "Ahh~", "So stiff..."],
+  look_around: ["Hmm?", "What's that?", "Looking around~"],
+  wiggle: ["~♪", "La la~", "Wiggle wiggle!"],
+  curious_peek: ["Hello?", "Anyone there?", "Peek~!"],
+  hop: ["Boing!", "Hup!", "Wheee~"],
+};
+
+function startIdleAnimation(): void {
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive) return;
+  // Pick a random animation
+  const anims: IdleAnimation[] = ["stretch", "look_around", "wiggle", "curious_peek", "hop"];
+  idleAnim = anims[Math.floor(Math.random() * anims.length)];
+  idleAnimProgress = 0;
+  if (idleAnim === "look_around") {
+    idleLookDirection = Math.random() < 0.5 ? -1 : 1;
+  } else if (idleAnim === "curious_peek") {
+    idlePeekDirection = Math.random() < 0.5 ? -1 : 1;
+  }
+  // Play a subtle sound for hop
+  if (idleAnim === "hop") {
+    playTone(600, 0.06, "sine", 0.05);
+  }
+  // ~40% chance to show a speech bubble with the animation
+  if (!speechBubble && Math.random() < 0.4) {
+    const msgs = idleAnimMessages[idleAnim];
+    const msg = msgs[Math.floor(Math.random() * msgs.length)];
+    speechBubble = { text: msg, life: 90, maxLife: 90 };
+  }
+}
+
+function getIdleAnimDuration(): number {
+  switch (idleAnim) {
+    case "stretch": return 90;       // ~1.5 seconds
+    case "look_around": return 120;  // ~2 seconds
+    case "wiggle": return 80;        // ~1.3 seconds
+    case "curious_peek": return 100; // ~1.7 seconds
+    case "hop": return 50;           // ~0.8 seconds
+    default: return 60;
+  }
+}
+
 // --- Hold-Click Charge-Up ---
 let isCharging = false;        // true when mouse is held down without moving
 let chargeStartTime = 0;      // timestamp when charge started
@@ -454,6 +507,8 @@ canvas.addEventListener("mousedown", (e) => {
   }
   isDragging = true;
   dragMoved = false;
+  lastInteractionTime = Date.now();
+  idleAnim = "none"; // cancel any active idle animation
   isFalling = false; // Cancel any active fall when grabbed
   velocityY = 0;
   lastX = e.screenX;
@@ -722,6 +777,7 @@ const tiredMessages = [
 ];
 
 function feedPet(): void {
+  lastInteractionTime = Date.now();
   petHunger = Math.min(100, petHunger + 25);
   playFeedSound();
   squishAmount = 0.6;
@@ -735,6 +791,7 @@ function feedPet(): void {
 }
 
 function petNap(): void {
+  lastInteractionTime = Date.now();
   petEnergy = Math.min(100, petEnergy + 20);
   playNapSound();
   squishAmount = 0.3;
@@ -1457,6 +1514,7 @@ function onPetClicked(): void {
   }
 
   // Regular single click — squish + hearts + combo
+  lastInteractionTime = Date.now();
   totalClicks++;
   squishAmount = 1.0;
   isHappy = true;
@@ -1779,23 +1837,24 @@ function drawFace(cx: number, cy: number, size: number): void {
     ctx.fillStyle = "#ffffff";
     ctx.fill();
 
-    // Pupils
+    // Pupils — shift when doing look_around idle animation
+    const pupilShift = idleAnim === "look_around" ? Math.sin(idleAnimProgress * Math.PI) * 3 * idleLookDirection : 0;
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing + 1, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing + 1 + pupilShift, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing + 1, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing + 1 + pupilShift, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
 
     // Eye shine
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing + 3, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing + 3 + pupilShift, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing + 3, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing + 3 + pupilShift, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
   }
@@ -2334,6 +2393,31 @@ function update(): void {
   if (comboShakeAmount > 0) {
     comboShakeAmount *= 0.85;
     if (comboShakeAmount < 0.1) comboShakeAmount = 0;
+  }
+
+  // Idle animation logic
+  if (idleAnim !== "none") {
+    const duration = getIdleAnimDuration();
+    idleAnimProgress += 1 / duration;
+    if (idleAnimProgress >= 1) {
+      idleAnim = "none";
+      idleAnimProgress = 0;
+    }
+  } else {
+    // Check if it's time to try an idle animation
+    const timeSinceInteraction = Date.now() - lastInteractionTime;
+    if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive) {
+      idleAnimTimer++;
+      if (idleAnimTimer >= IDLE_ANIM_COOLDOWN) {
+        idleAnimTimer = 0;
+        // 40% chance per check — keeps them occasional and unpredictable
+        if (Math.random() < 0.4) {
+          startIdleAnimation();
+        }
+      }
+    } else {
+      idleAnimTimer = 0;
+    }
   }
 
   // Hold-click charge-up logic
@@ -3209,6 +3293,39 @@ function draw(): void {
     const vx = (Math.random() - 0.5) * chargeVibrate * 2;
     const vy = (Math.random() - 0.5) * chargeVibrate * 2;
     ctx.translate(vx, vy);
+  }
+
+  // Idle animation transforms
+  if (idleAnim !== "none" && !isSpinning) {
+    const t = idleAnimProgress;
+    const ease = Math.sin(t * Math.PI); // bell curve: 0→1→0
+
+    if (idleAnim === "stretch") {
+      // Stretch tall then snap back — vertical elongation
+      const stretchY = ease * 0.08;
+      const stretchX = ease * -0.03;
+      ctx.translate(cx, feetY);
+      ctx.scale(1 + stretchX, 1 + stretchY);
+      ctx.translate(-cx, -feetY);
+    } else if (idleAnim === "wiggle") {
+      // Sway side to side — quick oscillating rotation
+      const wiggle = Math.sin(t * Math.PI * 4) * ease * 0.07;
+      ctx.translate(cx, feetY);
+      ctx.rotate(wiggle);
+      ctx.translate(-cx, -feetY);
+    } else if (idleAnim === "curious_peek") {
+      // Lean to one side curiously
+      const lean = ease * 0.08 * idlePeekDirection;
+      const shift = ease * 6 * idlePeekDirection;
+      ctx.translate(cx, feetY);
+      ctx.rotate(lean);
+      ctx.translate(-cx + shift, -feetY);
+    } else if (idleAnim === "hop") {
+      // Quick little hop — vertical translation
+      const hopHeight = Math.sin(t * Math.PI) * 8;
+      ctx.translate(0, -hopHeight);
+    }
+    // look_around doesn't need transforms — it modifies eye drawing
   }
 
   drawFeet(cx, cy, size);

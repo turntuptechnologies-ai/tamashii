@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.24.0] — 2026-03-31 — Idle Animations
+
+### Added
+- **Idle animations** — when the pet hasn't been interacted with for 5+ seconds, it occasionally performs one of five random animations on its own
+- **Stretch** — the pet elongates vertically then snaps back, like a lazy cat stretching after a nap
+- **Look around** — pupils shift to one side as the pet curiously scans its surroundings, eye shine follows
+- **Wiggle** — the pet sways side to side in a quick, playful wiggle dance
+- **Curious peek** — the pet leans to one side and shifts over, as if peeking around a corner
+- **Hop** — a quick little bounce into the air with a soft "boing" sound
+- **Idle speech bubbles** — ~40% of idle animations come with a matching speech bubble ("*streeetch*", "Hmm?", "~♪", "Peek~!", "Boing!")
+- **Hop sound** — a subtle soft tone plays when the pet does a little hop
+- **Smart interruption** — any user interaction (clicking, dragging, feeding, napping) immediately cancels the active idle animation
+- **Animations respect state** — idle anims won't trigger during spins, mini-games, charging, dragging, or when the pet is happy/yawning
+- **Natural timing** — animations are checked every ~7 seconds with a 40% trigger chance, keeping them occasional and surprising
+
+**Why this feature:** The pet had a rich world of reactions — it responded to clicks, drags, combos, charge-ups, and stat changes — but it was passive by default. Between interactions, it just bounced in place. Idle animations give the pet autonomous personality. Now when you glance at it while working, you might catch it stretching, peeking curiously to one side, or doing a little wiggle dance. These are the moments that make a desktop pet feel alive — not just when you interact with it, but when it's quietly doing its own thing.
+
 ## [v0.23.0] — 2026-03-30 — Hold-Click Charge-Up
 
 ### Added
