@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.26.0] — 2026-03-31 — Mood Particle Trails
+
+### Added
+- **Happy sparkle trail** — when happiness is above 70 and the pet is wandering, rainbow-hued sparkles trail behind it like a joyful wake
+- **Trailing sparkle design** — four-pointed star shapes that shift through the color spectrum, each with a soft halo glow
+- **Direction-aware spawning** — sparkles appear behind the pet relative to its walk direction, creating a natural trailing effect
+- **Happiness-scaled density** — the happier the pet, the more frequent the sparkle trail (spawning every ~8-15 frames)
+- **Sad rain cloud** — when happiness drops below 30, a small dark rain cloud appears and hovers above the pet's head
+- **Cloud physics** — the cloud follows the pet smoothly with a slight lag and gentle horizontal drift, feeling like it's floating
+- **Raindrop particles** — tiny blue teardrop-shaped drops fall from the cloud, with a highlight for depth
+- **Sadness-scaled rain** — the lower the happiness, the more frequent the raindrops fall
+- **Smart activation** — trails only appear during appropriate states (not during mini-games, dragging, or spinning)
+- **Graceful transitions** — the cloud fades in/out naturally as happiness crosses the threshold
+
+**Why this feature:** The pet already had stat-driven visual changes — desaturated colors when hungry, droopy eyes when tired, sad expressions when unhappy. But these were changes *to* the pet. Mood particle trails create changes *around* the pet. A happy pet walking across your screen now leaves a shimmering rainbow trail like a tiny celebration parade. A sad pet carries its own personal rain cloud, like a cartoon character feeling blue. These visual metaphors are instantly readable — you don't need to check stat bars or notice subtle expression changes. A glance at the sparkle trail or the rain cloud tells you everything about how your pet is feeling. And the contrast makes caring for your pet more rewarding: watching the rain cloud dissolve and sparkles appear as you play with it is deeply satisfying.
+
 ## [v0.25.0] — 2026-03-31 — Ambient Background Glow
 
 ### Added

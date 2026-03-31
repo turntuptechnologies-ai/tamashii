@@ -330,7 +330,7 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl" | "confetti";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl" | "confetti" | "raindrop" | "happy_trail";
   color?: string; // optional color for confetti
 }
 
@@ -345,6 +345,13 @@ let stressLevel = 0; // 0-1 smoothed stress indicator
 let sweatSpawnTimer = 0;
 let isStressed = false; // true when stress > 0.5
 let growlSpawnTimer = 0; // stomach growl particle timer
+
+// --- Mood Particle Trails ---
+let happyTrailTimer = 0;     // spawn timer for happy sparkle trails
+let sadCloudActive = false;  // whether the rain cloud is visible
+let sadCloudX = 0;           // cloud x position (follows pet)
+let sadCloudY = 0;           // cloud y position (above pet)
+let sadRainTimer = 0;        // spawn timer for raindrops
 
 window.tamashii.onSystemStats((stats) => {
   cpuUsage = stats.cpu;
@@ -2132,6 +2139,83 @@ function drawConfetti(x: number, y: number, size: number, alpha: number, life: n
   ctx.restore();
 }
 
+function drawRaindrop(x: number, y: number, size: number, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.7;
+  // Teardrop shape — elongated blue drop
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.quadraticCurveTo(x + size * 0.6, y, x, y + size * 0.5);
+  ctx.quadraticCurveTo(x - size * 0.6, y, x, y - size);
+  ctx.fillStyle = "#6CB4EE";
+  ctx.fill();
+  // Tiny highlight
+  ctx.beginPath();
+  ctx.arc(x - size * 0.15, y - size * 0.3, size * 0.15, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHappyTrail(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.8;
+  // Rainbow-tinted sparkle that shifts hue based on life
+  const hue = (life * 5) % 360;
+  // Four-pointed star shape
+  const r = size;
+  const inner = size * 0.35;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    const radius = i % 2 === 0 ? r : inner;
+    if (i === 0) {
+      ctx.moveTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+    } else {
+      ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+    }
+  }
+  ctx.closePath();
+  ctx.fillStyle = `hsla(${hue}, 80%, 70%, 1)`;
+  ctx.fill();
+  // Soft glow around the sparkle
+  ctx.beginPath();
+  ctx.arc(x, y, size * 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${alpha * 0.15})`;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSadCloud(x: number, y: number): void {
+  ctx.save();
+  // Dark grey rain cloud made of overlapping circles
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = "#778899";
+  // Cloud body — overlapping circles
+  ctx.beginPath();
+  ctx.arc(x, y, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x - 9, y + 2, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 9, y + 2, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x - 5, y - 4, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 5, y - 4, 7, 0, Math.PI * 2);
+  ctx.fill();
+  // Darker underside
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = "#556677";
+  ctx.beginPath();
+  ctx.ellipse(x, y + 5, 14, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // --- Ambient Background Glow ---
 function drawAmbientGlow(cx: number, cy: number): void {
   // Subtle radial gradient behind the pet that shifts with time of day
@@ -2657,6 +2741,13 @@ function update(): void {
       p.vy += 0.06; // gravity
       p.vx += Math.sin(p.life * 0.2) * 0.08; // flutter side to side
       p.vx *= 0.98;
+    } else if (p.type === "raindrop") {
+      // Raindrops fall and accelerate slightly
+      p.vy += 0.05;
+    } else if (p.type === "happy_trail") {
+      // Happy trail sparkles float up and drift with gentle sway
+      p.vx += Math.sin(p.life * 0.1) * 0.05;
+      p.vy -= 0.01;
     }
     p.vx *= 0.99;
     p.life--;
@@ -2864,6 +2955,67 @@ function update(): void {
     }
   } else {
     growlSpawnTimer = 0;
+  }
+
+  // --- Mood particle trails ---
+  const moodCx = canvas.width / 2;
+  const moodCy = canvas.height / 2 + bounceOffset;
+
+  // Happy sparkle trail — when happiness > 70 and pet is wandering
+  if (petHappiness > 70 && wanderState === "walking" && wanderingEnabled && !isDragging && !minigameActive) {
+    happyTrailTimer++;
+    // Spawn rate scales with happiness: every ~8-15 frames
+    const trailInterval = Math.max(8, 20 - (petHappiness - 70) * 0.4);
+    if (happyTrailTimer > trailInterval) {
+      happyTrailTimer = 0;
+      // Sparkles appear behind the pet (opposite to walk direction)
+      const trailOffsetX = -wanderDirection * (15 + Math.random() * 10);
+      particles.push({
+        x: moodCx + trailOffsetX + (Math.random() - 0.5) * 12,
+        y: moodCy + 10 + (Math.random() - 0.5) * 20,
+        vx: -wanderDirection * (0.2 + Math.random() * 0.3),
+        vy: -(0.3 + Math.random() * 0.4),
+        life: 50 + Math.random() * 30,
+        maxLife: 50 + Math.random() * 30,
+        size: 2 + Math.random() * 2.5,
+        type: "happy_trail",
+      });
+    }
+  } else {
+    happyTrailTimer = 0;
+  }
+
+  // Sad rain cloud — when happiness < 30
+  if (petHappiness < 30 && !isDragging && !minigameActive && !isSpinning) {
+    sadCloudActive = true;
+    // Cloud follows pet smoothly, hovering above head
+    const targetCloudX = moodCx;
+    const targetCloudY = moodCy - 55;
+    sadCloudX += (targetCloudX - sadCloudX) * 0.08;
+    sadCloudY += (targetCloudY - sadCloudY) * 0.08;
+    // Gentle horizontal drift
+    sadCloudX += Math.sin(frame * 0.02) * 0.3;
+
+    // Spawn raindrops from the cloud
+    sadRainTimer++;
+    // More rain when sadder: interval from ~18 (very sad) to ~30 (mildly sad)
+    const rainInterval = Math.max(10, 30 - (30 - petHappiness) * 0.7);
+    if (sadRainTimer > rainInterval) {
+      sadRainTimer = 0;
+      particles.push({
+        x: sadCloudX + (Math.random() - 0.5) * 24,
+        y: sadCloudY + 8,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: 1 + Math.random() * 0.8,
+        life: 35 + Math.random() * 15,
+        maxLife: 35 + Math.random() * 15,
+        size: 2 + Math.random() * 1.5,
+        type: "raindrop",
+      });
+    }
+  } else {
+    sadCloudActive = false;
+    sadRainTimer = 0;
   }
 
   // Idle bounce (speed and amplitude vary by time of day)
@@ -3405,7 +3557,16 @@ function draw(): void {
       drawGrowl(p.x, p.y, p.size, alpha, p.life);
     } else if (p.type === "confetti") {
       drawConfetti(p.x, p.y, p.size, alpha, p.life, p.color || "#FF4488");
+    } else if (p.type === "raindrop") {
+      drawRaindrop(p.x, p.y, p.size, alpha);
+    } else if (p.type === "happy_trail") {
+      drawHappyTrail(p.x, p.y, p.size, alpha, p.life);
     }
+  }
+
+  // Sad rain cloud (drawn above particles, below speech bubble)
+  if (sadCloudActive) {
+    drawSadCloud(sadCloudX, sadCloudY);
   }
 
   // Butterfly companion (drawn above particles, below speech bubble)
