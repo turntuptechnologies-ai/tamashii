@@ -189,6 +189,51 @@ function playChargeReleaseSound(level: number): void {
   }
 }
 
+function playTransitionSound(to: TimeOfDay): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Gentle melodic chime that matches the destination time
+  if (to === "morning") {
+    // Rising, bright — like a sunrise bell
+    playTone(523, 0.2, "sine", 0.07);
+    setTimeout(() => playTone(659, 0.2, "sine", 0.07), 150);
+    setTimeout(() => playTone(784, 0.3, "sine", 0.08), 300);
+  } else if (to === "afternoon") {
+    // Warm, sustained — midday calm
+    playTone(440, 0.25, "sine", 0.06);
+    setTimeout(() => playTone(554, 0.3, "sine", 0.06), 200);
+  } else if (to === "evening") {
+    // Descending, warm — settling down
+    playTone(659, 0.2, "sine", 0.06);
+    setTimeout(() => playTone(554, 0.2, "sine", 0.06), 200);
+    setTimeout(() => playTone(440, 0.3, "sine", 0.06), 400);
+  } else {
+    // Soft, low — lullaby tones
+    playTone(392, 0.3, "sine", 0.05);
+    setTimeout(() => playTone(330, 0.4, "sine", 0.04), 250);
+  }
+}
+
+function startTimeTransition(from: TimeOfDay, to: TimeOfDay): void {
+  isTimeTransitioning = true;
+  transitionFrom = from;
+  transitionTo = to;
+  transitionProgress = 0;
+  transitionFrame = 0;
+  transitionParticles = [];
+  playTransitionSound(to);
+
+  // Speech bubble announcing the transition
+  const messages: Record<TimeOfDay, string[]> = {
+    morning: ["Good morning~! ☀️", "Sunrise! A new day!", "The sun is up~!"],
+    afternoon: ["Afternoon already~", "Lunchtime feels~", "The day goes on!"],
+    evening: ["Sunset time~ 🌅", "What a pretty sky!", "Evening is here~"],
+    night: ["Night night~ 🌙", "The stars are out!", "Sleepy time..."],
+  };
+  const msgs = messages[to];
+  speechBubble = { text: msgs[Math.floor(Math.random() * msgs.length)], life: 180, maxLife: 180 };
+}
+
 // --- Time of Day ---
 type TimeOfDay = "morning" | "afternoon" | "evening" | "night";
 
@@ -218,6 +263,7 @@ window.tamashii.updateMood(getMoodLabel(currentTimeOfDay));
 setInterval(() => {
   const newTime = getTimeOfDay();
   if (newTime !== currentTimeOfDay) {
+    startTimeTransition(currentTimeOfDay, newTime);
     currentTimeOfDay = newTime;
     window.tamashii.updateMood(getMoodLabel(currentTimeOfDay));
   }
@@ -366,6 +412,15 @@ interface Footprint {
 const footprints: Footprint[] = [];
 let footprintTimer = 0;    // spawn timer
 let footprintLeft = true;  // alternates between left and right paw
+
+// --- Day/Night Transition Animation ---
+let isTimeTransitioning = false;
+let transitionFrom: TimeOfDay = "morning";
+let transitionTo: TimeOfDay = "afternoon";
+let transitionProgress = 0;       // 0 to 1
+const TRANSITION_DURATION = 240;  // ~4 seconds at 60fps
+let transitionFrame = 0;
+let transitionParticles: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number; hue: number; type: "ray" | "twinkle" | "drift" }[] = [];
 
 window.tamashii.onSystemStats((stats) => {
   cpuUsage = stats.cpu;
@@ -2313,6 +2368,204 @@ function drawAmbientGlow(cx: number, cy: number): void {
   ctx.fill();
 }
 
+// --- Day/Night Transition Animation ---
+function updateTimeTransition(): void {
+  if (!isTimeTransitioning) return;
+
+  transitionFrame++;
+  transitionProgress = Math.min(transitionFrame / TRANSITION_DURATION, 1);
+
+  // Spawn transition particles based on destination time
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const spawnRate = transitionProgress < 0.7 ? 3 : 1; // more particles during buildup
+
+  for (let i = 0; i < spawnRate; i++) {
+    if (Math.random() < 0.4) {
+      if (transitionTo === "morning") {
+        // Golden light rays rising from below
+        transitionParticles.push({
+          x: cx + (Math.random() - 0.5) * canvas.width,
+          y: canvas.height + 5,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: -1.5 - Math.random() * 1.5,
+          life: 80 + Math.random() * 40,
+          maxLife: 80 + Math.random() * 40,
+          size: 2 + Math.random() * 3,
+          hue: 40 + Math.random() * 20, // golden
+          type: "ray",
+        });
+      } else if (transitionTo === "afternoon") {
+        // Warm pollen drifting gently
+        transitionParticles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.5,
+          vy: -0.3 - Math.random() * 0.5,
+          life: 60 + Math.random() * 40,
+          maxLife: 60 + Math.random() * 40,
+          size: 1.5 + Math.random() * 2,
+          hue: 45 + Math.random() * 15, // warm yellow
+          type: "drift",
+        });
+      } else if (transitionTo === "evening") {
+        // Orange/pink sunset rays sweeping from the side
+        transitionParticles.push({
+          x: canvas.width + 5,
+          y: Math.random() * canvas.height * 0.7,
+          vx: -1.5 - Math.random() * 1,
+          vy: 0.3 + Math.random() * 0.5,
+          life: 70 + Math.random() * 40,
+          maxLife: 70 + Math.random() * 40,
+          size: 2 + Math.random() * 3,
+          hue: 15 + Math.random() * 25, // orange-pink
+          type: "ray",
+        });
+      } else {
+        // Twinkling stars appearing
+        transitionParticles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height * 0.6,
+          vx: 0,
+          vy: 0,
+          life: 90 + Math.random() * 50,
+          maxLife: 90 + Math.random() * 50,
+          size: 1 + Math.random() * 2,
+          hue: 220 + Math.random() * 40, // blue-purple
+          type: "twinkle",
+        });
+      }
+    }
+  }
+
+  // Update transition particles
+  for (let i = transitionParticles.length - 1; i >= 0; i--) {
+    const p = transitionParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0 || p.x < -10 || p.x > canvas.width + 10 || p.y < -10 || p.y > canvas.height + 10) {
+      transitionParticles.splice(i, 1);
+    }
+  }
+
+  // End transition
+  if (transitionProgress >= 1) {
+    isTimeTransitioning = false;
+    transitionParticles = [];
+  }
+}
+
+function drawTimeTransition(cx: number, cy: number): void {
+  // Smooth ease curve for the transition
+  const t = transitionProgress;
+  const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // ease-in-out quad
+  // Intensity peaks at the middle of the transition, then fades
+  const intensity = Math.sin(t * Math.PI);
+
+  // Full-canvas color wash overlay
+  let r: number, g: number, b: number;
+  if (transitionTo === "morning") {
+    // Golden sunrise wash
+    r = 255; g = 200; b = 80;
+  } else if (transitionTo === "afternoon") {
+    // Warm white wash
+    r = 255; g = 240; b = 180;
+  } else if (transitionTo === "evening") {
+    // Amber/rose sunset wash
+    r = 255; g = 140; b = 60;
+  } else {
+    // Deep blue/purple night wash
+    r = 80; g = 100; b = 200;
+  }
+
+  // Draw gradient wash — radiates from origin point based on transition type
+  const washAlpha = intensity * 0.15; // subtle — never more than 15% opacity
+  if (washAlpha > 0.005) {
+    ctx.save();
+    let originX = cx;
+    let originY = cy;
+    if (transitionTo === "morning") {
+      originY = canvas.height + 20; // sunrise from below
+    } else if (transitionTo === "evening") {
+      originX = canvas.width + 20; // sunset from the right
+    } else if (transitionTo === "night") {
+      originY = -20; // night descends from above
+    }
+
+    const grad = ctx.createRadialGradient(originX, originY, 0, originX, originY, canvas.width * 0.8);
+    grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${washAlpha})`);
+    grad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${washAlpha * 0.4})`);
+    grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  }
+
+  // Draw transition particles
+  for (const p of transitionParticles) {
+    const alpha = (p.life / p.maxLife);
+    ctx.save();
+
+    if (p.type === "ray") {
+      // Light ray — elongated glowing ellipse
+      const stretch = 2 + ease * 2;
+      ctx.globalAlpha = alpha * intensity * 0.5;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.size * 0.5, p.size * stretch, Math.atan2(p.vy, p.vx) + Math.PI / 2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue}, 80%, 75%)`;
+      ctx.fill();
+      // Soft glow halo
+      ctx.globalAlpha = alpha * intensity * 0.2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue}, 70%, 85%)`;
+      ctx.fill();
+    } else if (p.type === "twinkle") {
+      // Twinkling star — four-pointed sparkle that pulses
+      const twinkle = 0.5 + 0.5 * Math.sin(p.life * 0.15);
+      const starAlpha = alpha * twinkle * intensity * 0.6;
+      ctx.globalAlpha = starAlpha;
+      ctx.translate(p.x, p.y);
+      // Four-pointed star shape
+      ctx.beginPath();
+      const s = p.size * (0.8 + twinkle * 0.4);
+      ctx.moveTo(0, -s * 2);
+      ctx.lineTo(s * 0.3, -s * 0.3);
+      ctx.lineTo(s * 2, 0);
+      ctx.lineTo(s * 0.3, s * 0.3);
+      ctx.lineTo(0, s * 2);
+      ctx.lineTo(-s * 0.3, s * 0.3);
+      ctx.lineTo(-s * 2, 0);
+      ctx.lineTo(-s * 0.3, -s * 0.3);
+      ctx.closePath();
+      ctx.fillStyle = `hsl(${p.hue}, 60%, 85%)`;
+      ctx.fill();
+      // Center glow
+      ctx.globalAlpha = starAlpha * 0.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, s, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue}, 50%, 95%)`;
+      ctx.fill();
+    } else if (p.type === "drift") {
+      // Soft floating mote
+      ctx.globalAlpha = alpha * intensity * 0.4;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue}, 70%, 80%)`;
+      ctx.fill();
+      // Soft glow
+      ctx.globalAlpha = alpha * intensity * 0.15;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue}, 60%, 90%)`;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
 // --- Charge Ring Drawing ---
 function drawChargeRing(cx: number, cy: number, size: number): void {
   if (!isCharging || chargeLevel <= 0) return;
@@ -3114,6 +3367,9 @@ function update(): void {
   // Butterfly companion
   updateButterfly();
 
+  // Day/night transition animation
+  updateTimeTransition();
+
   // Mini-game
   updateMinigame();
 
@@ -3519,6 +3775,11 @@ function draw(): void {
 
   // Ambient background glow (behind everything — subtle time-of-day atmosphere)
   drawAmbientGlow(cx, cy);
+
+  // Day/night transition overlay (behind pet, after ambient glow)
+  if (isTimeTransitioning) {
+    drawTimeTransition(cx, cy);
+  }
 
   // Footprints (on the ground, behind everything else)
   drawFootprints();

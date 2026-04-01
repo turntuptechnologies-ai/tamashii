@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.28.0] — 2026-04-01 — Day/Night Transition Animation
+
+### Added
+- **Smooth time-of-day transitions** — when the time period changes (morning→afternoon→evening→night), a beautiful visual animation plays instead of an abrupt switch
+- **Sunrise effect** — golden light rays rise from below the pet, filling the scene with warm morning glow
+- **Afternoon shift** — warm yellow motes drift gently upward as the day settles into its stride
+- **Sunset effect** — amber and rose-colored rays sweep in from the side, painting the scene in evening warmth
+- **Nightfall effect** — twinkling four-pointed stars fade in from above as deep blue-purple washes down
+- **Gradient wash overlay** — each transition includes a subtle radial color wash that radiates from the appropriate direction (sunrise from below, sunset from the side, night from above)
+- **Transition particles** — each time period has unique particle types: light rays, drifting motes, or twinkling stars
+- **Smooth easing** — transitions use an ease-in-out curve so they build gracefully, peak in the middle, and fade naturally
+- **Transition sounds** — each time change plays a gentle melodic chime matching the destination mood (bright rising tones for morning, warm sustained notes for afternoon, descending melody for evening, soft lullaby tones for night)
+- **Speech bubble announcements** — the pet comments on each transition with time-appropriate messages ("Sunrise! A new day!", "Sunset time~ 🌅", "The stars are out!")
+- **~4 second duration** — transitions are long enough to appreciate but short enough to not distract
+
+**Why this feature:** The pet was already deeply aware of time — different moods, colors, behaviors, ambient particles, and glow for each period. But the *moment of change* was invisible. One frame it was afternoon, the next frame it was evening. Adding transition animations transforms these moments into events you can witness. Watching golden rays rise as morning breaks, or twinkling stars fade in as night falls, makes each time change feel like something *happening* rather than a silent state switch. It's the difference between a clock ticking and the sun actually moving across the sky.
+
 ## [v0.27.0] — 2026-03-31 — 🧬 Pet Footprints (Mutation)
 
 ### Added
