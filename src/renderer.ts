@@ -18,6 +18,7 @@ declare global {
       onStartMinigame: (callback: () => void) => void;
       onFeedPet: (callback: () => void) => void;
       onPetNap: (callback: () => void) => void;
+      onViewStats: (callback: () => void) => void;
     };
   }
 }
@@ -1572,6 +1573,215 @@ function reportAchievements(): void {
   const progress = getAchievementProgress();
   const unlocked = getUnlockedAchievements();
   window.tamashii.updateAchievements({ progress, unlocked });
+}
+
+// --- Lifetime Stats Panel ---
+let statsPanelOpen = false;
+let statsPanelFade = 0; // 0-1 animation
+const STATS_PANEL_FADE_SPEED = 0.06;
+
+function toggleStatsPanel(): void {
+  if (minigameActive) return; // don't open during mini-game
+  statsPanelOpen = !statsPanelOpen;
+  if (statsPanelOpen) {
+    playTone(600, 0.1, "sine", 0.08);
+    setTimeout(() => playTone(800, 0.12, "sine", 0.08), 60);
+  } else {
+    playTone(800, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(600, 0.1, "sine", 0.06), 60);
+  }
+}
+
+window.tamashii.onViewStats(() => {
+  toggleStatsPanel();
+});
+
+function formatTime(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function getNextStageThreshold(): number | null {
+  if (currentGrowthStage === "adult") return null;
+  const order: GrowthStage[] = ["baby", "child", "teen", "adult"];
+  const idx = order.indexOf(currentGrowthStage);
+  return GROWTH_THRESHOLDS[order[idx + 1]];
+}
+
+function drawStatsPanel(): void {
+  // Animate fade
+  if (statsPanelOpen && statsPanelFade < 1) {
+    statsPanelFade = Math.min(1, statsPanelFade + STATS_PANEL_FADE_SPEED);
+  } else if (!statsPanelOpen && statsPanelFade > 0) {
+    statsPanelFade = Math.max(0, statsPanelFade - STATS_PANEL_FADE_SPEED);
+  }
+  if (statsPanelFade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = statsPanelFade;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 8;
+  const panelX = pad;
+  const panelY = pad;
+  const panelW = w - pad * 2;
+  const panelH = h - pad * 2;
+  const cornerR = 10;
+
+  // Panel background — rounded rect with soft blur
+  ctx.beginPath();
+  ctx.moveTo(panelX + cornerR, panelY);
+  ctx.lineTo(panelX + panelW - cornerR, panelY);
+  ctx.quadraticCurveTo(panelX + panelW, panelY, panelX + panelW, panelY + cornerR);
+  ctx.lineTo(panelX + panelW, panelY + panelH - cornerR);
+  ctx.quadraticCurveTo(panelX + panelW, panelY + panelH, panelX + panelW - cornerR, panelY + panelH);
+  ctx.lineTo(panelX + cornerR, panelY + panelH);
+  ctx.quadraticCurveTo(panelX, panelY + panelH, panelX, panelY + panelH - cornerR);
+  ctx.lineTo(panelX, panelY + cornerR);
+  ctx.quadraticCurveTo(panelX, panelY, panelX + cornerR, panelY);
+  ctx.closePath();
+
+  // Gradient background
+  const bgGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+  bgGrad.addColorStop(0, "rgba(20, 25, 50, 0.92)");
+  bgGrad.addColorStop(1, "rgba(30, 15, 45, 0.92)");
+  ctx.fillStyle = bgGrad;
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = "rgba(120, 180, 255, 0.5)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Title
+  let y = panelY + 20;
+  ctx.textAlign = "center";
+  ctx.font = "bold 11px monospace";
+  ctx.fillStyle = "#e8d48b";
+  ctx.shadowColor = "rgba(232, 212, 139, 0.6)";
+  ctx.shadowBlur = 6;
+  ctx.fillText("LIFETIME STATS", w / 2, y);
+  ctx.shadowBlur = 0;
+
+  // Divider line
+  y += 6;
+  ctx.strokeStyle = "rgba(120, 180, 255, 0.3)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+
+  // Growth stage section
+  y += 14;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#a8c8ff";
+  ctx.fillText("GROWTH", panelX + 12, y);
+  ctx.textAlign = "right";
+  const stageEmojis: Record<GrowthStage, string> = { baby: "🥚", child: "🌱", teen: "🌟", adult: "👑" };
+  ctx.fillStyle = "#fff";
+  ctx.font = "9px monospace";
+  ctx.fillText(`${stageEmojis[currentGrowthStage]} ${GROWTH_STAGE_NAMES[currentGrowthStage]}`, panelX + panelW - 12, y);
+
+  // Progress bar to next stage
+  y += 10;
+  const barX = panelX + 12;
+  const barW = panelW - 24;
+  const barH = 6;
+  const nextThreshold = getNextStageThreshold();
+  const currentThreshold = GROWTH_THRESHOLDS[currentGrowthStage];
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.fillRect(barX, y, barW, barH);
+
+  if (nextThreshold !== null) {
+    const progress = (totalCarePoints - currentThreshold) / (nextThreshold - currentThreshold);
+    const fillW = Math.min(1, Math.max(0, progress)) * barW;
+    const barGrad = ctx.createLinearGradient(barX, y, barX + barW, y);
+    barGrad.addColorStop(0, "#4a9eff");
+    barGrad.addColorStop(1, "#a855f7");
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(barX, y, fillW, barH);
+    // Progress label
+    y += barH + 9;
+    ctx.textAlign = "center";
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.fillText(`${totalCarePoints} / ${nextThreshold} care points`, w / 2, y);
+  } else {
+    // Max stage — full bar with golden fill
+    const barGrad = ctx.createLinearGradient(barX, y, barX + barW, y);
+    barGrad.addColorStop(0, "#e8d48b");
+    barGrad.addColorStop(1, "#f5c542");
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(barX, y, barW, barH);
+    y += barH + 9;
+    ctx.textAlign = "center";
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#e8d48b";
+    ctx.fillText(`${totalCarePoints} care points (MAX)`, w / 2, y);
+  }
+
+  // Divider
+  y += 8;
+  ctx.strokeStyle = "rgba(120, 180, 255, 0.15)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+
+  // Stats rows
+  y += 12;
+  const currentSessionMs = Date.now() - sessionStartTime;
+  const totalTime = totalSessionTime + currentSessionMs;
+  const unlockedCount = achievements.filter(a => a.unlocked).length;
+
+  const stats: [string, string][] = [
+    ["Clicks", `${totalClicks}`],
+    ["Spins", `${totalSpins}`],
+    ["Bounces", `${totalBounces}`],
+    ["Best Combo", `${bestCombo}x`],
+    ["High Score", `${minigameHighScore}`],
+    ["Time Together", formatTime(totalTime)],
+    ["Achievements", `${unlockedCount} / ${achievements.length}`],
+  ];
+
+  ctx.font = "8px monospace";
+  const rowHeight = 13;
+  for (const [label, value] of stats) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(200, 215, 255, 0.7)";
+    ctx.fillText(label, panelX + 14, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(value, panelX + panelW - 14, y);
+    y += rowHeight;
+  }
+
+  // Current mood row
+  y += 2;
+  ctx.textAlign = "left";
+  ctx.font = "8px monospace";
+  ctx.fillStyle = "rgba(200, 215, 255, 0.7)";
+  ctx.fillText("Mood", panelX + 14, y);
+  ctx.textAlign = "right";
+  const moodStr = petHappiness >= 70 ? "Happy" : petHappiness >= 40 ? "Content" : "Sad";
+  const moodColor = petHappiness >= 70 ? "#6ee77a" : petHappiness >= 40 ? "#e8d48b" : "#ff7a7a";
+  ctx.fillStyle = moodColor;
+  ctx.fillText(moodStr, panelX + panelW - 14, y);
+
+  // Close hint
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.fillText("right-click to close", w / 2, panelY + panelH - 6);
+
+  ctx.restore();
 }
 
 // --- Persistent Save/Load ---
@@ -4537,6 +4747,9 @@ function draw(): void {
 
   // Speech bubble (above everything)
   drawSpeechBubble(cx, cy - size * 0.4);
+
+  // Stats panel overlay (topmost layer)
+  drawStatsPanel();
 }
 
 function loop(): void {

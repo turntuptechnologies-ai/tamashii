@@ -52,4 +52,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onPetNap: (callback: () => void) => {
     ipcRenderer.on("pet-nap", () => callback());
   },
+  onViewStats: (callback: () => void) => {
+    ipcRenderer.on("view-stats", () => callback());
+  },
 });

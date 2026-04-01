@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.31.0] — 2026-04-01 — Lifetime Stats Panel
+
+### Added
+- **Stats panel overlay** — right-click and select "View Stats" to see a beautiful full-screen stats panel drawn directly on the canvas
+- **Growth progress bar** — shows your current growth stage with a gradient progress bar tracking care points toward the next evolution
+- **Lifetime counters** — total clicks, spins, bounces, best combo, mini-game high score, and time spent together are all displayed
+- **Achievement progress** — see how many achievements you've unlocked at a glance
+- **Live mood indicator** — your pet's current emotional state is shown with color-coded text (green for happy, gold for content, red for sad)
+- **Stage icons** — each growth stage is represented with a thematic emoji (egg, seedling, star, crown)
+- **Max stage celebration** — adults get a golden "MAX" progress bar instead of a threshold target
+- **Smooth animation** — the panel fades in and out with a gentle transition, complete with opening/closing sound effects
+- **Dark glass aesthetic** — the panel uses a deep blue-purple gradient background with a soft blue border glow and golden title
+- **Non-intrusive** — the panel won't open during mini-games and can be closed by right-clicking again
+
+**Why this feature:** After 30 features, Tamashii has accumulated a rich history of interactions — clicks, spins, combos, growth stages, achievements, time together. But all of this was invisible. You could play for hours and never see a summary of your journey. The stats panel transforms all those hidden numbers into a beautiful, accessible view. Seeing "Time Together: 3h 42m" or "Best Combo: 15x" tells you a story about your relationship with your pet. And the growth progress bar — showing exactly how many care points until your next evolution — turns every interaction into measurable progress. It's a love letter to the player, reflecting back everything they've invested.
+
 ## [v0.30.0] — 2026-04-01 — Pet Evolution / Growth Stages
 
 ### Added

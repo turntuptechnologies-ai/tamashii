@@ -173,6 +173,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
       label: "⭐ Play Star Catcher",
       click: () => { mainWindow?.webContents.send("start-minigame"); },
     },
+    {
+      label: "📊 View Stats",
+      click: () => { mainWindow?.webContents.send("view-stats"); },
+    },
     { type: "separator" },
     {
       label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
@@ -186,7 +190,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.29.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.31.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -263,7 +267,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.29.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.31.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
