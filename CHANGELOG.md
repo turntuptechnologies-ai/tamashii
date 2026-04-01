@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.30.0] — 2026-04-01 — Pet Evolution / Growth Stages
+
+### Added
+- **Growth stages** — your pet now evolves through four stages as you care for it: Baby, Child, Teen, and Adult
+- **Care points system** — every interaction earns care points: clicks (+1), spins (+3), feeds (+3), naps (+2), bounces (+1), mini-games (+10), and passive time (+1 per 5 minutes)
+- **Baby stage** (0-99 care) — your pet starts here, fresh and new to the world
+- **Child stage** (100+ care) — a small golden 4-pointed star appears on the pet's forehead, softly glowing
+- **Teen stage** (500+ care) — the forehead star grows into a 6-pointed amber mark with a bright core and subtle shimmer
+- **Adult stage** (1500+ care) — a radiant golden crest with a slowly rotating outer star, layered inner star, bright white center, and warm aura
+- **Evolution celebration** — when your pet reaches a new stage, a spectacular burst of sparkles and hearts erupts, a triumphant ascending fanfare plays, and the pet proudly announces its growth
+- **Evolution glow** — a golden expanding ring and warm radial glow surround the pet during evolution, lasting ~3 seconds
+- **Stage-aware speech** — each growth stage has unique speech bubbles reflecting the pet's maturity: babies say "Everything is new!", teens say "Watch me go~", adults say "Thank you for everything ♥"
+- **Migration support** — existing players get their care points calculated retroactively from clicks, spins, and bounces
+- **Passive growth** — even just keeping your pet open earns care (+1 per 5 minutes), so your pet grows just from spending time together
+- **Two new achievements** — "Growing Up" (reach Child stage) and "Fully Grown" (reach Adult stage)
+- **Care persists** — total care points are saved to disk and remembered across sessions
+
+**Why this feature:** The pet had rich moment-to-moment interactions — clicks, combos, mini-games, feeding, stats — but no sense of long-term progress. You could play with it for days and it would look exactly the same as day one. Growth stages transform every interaction into an investment. Each click, each feed, each game isn't just fun in the moment — it's building toward something. Watching the forehead mark appear, then grow, then become a radiant golden crest tells a visual story of your care. And the evolution celebrations — with their sparkle bursts and triumphant fanfares — turn progression milestones into genuine events. Your pet isn't just alive; it's growing up, and you raised it.
+
 ## [v0.29.0] — 2026-04-01 — Pet Dreams
 
 ### Added

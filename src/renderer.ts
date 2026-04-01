@@ -514,6 +514,19 @@ function getTimeMessages(): string[] {
   }
 }
 
+function getGrowthMessages(): string[] {
+  switch (currentGrowthStage) {
+    case "baby":
+      return ["Everything is new!", "I'm just a baby~", "Pick me up?", "Waaah~!"];
+    case "child":
+      return ["I'm growing!", "Look how big I am!", "Let's play!", "I learned something!"];
+    case "teen":
+      return ["I'm almost grown up!", "Watch me go~", "So much energy!", "I feel stronger!"];
+    case "adult":
+      return ["Life is beautiful~", "I feel so wise...", "Thank you for everything ♥", "We've come so far~"];
+  }
+}
+
 const stressMessages = [
   "So much work...",
   "CPU is on fire!",
@@ -565,6 +578,12 @@ function spawnSpeechBubble(): void {
   const useStress = isStressed && Math.random() < 0.5;
   const messages = useStress ? stressMessages : getTimeMessages();
   let text = messages[Math.floor(Math.random() * messages.length)];
+
+  // ~15% chance to use a growth-stage message
+  if (!useStress && Math.random() < 0.15) {
+    const growthMsgs = getGrowthMessages();
+    text = growthMsgs[Math.floor(Math.random() * growthMsgs.length)];
+  }
 
   // ~25% chance to use a name-aware message if the pet has a name
   if (petName && !useStress && Math.random() < 0.25) {
@@ -837,6 +856,118 @@ window.tamashii.onPromptName(async () => {
   }
 });
 
+// --- Pet Growth / Evolution ---
+type GrowthStage = "baby" | "child" | "teen" | "adult";
+let totalCarePoints = 0;
+let currentGrowthStage: GrowthStage = "baby";
+let previousGrowthStage: GrowthStage = "baby";
+let evolutionCelebrating = false;
+let evolutionCelebrationTimer = 0;
+const EVOLUTION_CELEBRATION_DURATION = 180; // ~3 seconds
+let evolutionGlowPhase = 0;
+
+const GROWTH_THRESHOLDS: Record<GrowthStage, number> = {
+  baby: 0,
+  child: 100,
+  teen: 500,
+  adult: 1500,
+};
+
+const GROWTH_STAGE_NAMES: Record<GrowthStage, string> = {
+  baby: "Baby",
+  child: "Child",
+  teen: "Teen",
+  adult: "Adult",
+};
+
+function getGrowthStage(care: number): GrowthStage {
+  if (care >= GROWTH_THRESHOLDS.adult) return "adult";
+  if (care >= GROWTH_THRESHOLDS.teen) return "teen";
+  if (care >= GROWTH_THRESHOLDS.child) return "child";
+  return "baby";
+}
+
+function addCarePoints(amount: number): void {
+  totalCarePoints += amount;
+  const newStage = getGrowthStage(totalCarePoints);
+  if (newStage !== currentGrowthStage) {
+    previousGrowthStage = currentGrowthStage;
+    currentGrowthStage = newStage;
+    celebrateEvolution(newStage);
+  }
+}
+
+function celebrateEvolution(stage: GrowthStage): void {
+  evolutionCelebrating = true;
+  evolutionCelebrationTimer = EVOLUTION_CELEBRATION_DURATION;
+
+  // Play a special ascending fanfare
+  playEvolutionSound();
+
+  // Speech bubble
+  const name = petName || "I";
+  const messages: Record<GrowthStage, string[]> = {
+    baby: [],
+    child: [`${name} evolved! I'm growing up~!`, `${name} is a ${GROWTH_STAGE_NAMES[stage]} now! ✨`],
+    teen: [`${name} evolved again! Look at me! 💫`, `I feel so much stronger! ✨`],
+    adult: [`${name} is fully grown!! 🌟`, `I've reached my final form! ♥`],
+  };
+  const msgs = messages[stage];
+  if (msgs.length > 0) {
+    speechBubble = { text: msgs[Math.floor(Math.random() * msgs.length)], life: 240, maxLife: 240 };
+  }
+
+  // Happy reaction
+  squishAmount = 0.8;
+  isHappy = true;
+  happyTimer = 120;
+
+  // Burst of sparkles
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const sparkleCount = stage === "child" ? 12 : stage === "teen" ? 20 : 30;
+  for (let i = 0; i < sparkleCount; i++) {
+    const angle = (i / sparkleCount) * Math.PI * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 15,
+      y: cy + Math.sin(angle) * 10,
+      vx: Math.cos(angle) * (1.5 + Math.random()),
+      vy: Math.sin(angle) * (1.2 + Math.random()) - 0.5,
+      life: 60 + Math.random() * 40,
+      maxLife: 60 + Math.random() * 40,
+      size: 3 + Math.random() * 4,
+      type: "sparkle",
+    });
+  }
+  // Hearts too
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 40,
+      y: cy - 10,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -1.5 - Math.random() * 2,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 6 + Math.random() * 6,
+      type: "heart",
+    });
+  }
+
+  saveGame();
+}
+
+function playEvolutionSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Magical ascending arpeggio — longer and more triumphant than achievement
+  playTone(523, 0.15, "sine", 0.1);   // C5
+  setTimeout(() => playTone(659, 0.15, "sine", 0.1), 100);  // E5
+  setTimeout(() => playTone(784, 0.15, "sine", 0.1), 200);  // G5
+  setTimeout(() => playTone(1047, 0.2, "sine", 0.12), 300); // C6
+  setTimeout(() => playTone(1319, 0.2, "sine", 0.1), 420);  // E6
+  setTimeout(() => playTone(1568, 0.35, "sine", 0.12), 540); // G6
+}
+
 // --- Pet Stats (Hunger, Happiness, Energy) ---
 let petHunger = 80;     // 0-100, decays over time, boosted by feeding
 let petHappiness = 80;  // 0-100, decays over time, boosted by clicks/spins/games
@@ -872,6 +1003,7 @@ const tiredMessages = [
 function feedPet(): void {
   lastInteractionTime = Date.now();
   petHunger = Math.min(100, petHunger + 25);
+  addCarePoints(3);
   playFeedSound();
   squishAmount = 0.6;
   isHappy = true;
@@ -886,6 +1018,7 @@ function feedPet(): void {
 function petNap(): void {
   lastInteractionTime = Date.now();
   petEnergy = Math.min(100, petEnergy + 20);
+  addCarePoints(2);
   playNapSound();
   squishAmount = 0.3;
   const napMessages = ["*zzz*... Refreshed!", "Power nap~!", "That was nice...", "Feel better now!"];
@@ -1045,6 +1178,7 @@ function endMinigame(): void {
   isHappy = true;
   happyTimer = 90;
   petHappiness = Math.min(100, petHappiness + Math.min(minigameScore, 20)); // games boost happiness
+  addCarePoints(10); // mini-games give substantial care
 
   // Score-based speech
   let msg: string;
@@ -1358,6 +1492,16 @@ const achievements: Achievement[] = [
     icon: "🌟", unlockMessage: "LEGENDARY combo!!!",
     condition: () => bestCombo >= 20, unlocked: false,
   },
+  {
+    id: "first_growth", name: "Growing Up", description: "Reach the Child growth stage",
+    icon: "🌱", unlockMessage: "I'm not a baby anymore!",
+    condition: () => currentGrowthStage !== "baby", unlocked: false,
+  },
+  {
+    id: "fully_grown", name: "Fully Grown", description: "Reach the Adult growth stage",
+    icon: "🌳", unlockMessage: "I've reached my final form!",
+    condition: () => currentGrowthStage === "adult", unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -1447,6 +1591,7 @@ interface SaveData {
   petEnergy: number;
   lastStatSaveTime: number; // timestamp for calculating offline decay
   bestCombo: number;
+  totalCarePoints: number;
   version: number;
 }
 
@@ -1472,6 +1617,7 @@ function buildSaveData(): SaveData {
     petEnergy,
     lastStatSaveTime: Date.now(),
     bestCombo,
+    totalCarePoints,
     version: 1,
   };
 }
@@ -1507,6 +1653,16 @@ function applySaveData(data: SaveData): void {
   if (data.bestCombo) {
     bestCombo = data.bestCombo;
   }
+
+  // Restore care points and growth stage
+  if (typeof data.totalCarePoints === "number") {
+    totalCarePoints = data.totalCarePoints;
+  } else {
+    // Migrate from existing stats for players who already have progress
+    totalCarePoints = (data.totalClicks || 0) + (data.totalSpins || 0) * 3 + (data.totalBounces || 0);
+  }
+  currentGrowthStage = getGrowthStage(totalCarePoints);
+  previousGrowthStage = currentGrowthStage; // don't celebrate on load
 
   // Restore pet stats with offline decay
   if (typeof data.petHunger === "number") {
@@ -1564,6 +1720,7 @@ window.tamashii.loadSaveData().then((raw) => {
 
 function startSpin(): void {
   totalSpins++;
+  addCarePoints(3);
   playSpinSound();
   isSpinning = true;
   spinProgress = 0;
@@ -1609,6 +1766,7 @@ function onPetClicked(): void {
   // Regular single click — squish + hearts + combo
   lastInteractionTime = Date.now();
   totalClicks++;
+  addCarePoints(1);
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
@@ -3393,6 +3551,7 @@ function update(): void {
       } else {
         // Bounce! Reverse velocity with damping
         totalBounces++;
+        addCarePoints(1);
         const preBounceSpeed = Math.abs(velocityY) / BOUNCE_DAMPING;
         playBounceSound(preBounceSpeed);
         velocityY = -velocityY * BOUNCE_DAMPING;
@@ -3451,6 +3610,19 @@ function update(): void {
     if (achievementCelebrationTimer <= 0) {
       achievementCelebrating = false;
     }
+  }
+
+  // Evolution celebration timer
+  if (evolutionCelebrating) {
+    evolutionCelebrationTimer--;
+    if (evolutionCelebrationTimer <= 0) {
+      evolutionCelebrating = false;
+    }
+  }
+
+  // Passive care: +1 care point every 5 minutes of session time
+  if (frame % 18000 === 0 && frame > 0) { // 18000 frames ≈ 5 min at 60fps
+    addCarePoints(1);
   }
 
   // Check achievements every 30 frames (~0.5s)
@@ -3638,6 +3810,152 @@ function update(): void {
 
   // Pet stats decay
   updatePetStats();
+}
+
+function drawGrowthMark(cx: number, cy: number, size: number): void {
+  if (currentGrowthStage === "baby") return; // no mark at baby stage
+
+  const markY = cy - size * 0.22; // forehead area
+  evolutionGlowPhase += 0.03;
+  const pulse = 0.7 + 0.3 * Math.sin(evolutionGlowPhase);
+
+  ctx.save();
+
+  if (currentGrowthStage === "child") {
+    // Small 4-pointed star on forehead — soft golden
+    const starSize = 4;
+    const alpha = 0.6 * pulse;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#FFD700";
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const r = i % 2 === 0 ? starSize : starSize * 0.35;
+      const angle = (i * Math.PI) / 4 - Math.PI / 2;
+      if (i === 0) ctx.moveTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+      else ctx.lineTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // Tiny glow
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.beginPath();
+    ctx.arc(cx, markY, starSize * 2, 0, Math.PI * 2);
+    const g = ctx.createRadialGradient(cx, markY, 0, cx, markY, starSize * 2);
+    g.addColorStop(0, "rgba(255, 215, 0, 0.4)");
+    g.addColorStop(1, "rgba(255, 215, 0, 0)");
+    ctx.fillStyle = g;
+    ctx.fill();
+  } else if (currentGrowthStage === "teen") {
+    // Larger glowing 6-pointed star — brighter, with shimmer
+    const starSize = 6;
+    const alpha = 0.75 * pulse;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#FFB347";
+    ctx.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const r = i % 2 === 0 ? starSize : starSize * 0.4;
+      const angle = (i * Math.PI) / 6 - Math.PI / 2 + Math.sin(evolutionGlowPhase * 0.5) * 0.1;
+      if (i === 0) ctx.moveTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+      else ctx.lineTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // Inner bright core
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fillStyle = "#FFD700";
+    ctx.beginPath();
+    ctx.arc(cx, markY, starSize * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Glow
+    ctx.globalAlpha = alpha * 0.25;
+    ctx.beginPath();
+    ctx.arc(cx, markY, starSize * 2.5, 0, Math.PI * 2);
+    const g = ctx.createRadialGradient(cx, markY, 0, cx, markY, starSize * 2.5);
+    g.addColorStop(0, "rgba(255, 179, 71, 0.5)");
+    g.addColorStop(1, "rgba(255, 179, 71, 0)");
+    ctx.fillStyle = g;
+    ctx.fill();
+  } else if (currentGrowthStage === "adult") {
+    // Radiant golden crest — multi-layered star with bright aura
+    const starSize = 8;
+    const alpha = 0.85 * pulse;
+    const slowSpin = evolutionGlowPhase * 0.3;
+
+    // Outer soft aura
+    ctx.globalAlpha = alpha * 0.15;
+    ctx.beginPath();
+    ctx.arc(cx, markY, starSize * 3.5, 0, Math.PI * 2);
+    const auraG = ctx.createRadialGradient(cx, markY, 0, cx, markY, starSize * 3.5);
+    auraG.addColorStop(0, "rgba(255, 215, 0, 0.6)");
+    auraG.addColorStop(0.5, "rgba(255, 180, 50, 0.2)");
+    auraG.addColorStop(1, "rgba(255, 215, 0, 0)");
+    ctx.fillStyle = auraG;
+    ctx.fill();
+
+    // Outer rotating 8-pointed star (slightly transparent)
+    ctx.globalAlpha = alpha * 0.4;
+    ctx.fillStyle = "#FFC94D";
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const r = i % 2 === 0 ? starSize * 1.1 : starSize * 0.35;
+      const angle = (i * Math.PI) / 8 + slowSpin;
+      if (i === 0) ctx.moveTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+      else ctx.lineTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner solid 6-pointed star
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#FFD700";
+    ctx.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const r = i % 2 === 0 ? starSize * 0.7 : starSize * 0.25;
+      const angle = (i * Math.PI) / 6 - Math.PI / 2;
+      if (i === 0) ctx.moveTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+      else ctx.lineTo(cx + Math.cos(angle) * r, markY + Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright white center
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.fillStyle = "#FFFDE0";
+    ctx.beginPath();
+    ctx.arc(cx, markY, starSize * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Evolution celebration glow — a radiant expanding ring around the pet
+function drawEvolutionGlow(cx: number, cy: number): void {
+  if (!evolutionCelebrating) return;
+  const progress = 1 - evolutionCelebrationTimer / EVOLUTION_CELEBRATION_DURATION;
+  const alpha = Math.sin(progress * Math.PI); // fade in and out
+
+  // Expanding golden ring
+  const ringRadius = 40 + progress * 30;
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.4;
+  ctx.strokeStyle = "#FFD700";
+  ctx.lineWidth = 3 - progress * 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy + 5, ringRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner warm glow
+  ctx.globalAlpha = alpha * 0.2;
+  const g = ctx.createRadialGradient(cx, cy + 5, 0, cx, cy + 5, ringRadius);
+  g.addColorStop(0, "rgba(255, 215, 0, 0.4)");
+  g.addColorStop(0.6, "rgba(255, 200, 50, 0.1)");
+  g.addColorStop(1, "rgba(255, 215, 0, 0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy + 5, ringRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawAccessory(cx: number, cy: number, size: number): void {
@@ -4143,8 +4461,12 @@ function draw(): void {
   drawFeet(cx, cy, size);
   drawBody(cx, cy, size);
   drawFace(cx, cy, size);
+  drawGrowthMark(cx, cy, size);
   drawAccessory(cx, cy, size);
   ctx.restore();
+
+  // Evolution celebration glow (outside transform context)
+  drawEvolutionGlow(canvas.width / 2, canvas.height / 2);
 
   // Draw particles on top (not affected by squish)
   for (const p of particles) {

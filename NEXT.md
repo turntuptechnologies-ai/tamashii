@@ -3,39 +3,44 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.29.0 — Pet Dreams (2026-04-01)
+## Last completed: v0.30.0 — Pet Evolution / Growth Stages (2026-04-01)
 
 ### What was done
-- Added dream bubbles that float above the pet at nighttime
-- Eight unique dream icons: star, heart, food (apple), butterfly, moon, fish, flower, music note
-- Each icon is hand-drawn on canvas with unique details (bezier hearts, 10-point stars, crescent moons, etc.)
-- Classic thought bubble style with main circle + two trailing dots
-- Gentle wobble and float physics — bubbles drift upward with sine-wave sway
-- Smooth fade-in (first 20% of life) and natural fade-out
-- Dreams spawn every ~3-5 seconds during nighttime
-- Context-aware: stops during interactions (dragging, spinning, mini-games, charging)
-- Quick cleanup when transitioning out of nighttime (remaining bubbles fade in ~0.25s)
-- `drawDreamIcon()` renders all 8 icon types, `drawDreamBubble()` handles thought bubble + icon composition
-- Dream bubbles rendered after butterfly, before achievement glow, below speech bubble
-- Update logic sits before idle bounce in `update()`
+- Added a full growth/evolution system with 4 stages: Baby, Child, Teen, Adult
+- Care points accumulate from all interactions: clicks (+1), spins (+3), feeds (+3), naps (+2), bounces (+1), mini-games (+10), passive time (+1 per 5 min)
+- Thresholds: Baby (0-99), Child (100-499), Teen (500-1499), Adult (1500+)
+- Visual forehead mark evolves with each stage:
+  - Baby: no mark
+  - Child: small 4-pointed golden star with soft glow
+  - Teen: larger 6-pointed amber star with bright core and shimmer
+  - Adult: radiant golden crest with slow-rotating outer star, layered inner star, white center, and warm aura
+- Evolution celebration: sparkle/heart burst, golden expanding ring glow, triumphant ascending fanfare, excited speech bubble
+- Stage-aware speech bubbles (~15% chance in periodic speech)
+- `totalCarePoints` added to SaveData with migration from existing stats for returning players
+- Two new achievements: "Growing Up" (🌱, reach Child) and "Fully Grown" (🌳, reach Adult)
+- Total achievements now 16
 
 ### Thoughts for next cycle
-- **Settings window** — still the most pressing UX improvement. The context menu has 10+ items. A dedicated settings BrowserWindow would consolidate: sound toggle, volume slider, wandering toggle, pet name, accessory picker with visual preview, stat display toggle.
-- **More mini-games** — memory match, reaction speed test, or rhythm game. The mini-game infrastructure is solid (startMinigame/endMinigame/updateMinigame/drawMinigame pattern). New games just need their own state and logic.
-- **Weather awareness** — fetch local weather (via a free API) and show rain/snow/sun effects around the pet. Would need a new IPC channel for weather data from main process.
-- **Pet evolution / growth stages** — the pet changes appearance based on total accumulated care (clicks + feeds + play time). Baby -> child -> adult -> elder. Would need multiple draw variants.
-- **Accessory combos** — wear multiple accessories simultaneously (hat + glasses). Would need to change `currentAccessory` from a single string to an array.
-- **Lifetime stats screen** — show total clicks, spins, bounces, feeding count, play time, mini-game high score, best combo, best charge in a separate window.
-- **Notification integration** — pet reacts to OS notifications with a startled or curious expression.
+- **Settings window** — still the most pressing UX improvement. The context menu has 11+ items now. A dedicated settings BrowserWindow would consolidate: sound toggle, volume slider, wandering toggle, pet name, accessory picker, stat display toggle, growth stage info.
+- **More mini-games** — memory match, reaction speed test, or rhythm game. The mini-game infrastructure is solid. New games could also grant care points.
+- **Pet evolution visual variants** — instead of just a forehead mark, the pet's body shape/color could change subtly at each stage. Child could be slightly more rounded, teen more defined, adult could have a slight glow to the body outline.
+- **Growth stage info panel** — show current stage, care points, points to next stage as a progress bar. Could be in the context menu or a separate mini-window.
+- **Dream themes tied to growth** — baby dreams of simple things (stars, hearts), teen dreams of adventure (mountains, rockets), adult dreams of memories (replays of past interactions).
+- **Weather awareness** — fetch local weather and show rain/snow/sun effects. Would need new IPC channel.
 - **Multiple pet companions** — spawn a second smaller pet that interacts with the main one.
-- **Dream themes** — dreams could reflect the pet's recent experiences (dreams about stars after playing Star Catcher, dreams about food when hungry, dreams about hearts when happy). Would need to track recent activities.
+- **Accessory combos** — wear multiple accessories simultaneously.
+- **Lifetime stats screen** — show total clicks, spins, bounces, feeding count, play time, care points, growth stage history.
 
 ### Current architecture notes
-- Renderer is now ~4300 lines — module splitting would help significantly
-- Dream bubbles use their own `dreamBubbles[]` array (separate from `particles[]` and `transitionParticles[]`)
-- `DreamBubble` interface: x, y, vx, vy, life, maxLife, icon, size, wobblePhase
-- Dream icons use `globalCompositeOperation = "destination-out"` for the crescent moon cutout — make sure this is always restored to "source-over"
-- Dreams are rendered in draw order: ambient glow -> transition -> footprints -> shadow -> charge ring -> pet body -> particles -> butterfly -> **dream bubbles** -> achievement glow -> stat bars -> mini-game -> combo counter -> speech bubble
-- preload.ts still has 17 methods — no new IPC channels needed
-- SaveData interface is unchanged — dreams have no persistent state
-- Total achievements still 14 (no new achievements added this cycle)
+- Renderer is now ~4550 lines — module splitting would really help
+- Growth system is at the top of the pet stats section (~line 840-960)
+- `GrowthStage` type: "baby" | "child" | "teen" | "adult"
+- `addCarePoints(n)` is the central function — call it from any interaction handler
+- `celebrateEvolution()` handles sparkle bursts, sound, speech, and sets celebration timer
+- `drawGrowthMark()` renders the forehead mark (inside pet transform context, after face, before accessory)
+- `drawEvolutionGlow()` renders the celebration ring (outside transform context, after pet body restore)
+- Evolution glow uses `evolutionCelebrating` + `evolutionCelebrationTimer` (same pattern as achievement celebration)
+- `evolutionGlowPhase` is a continuously incrementing phase for the mark's breathing/rotation animation
+- SaveData now has `totalCarePoints` field; migration computes from existing clicks/spins/bounces for old saves
+- preload.ts unchanged — no new IPC channels needed
+- Total achievements: 16 (added "Growing Up" and "Fully Grown")
