@@ -413,6 +413,23 @@ const footprints: Footprint[] = [];
 let footprintTimer = 0;    // spawn timer
 let footprintLeft = true;  // alternates between left and right paw
 
+// --- Pet Dreams (Night) ---
+interface DreamBubble {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  icon: string;       // which dream icon to draw
+  size: number;
+  wobblePhase: number;
+}
+
+const dreamBubbles: DreamBubble[] = [];
+let dreamSpawnTimer = 0;
+const DREAM_ICONS = ["star", "heart", "food", "butterfly", "moon", "fish", "flower", "music"];
+
 // --- Day/Night Transition Animation ---
 let isTimeTransitioning = false;
 let transitionFrom: TimeOfDay = "morning";
@@ -2285,6 +2302,209 @@ function drawSadCloud(x: number, y: number): void {
   ctx.restore();
 }
 
+// --- Dream Bubble Drawing ---
+function drawDreamIcon(x: number, y: number, icon: string, size: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  const s = size * 0.35;
+
+  switch (icon) {
+    case "star": {
+      // Tiny golden star
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? s : s * 0.4;
+        const angle = (i * Math.PI) / 5 - Math.PI / 2;
+        if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#FFD700";
+      ctx.fill();
+      break;
+    }
+    case "heart": {
+      // Tiny pink heart
+      const hs = s * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(0, hs * 0.3);
+      ctx.bezierCurveTo(-hs * 0.5, -hs * 0.1, -hs * 0.5, -hs * 0.5, 0, -hs * 0.2);
+      ctx.bezierCurveTo(hs * 0.5, -hs * 0.5, hs * 0.5, -hs * 0.1, 0, hs * 0.3);
+      ctx.fillStyle = "#FF6B8A";
+      ctx.fill();
+      break;
+    }
+    case "food": {
+      // Tiny apple — circle with stem
+      ctx.beginPath();
+      ctx.arc(0, 1, s * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF4444";
+      ctx.fill();
+      // Stem
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.3);
+      ctx.lineTo(1, -s * 0.7);
+      ctx.strokeStyle = "#886633";
+      ctx.lineWidth = 1;
+      ctx.lineCap = "round";
+      ctx.stroke();
+      // Tiny leaf
+      ctx.beginPath();
+      ctx.ellipse(2, -s * 0.5, s * 0.25, s * 0.12, 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = "#66AA44";
+      ctx.fill();
+      break;
+    }
+    case "butterfly": {
+      // Tiny butterfly silhouette
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(side * s * 0.35, -s * 0.1, s * 0.35, s * 0.25, side * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#CC88DD";
+        ctx.fill();
+      }
+      // Body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 0.08, s * 0.3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#885599";
+      ctx.fill();
+      break;
+    }
+    case "moon": {
+      // Crescent moon
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.55, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFEE88";
+      ctx.fill();
+      // Cutout
+      ctx.beginPath();
+      ctx.arc(s * 0.2, -s * 0.15, s * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0)";
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      break;
+    }
+    case "fish": {
+      // Tiny fish
+      ctx.beginPath();
+      ctx.ellipse(0, 0, s * 0.55, s * 0.3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#66BBEE";
+      ctx.fill();
+      // Tail
+      ctx.beginPath();
+      ctx.moveTo(s * 0.4, 0);
+      ctx.lineTo(s * 0.8, -s * 0.3);
+      ctx.lineTo(s * 0.8, s * 0.3);
+      ctx.closePath();
+      ctx.fillStyle = "#66BBEE";
+      ctx.fill();
+      // Eye
+      ctx.beginPath();
+      ctx.arc(-s * 0.2, -s * 0.05, s * 0.1, 0, Math.PI * 2);
+      ctx.fillStyle = "#111";
+      ctx.fill();
+      break;
+    }
+    case "flower": {
+      // Tiny daisy
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.ellipse(
+          Math.cos(angle) * s * 0.35,
+          Math.sin(angle) * s * 0.35,
+          s * 0.25, s * 0.15,
+          angle, 0, Math.PI * 2
+        );
+        ctx.fillStyle = "#FFAACC";
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFDD44";
+      ctx.fill();
+      break;
+    }
+    case "music": {
+      // Musical note
+      ctx.beginPath();
+      ctx.arc(-s * 0.15, s * 0.2, s * 0.25, 0, Math.PI * 2);
+      ctx.fillStyle = "#AA88DD";
+      ctx.fill();
+      // Stem
+      ctx.beginPath();
+      ctx.moveTo(s * 0.1, s * 0.2);
+      ctx.lineTo(s * 0.1, -s * 0.5);
+      ctx.strokeStyle = "#AA88DD";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Flag
+      ctx.beginPath();
+      ctx.moveTo(s * 0.1, -s * 0.5);
+      ctx.quadraticCurveTo(s * 0.4, -s * 0.3, s * 0.1, -s * 0.1);
+      ctx.strokeStyle = "#AA88DD";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawDreamBubble(db: DreamBubble): void {
+  const alpha = db.life / db.maxLife;
+  // Fade in for first 20% of life
+  const fadeIn = (db.maxLife - db.life) / db.maxLife;
+  const effectiveAlpha = alpha * Math.min(fadeIn / 0.2, 1);
+
+  if (effectiveAlpha < 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = effectiveAlpha * 0.85;
+
+  // Wobble
+  const wobbleX = Math.sin(db.wobblePhase) * 3;
+
+  const bx = db.x + wobbleX;
+  const by = db.y;
+  const r = db.size;
+
+  // Thought bubble — main circle
+  ctx.beginPath();
+  ctx.arc(bx, by, r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(180, 180, 220, 0.5)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Small trailing circles (thought bubble dots leading down to pet)
+  const dot1r = r * 0.3;
+  const dot2r = r * 0.18;
+  ctx.beginPath();
+  ctx.arc(bx - r * 0.4, by + r + dot1r + 2, dot1r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(180, 180, 220, 0.4)";
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(bx - r * 0.7, by + r + dot1r * 2 + dot2r + 4, dot2r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(180, 180, 220, 0.3)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Draw the dream icon inside the bubble
+  ctx.globalAlpha = effectiveAlpha;
+  drawDreamIcon(bx, by, db.icon, r);
+
+  ctx.restore();
+}
+
 // --- Ambient Background Glow ---
 function drawFootprints(): void {
   for (const fp of footprints) {
@@ -3356,6 +3576,49 @@ function update(): void {
     sadRainTimer = 0;
   }
 
+  // --- Pet Dreams (night only, when idle) ---
+  const dreamCx = canvas.width / 2;
+  const dreamCy = canvas.height / 2 + bounceOffset;
+  if (currentTimeOfDay === "night" && !isDragging && !isSpinning && !minigameActive && !isCharging) {
+    dreamSpawnTimer++;
+    // Spawn a dream bubble every ~3-5 seconds
+    const dreamInterval = 180 + Math.floor(Math.random() * 120);
+    if (dreamSpawnTimer >= dreamInterval) {
+      dreamSpawnTimer = 0;
+      const icon = DREAM_ICONS[Math.floor(Math.random() * DREAM_ICONS.length)];
+      dreamBubbles.push({
+        x: dreamCx + (Math.random() - 0.5) * 20,
+        y: dreamCy - 45,
+        vx: (Math.random() - 0.5) * 0.15,
+        vy: -(0.25 + Math.random() * 0.2),
+        life: 180 + Math.floor(Math.random() * 60), // ~3-4 seconds
+        maxLife: 180 + Math.floor(Math.random() * 60),
+        icon,
+        size: 12 + Math.random() * 4,
+        wobblePhase: Math.random() * Math.PI * 2,
+      });
+    }
+  } else {
+    dreamSpawnTimer = 0;
+  }
+  // Update dream bubbles
+  for (let i = dreamBubbles.length - 1; i >= 0; i--) {
+    const db = dreamBubbles[i];
+    db.x += db.vx;
+    db.y += db.vy;
+    db.wobblePhase += 0.04;
+    db.life--;
+    if (db.life <= 0) {
+      dreamBubbles.splice(i, 1);
+    }
+  }
+  // Clear dream bubbles when it's not night (smooth cleanup)
+  if (currentTimeOfDay !== "night" && dreamBubbles.length > 0) {
+    for (const db of dreamBubbles) {
+      db.life = Math.min(db.life, 15); // fade out quickly
+    }
+  }
+
   // Idle bounce (speed and amplitude vary by time of day)
   if (!isDragging) {
     const amplitude = getBounceAmplitude();
@@ -3920,6 +4183,11 @@ function draw(): void {
 
   // Butterfly companion (drawn above particles, below speech bubble)
   drawButterfly();
+
+  // Dream bubbles (above butterfly, below speech bubble)
+  for (const db of dreamBubbles) {
+    drawDreamBubble(db);
+  }
 
   // Achievement celebration glow
   if (achievementCelebrating) {

@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.29.0] — 2026-04-01 — Pet Dreams
+
+### Added
+- **Pet dreams** — at nighttime, translucent thought bubbles float up from your sleeping pet, each containing a tiny dream icon
+- **Eight dream icons** — your pet dreams of stars, hearts, food, butterflies, moons, fish, flowers, and music notes
+- **Thought bubble style** — each dream appears inside a classic thought bubble (main circle with two trailing dots), drawn with soft translucent white fills and gentle outlines
+- **Gentle float physics** — dream bubbles rise slowly with a soft side-to-side wobble, creating a dreamy, weightless feel
+- **Smooth fade** — dreams fade in gently when they appear and fade out as they float away (~3-4 seconds each)
+- **Natural pacing** — a new dream appears every ~3-5 seconds, keeping the scene atmospheric without cluttering it
+- **Context-aware** — dreams only appear at night and stop immediately during interactions (dragging, spinning, mini-games, charging)
+- **Detailed mini-art** — each icon is hand-drawn on canvas: the star has 10 points, the heart uses bezier curves, the apple has a stem and leaf, the butterfly has two wing pairs, the moon is a crescent, the fish has a tail and eye, the flower has 5 petals with a yellow center, and the music note has a stem and flag
+
+**Why this feature:** The pet already had rich nighttime behavior — droopy eyes, slow bouncing, floating zzz particles, sleepy speech bubbles, and a cool moonlight glow. But sleep was passive. Dreams add an inner life to the sleeping pet. When you glance at your screen late at night and see tiny thought bubbles drifting up — a little star here, a heart there, a butterfly — it tells a story. Your pet isn't just sleeping, it's dreaming. And the icons create charming narratives: is it dreaming about the stars it caught in the mini-game? The food it ate earlier? The butterfly friend that lands on its head? Dreams transform sleep from an empty state into the most poetic moment of the pet's day.
+
 ## [v0.28.0] — 2026-04-01 — Day/Night Transition Animation
 
 ### Added
