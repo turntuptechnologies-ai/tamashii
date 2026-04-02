@@ -19,6 +19,7 @@ declare global {
       onFeedPet: (callback: () => void) => void;
       onPetNap: (callback: () => void) => void;
       onViewStats: (callback: () => void) => void;
+      onStartMemoryGame: (callback: () => void) => void;
     };
   }
 }
@@ -323,7 +324,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive) return;
   // Pick a random animation
   const anims: IdleAnimation[] = ["stretch", "look_around", "wiggle", "curious_peek", "hop"];
   idleAnim = anims[Math.floor(Math.random() * anims.length)];
@@ -616,6 +617,15 @@ canvas.addEventListener("mousedown", (e) => {
     const clickY = e.clientY - rect.top;
     if (tryClickMinigameStar(clickX, clickY)) {
       return; // Caught a star, don't start drag
+    }
+  }
+  // During memory game, check for orb clicks before drag
+  if (memoryGameActive) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickMemoryOrb(clickX, clickY)) {
+      return; // Clicked an orb, don't start drag
     }
   }
   isDragging = true;
@@ -1149,7 +1159,7 @@ let minigameBestCombo = 0;
 const MINIGAME_DURATION = 1800; // 30 seconds at 60fps
 
 function startMinigame(): void {
-  if (minigameActive) return;
+  if (minigameActive || memoryGameActive) return;
   minigameActive = true;
   minigameScore = 0;
   minigameTimeLeft = MINIGAME_DURATION;
@@ -1393,6 +1403,301 @@ window.tamashii.onStartMinigame(() => {
   startMinigame();
 });
 
+// --- Color Memory Mini-game (Simon Says) ---
+let memoryGameActive = false;
+let memoryGameSequence: number[] = []; // indices 0-3 for the four orbs
+let memoryGamePlayerIndex = 0; // which step the player is on
+let memoryGameRound = 0; // current round (sequence length)
+let memoryGameScore = 0; // rounds completed
+let memoryGameHighScore = 0;
+let memoryGamePhase: "showing" | "waiting" | "flash_correct" | "flash_wrong" | "round_clear" = "showing";
+let memoryGameShowIndex = 0; // which orb in the sequence is being shown
+let memoryGameShowTimer = 0; // frames remaining for current show step
+let memoryGamePauseTimer = 0; // pause between show steps
+let memoryGameFlashTimer = 0; // feedback flash timer
+let memoryGameFlashedOrb = -1; // which orb is currently flashing (player feedback)
+let memoryGameOrbPulse = 0; // animation phase for orbs
+
+const MEMORY_ORB_COLORS = [
+  { base: "#FF6B8A", glow: "#FF3366", name: "pink" },    // top
+  { base: "#4ECDC4", glow: "#00B4A6", name: "teal" },    // right
+  { base: "#FFD93D", glow: "#FFB800", name: "yellow" },   // bottom
+  { base: "#6C5CE7", glow: "#4834D4", name: "purple" },   // left
+];
+
+const MEMORY_SHOW_FRAMES = 30; // how long each orb lights up during sequence display
+const MEMORY_PAUSE_FRAMES = 12; // pause between show steps
+const MEMORY_FLASH_FRAMES = 15; // feedback flash duration
+
+function startMemoryGame(): void {
+  if (minigameActive || memoryGameActive) return;
+  memoryGameActive = true;
+  memoryGameSequence = [];
+  memoryGamePlayerIndex = 0;
+  memoryGameRound = 0;
+  memoryGameScore = 0;
+  memoryGameOrbPulse = 0;
+  speechBubble = { text: "Watch closely!", life: 90, maxLife: 90 };
+  playGreetingSound();
+  squishAmount = 0.5;
+  isHappy = true;
+  happyTimer = 60;
+  // Start first round
+  memoryGameNextRound();
+}
+
+function memoryGameNextRound(): void {
+  memoryGameRound++;
+  // Add a random orb to the sequence
+  memoryGameSequence.push(Math.floor(Math.random() * 4));
+  memoryGamePlayerIndex = 0;
+  memoryGamePhase = "showing";
+  memoryGameShowIndex = 0;
+  memoryGameShowTimer = 0;
+  memoryGamePauseTimer = 30; // brief pause before showing sequence
+}
+
+function endMemoryGame(): void {
+  memoryGameActive = false;
+  const isNewRecord = memoryGameScore > memoryGameHighScore;
+  if (isNewRecord) {
+    memoryGameHighScore = memoryGameScore;
+  }
+  saveGame();
+
+  playMinigameEndSound();
+  squishAmount = 0.8;
+  isHappy = true;
+  happyTimer = 90;
+  petHappiness = Math.min(100, petHappiness + Math.min(memoryGameScore * 2, 20));
+  addCarePoints(10);
+
+  let msg: string;
+  if (memoryGameScore === 0) {
+    msg = "Maybe next time...";
+  } else if (memoryGameScore < 3) {
+    msg = `Round ${memoryGameScore}! Not bad~`;
+  } else if (memoryGameScore < 7) {
+    msg = `Round ${memoryGameScore}! Great memory!`;
+  } else {
+    msg = `Round ${memoryGameScore}! Incredible!!`;
+  }
+  if (isNewRecord && memoryGameScore > 0) {
+    msg = `New record: round ${memoryGameScore}! 🧠`;
+  }
+  speechBubble = { text: msg, life: 240, maxLife: 240 };
+
+  // Celebration sparkles
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < Math.min(memoryGameScore * 2, 16); i++) {
+    const angle = (i / Math.min(memoryGameScore * 2, 16)) * Math.PI * 2;
+    particles.push({
+      x: cx + Math.cos(angle) * 25,
+      y: cy + Math.sin(angle) * 20,
+      vx: Math.cos(angle) * 2,
+      vy: Math.sin(angle) * 1.5 - 1,
+      life: 60 + Math.random() * 30,
+      maxLife: 60 + Math.random() * 30,
+      size: 3 + Math.random() * 3,
+      type: "sparkle",
+    });
+  }
+}
+
+function getMemoryOrbPositions(): { x: number; y: number }[] {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const r = 55; // distance from center
+  return [
+    { x: cx, y: cy - r },         // top
+    { x: cx + r, y: cy },         // right
+    { x: cx, y: cy + r },         // bottom
+    { x: cx - r, y: cy },         // left
+  ];
+}
+
+function playMemoryOrbSound(orbIndex: number): void {
+  // Each orb has a distinct pitch
+  const freqs = [523, 659, 784, 880]; // C5, E5, G5, A5
+  playTone(freqs[orbIndex], 0.2, "sine", 0.1);
+}
+
+function playMemoryWrongSound(): void {
+  playTone(200, 0.3, "sawtooth", 0.08);
+  setTimeout(() => playTone(160, 0.3, "sawtooth", 0.06), 100);
+}
+
+function updateMemoryGame(): void {
+  if (!memoryGameActive) return;
+  memoryGameOrbPulse += 0.05;
+
+  if (memoryGamePhase === "showing") {
+    if (memoryGamePauseTimer > 0) {
+      memoryGamePauseTimer--;
+      return;
+    }
+    if (memoryGameShowTimer > 0) {
+      memoryGameShowTimer--;
+      if (memoryGameShowTimer <= 0) {
+        // Move to next in sequence
+        memoryGameShowIndex++;
+        if (memoryGameShowIndex >= memoryGameSequence.length) {
+          // Done showing — player's turn
+          memoryGamePhase = "waiting";
+          memoryGamePlayerIndex = 0;
+        } else {
+          memoryGamePauseTimer = MEMORY_PAUSE_FRAMES;
+          memoryGameShowTimer = 0;
+        }
+      }
+    } else {
+      // Start showing current orb
+      memoryGameShowTimer = MEMORY_SHOW_FRAMES;
+      playMemoryOrbSound(memoryGameSequence[memoryGameShowIndex]);
+    }
+  } else if (memoryGamePhase === "flash_correct") {
+    memoryGameFlashTimer--;
+    if (memoryGameFlashTimer <= 0) {
+      memoryGameFlashedOrb = -1;
+      if (memoryGamePlayerIndex >= memoryGameSequence.length) {
+        // Round complete!
+        memoryGamePhase = "round_clear";
+        memoryGameFlashTimer = 40;
+        memoryGameScore = memoryGameRound;
+        const msgs = ["Nice!", "Good memory!", "Keep going~", "Perfect! ✨", "Impressive!"];
+        speechBubble = { text: msgs[Math.min(memoryGameRound - 1, msgs.length - 1)], life: 50, maxLife: 50 };
+      } else {
+        memoryGamePhase = "waiting";
+      }
+    }
+  } else if (memoryGamePhase === "flash_wrong") {
+    memoryGameFlashTimer--;
+    if (memoryGameFlashTimer <= 0) {
+      endMemoryGame();
+    }
+  } else if (memoryGamePhase === "round_clear") {
+    memoryGameFlashTimer--;
+    if (memoryGameFlashTimer <= 0) {
+      memoryGameNextRound();
+    }
+  }
+}
+
+function tryClickMemoryOrb(clickX: number, clickY: number): boolean {
+  if (!memoryGameActive || memoryGamePhase !== "waiting") return false;
+
+  const positions = getMemoryOrbPositions();
+  const hitRadius = 18;
+
+  for (let i = 0; i < 4; i++) {
+    const dx = clickX - positions[i].x;
+    const dy = clickY - positions[i].y;
+    if (Math.sqrt(dx * dx + dy * dy) <= hitRadius) {
+      const expected = memoryGameSequence[memoryGamePlayerIndex];
+      if (i === expected) {
+        // Correct!
+        playMemoryOrbSound(i);
+        memoryGameFlashedOrb = i;
+        memoryGameFlashTimer = MEMORY_FLASH_FRAMES;
+        memoryGamePhase = "flash_correct";
+        memoryGamePlayerIndex++;
+      } else {
+        // Wrong!
+        playMemoryWrongSound();
+        memoryGameFlashedOrb = i;
+        memoryGameFlashTimer = 40;
+        memoryGamePhase = "flash_wrong";
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+function drawMemoryGame(): void {
+  if (!memoryGameActive) return;
+
+  const positions = getMemoryOrbPositions();
+  const orbRadius = 14;
+
+  for (let i = 0; i < 4; i++) {
+    const pos = positions[i];
+    const color = MEMORY_ORB_COLORS[i];
+    const isLit =
+      (memoryGamePhase === "showing" && memoryGameShowTimer > 0 && memoryGameSequence[memoryGameShowIndex] === i) ||
+      (memoryGameFlashedOrb === i && (memoryGamePhase === "flash_correct" || memoryGamePhase === "flash_wrong"));
+    const isWrong = memoryGamePhase === "flash_wrong" && memoryGameFlashedOrb === i;
+
+    ctx.save();
+
+    // Outer glow when lit
+    if (isLit) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, orbRadius * 2, 0, Math.PI * 2);
+      const g = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, orbRadius * 2);
+      g.addColorStop(0, isWrong ? "rgba(255, 50, 50, 0.4)" : `${color.glow}66`);
+      g.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+
+    // Orb body
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, orbRadius, 0, Math.PI * 2);
+    if (isLit) {
+      ctx.fillStyle = isWrong ? "#FF4444" : color.glow;
+      ctx.shadowColor = isWrong ? "#FF0000" : color.glow;
+      ctx.shadowBlur = 12;
+    } else {
+      // Dim but visible, subtle pulse when waiting
+      const pulse = memoryGamePhase === "waiting" ? 0.4 + 0.1 * Math.sin(memoryGameOrbPulse + i * 1.5) : 0.35;
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = color.base;
+    }
+    ctx.fill();
+
+    // Inner highlight
+    ctx.globalAlpha = isLit ? 0.6 : 0.2;
+    ctx.beginPath();
+    ctx.arc(pos.x - 3, pos.y - 3, orbRadius * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // HUD — round number
+  ctx.save();
+  ctx.font = "bold 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.fillText(`🧠 Round ${memoryGameRound}`, canvas.width / 2 + 1, 18 + 1);
+  ctx.fillStyle = "#6C5CE7";
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
+  ctx.lineWidth = 2.5;
+  ctx.strokeText(`🧠 Round ${memoryGameRound}`, canvas.width / 2, 18);
+  ctx.fillText(`🧠 Round ${memoryGameRound}`, canvas.width / 2, 18);
+
+  // Phase indicator
+  ctx.font = "10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  if (memoryGamePhase === "showing" || memoryGamePhase === "round_clear") {
+    ctx.fillStyle = "rgba(100, 80, 150, 0.7)";
+    ctx.fillText("Watch...", canvas.width / 2, 32);
+  } else if (memoryGamePhase === "waiting") {
+    ctx.fillStyle = "rgba(0, 150, 100, 0.8)";
+    ctx.fillText(`Your turn! (${memoryGamePlayerIndex + 1}/${memoryGameSequence.length})`, canvas.width / 2, 32);
+  } else if (memoryGamePhase === "flash_wrong") {
+    ctx.fillStyle = "rgba(200, 50, 50, 0.8)";
+    ctx.fillText("Wrong!", canvas.width / 2, 32);
+  }
+  ctx.restore();
+}
+
+window.tamashii.onStartMemoryGame(() => {
+  startMemoryGame();
+});
+
 const spinMessages = [
   "Wheee~!",
   "Watch this!",
@@ -1581,7 +1886,7 @@ let statsPanelFade = 0; // 0-1 animation
 const STATS_PANEL_FADE_SPEED = 0.06;
 
 function toggleStatsPanel(): void {
-  if (minigameActive) return; // don't open during mini-game
+  if (minigameActive || memoryGameActive) return; // don't open during mini-game
   statsPanelOpen = !statsPanelOpen;
   if (statsPanelOpen) {
     playTone(600, 0.1, "sine", 0.08);
@@ -1746,7 +2051,8 @@ function drawStatsPanel(): void {
     ["Spins", `${totalSpins}`],
     ["Bounces", `${totalBounces}`],
     ["Best Combo", `${bestCombo}x`],
-    ["High Score", `${minigameHighScore}`],
+    ["Star Catcher", `${minigameHighScore}`],
+    ["Memory Match", `Round ${memoryGameHighScore}`],
     ["Time Together", formatTime(totalTime)],
     ["Achievements", `${unlockedCount} / ${achievements.length}`],
   ];
@@ -1802,6 +2108,7 @@ interface SaveData {
   lastStatSaveTime: number; // timestamp for calculating offline decay
   bestCombo: number;
   totalCarePoints: number;
+  memoryGameHighScore: number;
   version: number;
 }
 
@@ -1828,6 +2135,7 @@ function buildSaveData(): SaveData {
     lastStatSaveTime: Date.now(),
     bestCombo,
     totalCarePoints,
+    memoryGameHighScore,
     version: 1,
   };
 }
@@ -1862,6 +2170,11 @@ function applySaveData(data: SaveData): void {
   // Restore best combo
   if (data.bestCombo) {
     bestCombo = data.bestCombo;
+  }
+
+  // Restore memory game high score
+  if (data.memoryGameHighScore) {
+    memoryGameHighScore = data.memoryGameHighScore;
   }
 
   // Restore care points and growth stage
@@ -3428,7 +3741,7 @@ function update(): void {
   } else {
     // Check if it's time to try an idle animation
     const timeSinceInteraction = Date.now() - lastInteractionTime;
-    if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive) {
+    if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive && !memoryGameActive) {
       idleAnimTimer++;
       if (idleAnimTimer >= IDLE_ANIM_COOLDOWN) {
         idleAnimTimer = 0;
@@ -3443,7 +3756,7 @@ function update(): void {
   }
 
   // Hold-click charge-up logic
-  if (isDragging && !dragMoved && !minigameActive && !isSpinning) {
+  if (isDragging && !dragMoved && !minigameActive && !memoryGameActive && !isSpinning) {
     const holdTime = Date.now() - chargeStartTime;
     if (holdTime >= CHARGE_MIN_TIME) {
       if (!isCharging) {
@@ -4015,8 +4328,9 @@ function update(): void {
   // Day/night transition animation
   updateTimeTransition();
 
-  // Mini-game
+  // Mini-games
   updateMinigame();
+  updateMemoryGame();
 
   // Pet stats decay
   updatePetStats();
@@ -4735,12 +5049,13 @@ function draw(): void {
   }
 
   // Pet stat bars (below the pet)
-  if (!minigameActive) {
+  if (!minigameActive && !memoryGameActive) {
     drawStatBars();
   }
 
   // Mini-game stars and HUD (above pet, below speech bubble)
   drawMinigame();
+  drawMemoryGame();
 
   // Combo counter (above pet, near speech bubble area)
   drawComboCounter(cx, cy - size * 0.55);

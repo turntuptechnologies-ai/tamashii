@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.32.0] — 2026-04-02 — Memory Match Mini-game
+
+### Added
+- **Memory Match game** — a Simon Says-style mini-game accessible from the right-click menu ("Play Memory Match")
+- **Four colored orbs** — pink, teal, yellow, and purple orbs appear around the pet in cardinal positions (top, right, bottom, left)
+- **Sequence memory** — the game shows a growing sequence of orb flashes that the player must repeat in order
+- **Progressive difficulty** — each round adds one more step to the sequence, testing your memory further
+- **Distinct orb sounds** — each orb plays a unique musical note (C5, E5, G5, A5) when it lights up, adding an audio memory aid
+- **Visual feedback** — correct clicks flash the orb brightly, wrong clicks flash red with a buzzer sound, and the orbs pulse gently while waiting for input
+- **Round HUD** — displays the current round number and phase (watching sequence vs. player's turn with progress counter)
+- **Score-based reactions** — the pet celebrates with sparkles and score-appropriate speech at the end
+- **High score tracking** — memory game high score is saved to disk and displayed in the stats panel
+- **Care points reward** — completing rounds earns care points (+10) and boosts happiness, contributing to pet growth
+- **Non-conflicting** — the memory game blocks Star Catcher (and vice versa), idle animations, charge-ups, and stat bar display while active
+
+**Why this feature:** Tamashii had one mini-game (Star Catcher) — a fast-paced reflex game about clicking falling stars. But some players prefer a different kind of challenge. Memory Match tests pattern recognition and recall instead of speed. It's a classic game mechanic (Simon Says) that works perfectly in a small space — four orbs, no complex UI needed. The distinct sounds for each orb mean you can use audio memory alongside visual memory, making it accessible and satisfying. And because each round adds just one more step, there's always a "just one more try" pull. Two mini-games means two ways to bond with your pet, and two paths to earn care points toward evolution.
+
 ## [v0.31.0] — 2026-04-01 — Lifetime Stats Panel
 
 ### Added
