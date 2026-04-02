@@ -1838,6 +1838,11 @@ const achievements: Achievement[] = [
     icon: "🌳", unlockMessage: "I've reached my final form!",
     condition: () => currentGrowthStage === "adult", unlocked: false,
   },
+  {
+    id: "shortcut_master", name: "Shortcut Master", description: "Use keyboard shortcuts 10 times",
+    icon: "⌨", unlockMessage: "Keyboard ninja!",
+    condition: () => shortcutUsageCount >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -5315,6 +5320,15 @@ function draw(): void {
 
   // Stats panel overlay (topmost layer)
   drawStatsPanel();
+
+  // Shortcut help overlay (above everything)
+  // Animate fade
+  if (shortcutHelpOpen && shortcutHelpFade < 1) {
+    shortcutHelpFade = Math.min(1, shortcutHelpFade + SHORTCUT_HELP_FADE_SPEED);
+  } else if (!shortcutHelpOpen && shortcutHelpFade > 0) {
+    shortcutHelpFade = Math.max(0, shortcutHelpFade - SHORTCUT_HELP_FADE_SPEED);
+  }
+  drawShortcutHelp();
 }
 
 function loop(): void {
@@ -5511,6 +5525,195 @@ function drawButterfly(): void {
 
   ctx.restore();
 }
+
+// --- Keyboard Shortcuts ---
+let shortcutHelpOpen = false;
+let shortcutHelpFade = 0; // 0-1 animation
+const SHORTCUT_HELP_FADE_SPEED = 0.08;
+let shortcutUsageCount = 0; // track how many times shortcuts are used
+
+function toggleShortcutHelp(): void {
+  shortcutHelpOpen = !shortcutHelpOpen;
+  if (shortcutHelpOpen) {
+    playTone(700, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(900, 0.1, "sine", 0.06), 50);
+  } else {
+    playTone(900, 0.06, "sine", 0.04);
+    setTimeout(() => playTone(700, 0.08, "sine", 0.04), 50);
+  }
+}
+
+function drawShortcutHelp(): void {
+  if (shortcutHelpFade <= 0) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const alpha = shortcutHelpFade;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Dark glass background
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+  bgGrad.addColorStop(0, "rgba(20, 15, 40, 0.92)");
+  bgGrad.addColorStop(1, "rgba(10, 8, 25, 0.95)");
+  ctx.fillStyle = bgGrad;
+  ctx.beginPath();
+  ctx.roundRect(6, 6, w - 12, h - 12, 10);
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = `rgba(120, 180, 255, ${0.4 * alpha})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Title
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("⌨ Keyboard Shortcuts", w / 2, 26);
+
+  // Shortcut entries
+  const shortcuts = [
+    ["Space", "Pet / Click"],
+    ["F", "Feed Pet"],
+    ["N", "Power Nap"],
+    ["S", "Toggle Stats"],
+    ["M", "Toggle Sound"],
+    ["W", "Toggle Wandering"],
+    ["1", "Star Catcher"],
+    ["2", "Memory Match"],
+    ["Esc", "Close Overlay"],
+    ["?", "This Help"],
+  ];
+
+  ctx.font = "9px monospace";
+  const startY = 42;
+  const lineH = 14;
+  const keyX = 22;
+  const descX = 58;
+
+  for (let i = 0; i < shortcuts.length; i++) {
+    const y = startY + i * lineH;
+    const [key, desc] = shortcuts[i];
+
+    // Key box
+    const keyW = ctx.measureText(key).width + 8;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.beginPath();
+    ctx.roundRect(keyX - 4, y - 8, keyW, 12, 3);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Key text
+    ctx.fillStyle = "#E0E8FF";
+    ctx.textAlign = "left";
+    ctx.fillText(key, keyX, y);
+
+    // Description
+    ctx.fillStyle = "rgba(200, 210, 230, 0.85)";
+    ctx.fillText(desc, descX, y);
+  }
+
+  // Footer hint
+  ctx.fillStyle = "rgba(160, 170, 200, 0.6)";
+  ctx.font = "8px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("Press ? to close", w / 2, h - 10);
+
+  ctx.restore();
+}
+
+window.addEventListener("keydown", (e) => {
+  // Don't capture keys if a mini-game needs specific input
+  // or if the pet is being dragged
+  if (isDragging) return;
+
+  const key = e.key.toLowerCase();
+
+  // Escape closes any open overlay
+  if (e.key === "Escape") {
+    if (shortcutHelpOpen) {
+      toggleShortcutHelp();
+      return;
+    }
+    if (statsPanelOpen) {
+      toggleStatsPanel();
+      return;
+    }
+    if (minigameActive || memoryGameActive) {
+      // Don't force-close games with Escape — let them finish
+      return;
+    }
+    return;
+  }
+
+  // ? toggles shortcut help
+  if (key === "?" || (e.shiftKey && key === "/")) {
+    toggleShortcutHelp();
+    return;
+  }
+
+  // Don't process shortcuts while help overlay is open (except Esc and ?)
+  if (shortcutHelpOpen) return;
+
+  // Don't process shortcuts during mini-games (except Esc)
+  if (minigameActive || memoryGameActive) return;
+
+  // Don't process shortcuts while stats panel is open (except Esc and S)
+  if (statsPanelOpen && key !== "s") return;
+
+  switch (key) {
+    case " ":
+      e.preventDefault();
+      onPetClicked();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "f":
+      feedPet();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "n":
+      petNap();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "s":
+      toggleStatsPanel();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "m":
+      soundEnabled = !soundEnabled;
+      if (soundEnabled) playClickSound();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "w":
+      wanderingEnabled = !wanderingEnabled;
+      if (!wanderingEnabled) {
+        wanderState = "pausing";
+        wanderTimer = 60;
+      }
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "1":
+      startMinigame();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "2":
+      startMemoryGame();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+  }
+});
 
 // Save when window is about to close
 window.addEventListener("beforeunload", () => {

@@ -3,41 +3,37 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.33.0 — Seasonal Awareness (2026-04-02)
+## Last completed: v0.34.0 — Keyboard Shortcuts (2026-04-02)
 
 ### What was done
-- Added calendar-based seasonal awareness with four seasons (spring, summer, autumn, winter)
-- Three new particle types: `blossom` (cherry blossom petals), `leaf` (autumn leaves), `snowflake` (crystalline snowflakes)
-- Summer enhances existing fireflies at night and adds golden sparkles during the day
-- Seasonal tint blended into the existing `drawAmbientGlow()` — subtle color shifts per season
-- Seasonal speech bubbles with ~15% chance (5 messages per season)
-- `getSeason()` function uses `new Date().getMonth()` — no network requests needed
-- Season re-checked every 60 seconds via setInterval
-- `seasonalSpawnTimer` controls seasonal particle spawn rate independently from `ambientSpawnTimer`
-- New particle physics: blossoms sway gently, leaves tumble with random gusts, snowflakes drift slowly
-- Draw functions: `drawBlossom()` (5-petal flower with center dot), `drawLeaf()` (bezier leaf with vein, 4 color variants), `drawSnowflake()` (6-armed crystal with branches and center glow)
+- Added in-app keyboard shortcuts for all major pet interactions
+- Space (click/pet), F (feed), N (nap), S (stats), M (sound), W (wandering), 1 (Star Catcher), 2 (Memory Match), Esc (close overlay), ? (help)
+- Built a shortcut help overlay panel (canvas-drawn, glass aesthetic matching stats panel)
+- Help overlay has styled key boxes, descriptions, and fades in/out smoothly
+- Added "Shortcut Master" achievement — use keyboard shortcuts 10 times
+- `shortcutUsageCount` tracks usage but is NOT persisted to save data (resets per session — keeps it simple)
+- Shortcuts are context-aware: disabled during mini-games and while dragging
+- Escape intelligently closes the topmost overlay (shortcut help > stats panel)
+- `drawShortcutHelp()` renders in the draw function as the absolute topmost layer (above stats panel)
+- Shortcut help fade animation runs in the draw function alongside rendering
 
 ### Thoughts for next cycle
-- **Settings window** — still the most pressing UX improvement. The context menu now has 13+ items. A dedicated settings BrowserWindow would consolidate: sound toggle, volume slider, wandering toggle, pet name, accessory picker, stat display toggle, growth stage info, and now potentially season override.
-- **Mini-game select menu** — with two games, a submenu grouping them would clean up the context menu.
-- **Pet evolution visual variants** — instead of just a forehead mark, the pet's body shape/color could change subtly at each stage. Child could be slightly more rounded, teen more defined, adult could have a slight glow to the body outline.
-- **Keyboard shortcuts** — let users press keys to toggle stats, start games, show/hide elements. Infrastructure partially exists (global toggle shortcut), but in-app shortcuts would be useful.
-- **Multiple pet companions** — spawn a second smaller pet that interacts with the main one. Could appear as a seasonal visitor (a snowman friend in winter, a butterfly companion in spring).
-- **Weather awareness** — fetch actual local weather data for real-time effects. Would complement seasonal awareness nicely but requires network permissions.
-- **Seasonal achievements** — unlock achievements for experiencing all four seasons with your pet.
-- **Notification integration** — show desktop notifications for pet milestones.
+- **Settings window** — still the most pressing UX improvement. Now that keyboard shortcuts handle quick toggles, a settings window could focus on: pet name, accessory picker, volume slider, season override, and resetting save data.
+- **Mini-game select menu** — with two games and keyboard shortcuts 1/2, a submenu in the context menu grouping games would clean things up.
+- **Pet evolution visual variants** — the pet's body shape/color could change subtly at each growth stage. Child more rounded, teen more defined, adult with a glow outline.
+- **Multiple pet companions** — a seasonal visitor companion (butterfly in spring, firefly friend in summer, fox in autumn, snowman in winter) that interacts with the main pet.
+- **Persist shortcut usage count** — could add `shortcutUsageCount` to SaveData so the achievement persists across sessions. Low priority since it unlocks fast.
+- **Weather awareness** — fetch actual local weather for real-time effects. Complements seasonal awareness but needs network permissions.
+- **Notification integration** — desktop notifications for pet milestones (evolution, achievements).
+- **Context menu cleanup** — the menu is getting long. Could reorganize into submenus: Actions (feed/nap), Games (star catcher/memory match), Settings (sound/wandering/name/accessories).
 
 ### Current architecture notes
-- Renderer is now ~5400+ lines — module splitting would really help
-- `Season` type is "spring" | "summer" | "autumn" | "winter" at ~line 253
-- `getSeason()` at ~line 255, `currentSeason` global at ~line 262, `seasonalSpawnTimer` at ~line 263
-- Seasonal particle spawning is in update() after the existing ambient spawning block, before speech bubble logic
-- Three new draw functions (`drawBlossom`, `drawLeaf`, `drawSnowflake`) are right before `drawSadCloud`
-- New particle update physics (blossom, leaf, snowflake) are after the `happy_trail` case in the particle update loop
-- New particle render cases are after `happy_trail` in the draw loop particle rendering
-- Seasonal tint in `drawAmbientGlow()` is applied after time-of-day color calculation, before mood modulation
-- Seasonal speech messages are in `spawnSpeechBubble()` with ~15% chance, between growth messages and name messages
-- Total particle types: 15 (original 12 + blossom, leaf, snowflake)
-- SaveData unchanged — no new persistent data this cycle
-- About dialog version updated to 0.33.0
-- Total achievements still 16 (no new ones this cycle)
+- Renderer is now ~5680+ lines
+- Keyboard shortcut handler is a `window.addEventListener("keydown", ...)` near the end of the file, before the beforeunload handler
+- `shortcutHelpOpen`, `shortcutHelpFade`, `shortcutUsageCount` globals near the keyboard section
+- `toggleShortcutHelp()` handles open/close with sound
+- `drawShortcutHelp()` renders the overlay panel — called in `draw()` as the last thing (after drawStatsPanel)
+- Shortcut help fade animation is inside the `draw()` function alongside the drawShortcutHelp call
+- New achievement "shortcut_master" added after "fully_grown" in the achievements array — total achievements now 17
+- `shortcutUsageCount` is NOT in SaveData — resets each session
+- The `?` key check handles both `?` directly and Shift+`/` for compatibility

@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.34.0] — 2026-04-02 — Keyboard Shortcuts
+
+### Added
+- **Keyboard shortcuts** — press keys to interact with your pet without needing the right-click menu
+- **Space** — click/pet your pet (triggers the same reaction as a mouse click)
+- **F** — feed your pet
+- **N** — power nap
+- **S** — toggle the stats panel
+- **M** — toggle sound on/off
+- **W** — toggle wandering on/off
+- **1** — start Star Catcher mini-game
+- **2** — start Memory Match mini-game
+- **Escape** — close any open overlay (stats panel, shortcut help)
+- **?** — show/hide a beautiful keyboard shortcut help overlay with all available keybindings
+- **Shortcut help panel** — a glass-panel overlay listing all shortcuts with styled key indicators, matching the existing stats panel aesthetic
+- **"Shortcut Master" achievement** — unlock by using keyboard shortcuts 10 times, rewarding players who discover this feature
+- **Smart context awareness** — shortcuts are disabled during mini-games (to avoid accidental triggers) and while dragging the pet
+
+**Why this feature:** Tamashii's context menu had grown to 13+ items across 33 features. Every interaction — feeding, napping, games, stats, sound toggle — required a right-click and menu navigation. Keyboard shortcuts transform this into instant, fluid interaction. Press Space to pet, F to feed, S to check stats — no menus, no friction. The help overlay (press ?) means the shortcuts are discoverable but not intrusive. And because the shortcuts are context-aware (disabled during mini-games, closing overlays with Escape), they feel natural and safe. Power users will love the speed; casual users can keep right-clicking. Everyone wins.
+
 ## [v0.33.0] — 2026-04-02 — Seasonal Awareness
 
 ### Added
