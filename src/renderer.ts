@@ -247,6 +247,25 @@ function getTimeOfDay(): TimeOfDay {
   return "night";
 }
 
+// --- Season ---
+type Season = "spring" | "summer" | "autumn" | "winter";
+
+function getSeason(): Season {
+  const month = new Date().getMonth(); // 0-11
+  if (month >= 2 && month <= 4) return "spring";
+  if (month >= 5 && month <= 7) return "summer";
+  if (month >= 8 && month <= 10) return "autumn";
+  return "winter";
+}
+
+let currentSeason: Season = getSeason();
+let seasonalSpawnTimer = 0;
+
+// Re-check season every 60 seconds (alongside time-of-day check)
+setInterval(() => {
+  currentSeason = getSeason();
+}, 60000);
+
 let currentTimeOfDay: TimeOfDay = getTimeOfDay();
 
 function getMoodLabel(tod: TimeOfDay): string {
@@ -378,7 +397,7 @@ interface Particle {
   life: number;
   maxLife: number;
   size: number;
-  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl" | "confetti" | "raindrop" | "happy_trail";
+  type: "heart" | "zzz" | "dust" | "sparkle" | "pollen" | "firefly" | "star" | "sweat" | "growl" | "confetti" | "raindrop" | "happy_trail" | "blossom" | "leaf" | "snowflake";
   color?: string; // optional color for confetti
 }
 
@@ -585,6 +604,17 @@ function spawnSpeechBubble(): void {
   if (!useStress && Math.random() < 0.15) {
     const growthMsgs = getGrowthMessages();
     text = growthMsgs[Math.floor(Math.random() * growthMsgs.length)];
+  }
+
+  // ~15% chance to use a seasonal message
+  if (!useStress && Math.random() < 0.15) {
+    const seasonalMsgs: Record<Season, string[]> = {
+      spring: ["Cherry blossoms~! 🌸", "Spring is here!", "The flowers are blooming!", "What a lovely breeze~", "Petal shower~!"],
+      summer: ["It's so warm! ☀️", "Summer vibes~", "Firefly season!", "What a hot day!", "Ice cream weather~!"],
+      autumn: ["The leaves are falling 🍂", "So cozy and warm~", "Autumn colors!", "Sweater weather!", "Pumpkin season~!"],
+      winter: ["Snowflakes! ❄️", "It's so cold~!", "Winter wonderland!", "Brrr... cuddle me?", "Hot cocoa time~!"],
+    };
+    text = seasonalMsgs[currentSeason][Math.floor(Math.random() * seasonalMsgs[currentSeason].length)];
   }
 
   // ~25% chance to use a name-aware message if the pet has a name
@@ -2953,6 +2983,99 @@ function drawHappyTrail(x: number, y: number, size: number, alpha: number, life:
   ctx.restore();
 }
 
+function drawBlossom(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.85;
+  ctx.translate(x, y);
+  // Rotate gently as it falls
+  ctx.rotate((life * 0.03) + (x * 0.1));
+  // Five-petal cherry blossom
+  const petalSize = size * 0.6;
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    const px = Math.cos(angle) * petalSize;
+    const py = Math.sin(angle) * petalSize;
+    ctx.beginPath();
+    ctx.ellipse(px, py, petalSize * 0.7, petalSize * 0.4, angle, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, ${180 + Math.floor(life % 40)}, ${200 + Math.floor(life % 30)}, 1)`;
+    ctx.fill();
+  }
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255, 220, 100, ${alpha})`;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLeaf(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.8;
+  ctx.translate(x, y);
+  // Tumble as it falls — rotation based on life and position
+  ctx.rotate(Math.sin(life * 0.04) * 0.8 + life * 0.02);
+  // Leaf shape using bezier curves
+  const w = size * 0.8;
+  const h = size * 1.2;
+  // Pick a warm autumn color based on particle position (deterministic per leaf)
+  const colorIndex = Math.floor(Math.abs(x * 7 + y * 3)) % 4;
+  const colors = ["#E8722A", "#D4451A", "#F0A030", "#C83030"];
+  ctx.beginPath();
+  ctx.moveTo(0, -h / 2);
+  ctx.bezierCurveTo(w, -h / 4, w, h / 4, 0, h / 2);
+  ctx.bezierCurveTo(-w, h / 4, -w, -h / 4, 0, -h / 2);
+  ctx.fillStyle = colors[colorIndex];
+  ctx.fill();
+  // Center vein
+  ctx.beginPath();
+  ctx.moveTo(0, -h / 2 + 1);
+  ctx.lineTo(0, h / 2 - 1);
+  ctx.strokeStyle = `rgba(100, 50, 20, ${alpha * 0.4})`;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSnowflake(x: number, y: number, size: number, alpha: number, life: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.translate(x, y);
+  // Gentle slow rotation
+  ctx.rotate(life * 0.01);
+  // Six-armed snowflake
+  ctx.strokeStyle = `rgba(220, 235, 255, 1)`;
+  ctx.lineWidth = 0.8;
+  ctx.lineCap = "round";
+  const armLen = size * 0.9;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const ax = Math.cos(angle) * armLen;
+    const ay = Math.sin(angle) * armLen;
+    // Main arm
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    // Small branches at 60% along each arm
+    const bx = Math.cos(angle) * armLen * 0.6;
+    const by = Math.sin(angle) * armLen * 0.6;
+    const branchLen = armLen * 0.35;
+    for (const dir of [-1, 1]) {
+      const ba = angle + dir * Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(ba) * branchLen, by + Math.sin(ba) * branchLen);
+      ctx.stroke();
+    }
+  }
+  // Center dot glow
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(200, 220, 255, ${alpha * 0.5})`;
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawSadCloud(x: number, y: number): void {
   ctx.save();
   // Dark grey rain cloud made of overlapping circles
@@ -3249,6 +3372,29 @@ function drawAmbientGlow(cx: number, cy: number): void {
       // Cool blue/purple — moonlight
       r = 130; g = 160; b = 255; alpha = 0.10 * breathe;
       break;
+  }
+
+  // Seasonal tint — subtly shift the ambient glow color based on calendar season
+  if (currentSeason === "spring") {
+    // Soft pink-cherry tint
+    r = Math.round(r * 0.8 + 255 * 0.2);
+    g = Math.round(g * 0.8 + 180 * 0.2);
+    b = Math.round(b * 0.8 + 200 * 0.2);
+  } else if (currentSeason === "summer") {
+    // Warm golden-yellow boost
+    r = Math.round(r * 0.85 + 255 * 0.15);
+    g = Math.round(g * 0.85 + 230 * 0.15);
+    b = Math.round(b * 0.9 + 100 * 0.1);
+  } else if (currentSeason === "autumn") {
+    // Amber-orange warmth
+    r = Math.round(r * 0.8 + 230 * 0.2);
+    g = Math.round(g * 0.8 + 140 * 0.2);
+    b = Math.round(b * 0.85 + 50 * 0.15);
+  } else if (currentSeason === "winter") {
+    // Cool icy blue-white
+    r = Math.round(r * 0.85 + 200 * 0.15);
+    g = Math.round(g * 0.85 + 220 * 0.15);
+    b = Math.round(b * 0.8 + 255 * 0.2);
   }
 
   // Mood modulates glow: happy pet glows brighter, sad pet is dimmer
@@ -3890,6 +4036,87 @@ function update(): void {
     }
   }
 
+  // Seasonal particle spawning (calendar-based ambient effects)
+  seasonalSpawnTimer++;
+  if (currentSeason === "spring") {
+    // Cherry blossom petals — every ~50-90 frames
+    if (seasonalSpawnTimer > 50 + Math.random() * 40) {
+      seasonalSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.3) * 160,
+        y: cy2 - 80 - Math.random() * 20,
+        vx: 0.2 + Math.random() * 0.3,
+        vy: 0.15 + Math.random() * 0.15,
+        life: 160 + Math.random() * 80,
+        maxLife: 160 + Math.random() * 80,
+        size: 3 + Math.random() * 2.5,
+        type: "blossom",
+      });
+    }
+  } else if (currentSeason === "summer") {
+    // Summer enhances fireflies at evening/night, adds extra sparkles during day
+    if (currentTimeOfDay === "evening" || currentTimeOfDay === "night") {
+      if (seasonalSpawnTimer > 40 + Math.random() * 30) {
+        seasonalSpawnTimer = 0;
+        particles.push({
+          x: cx2 + (Math.random() - 0.5) * 160,
+          y: cy2 + (Math.random() - 0.5) * 100,
+          vx: (Math.random() - 0.5) * 0.3,
+          vy: (Math.random() - 0.5) * 0.2,
+          life: 180 + Math.random() * 100,
+          maxLife: 180 + Math.random() * 100,
+          size: 2.5 + Math.random() * 2,
+          type: "firefly",
+        });
+      }
+    } else {
+      // Daytime summer: extra golden sparkles
+      if (seasonalSpawnTimer > 60 + Math.random() * 50) {
+        seasonalSpawnTimer = 0;
+        particles.push({
+          x: cx2 + (Math.random() - 0.5) * 130,
+          y: cy2 + (Math.random() - 0.5) * 80,
+          vx: (Math.random() - 0.5) * 0.2,
+          vy: -(0.1 + Math.random() * 0.2),
+          life: 70 + Math.random() * 40,
+          maxLife: 70 + Math.random() * 40,
+          size: 2 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+    }
+  } else if (currentSeason === "autumn") {
+    // Falling leaves — every ~60-100 frames
+    if (seasonalSpawnTimer > 60 + Math.random() * 40) {
+      seasonalSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 160,
+        y: cy2 - 80 - Math.random() * 20,
+        vx: (Math.random() - 0.3) * 0.4,
+        vy: 0.2 + Math.random() * 0.2,
+        life: 180 + Math.random() * 80,
+        maxLife: 180 + Math.random() * 80,
+        size: 4 + Math.random() * 3,
+        type: "leaf",
+      });
+    }
+  } else if (currentSeason === "winter") {
+    // Snowflakes — every ~35-65 frames
+    if (seasonalSpawnTimer > 35 + Math.random() * 30) {
+      seasonalSpawnTimer = 0;
+      particles.push({
+        x: cx2 + (Math.random() - 0.5) * 170,
+        y: cy2 - 85 - Math.random() * 15,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: 0.1 + Math.random() * 0.15,
+        life: 200 + Math.random() * 100,
+        maxLife: 200 + Math.random() * 100,
+        size: 3 + Math.random() * 3,
+        type: "snowflake",
+      });
+    }
+  }
+
   // Speech bubble logic
   if (speechBubble) {
     speechBubble.life--;
@@ -3954,6 +4181,23 @@ function update(): void {
       // Happy trail sparkles float up and drift with gentle sway
       p.vx += Math.sin(p.life * 0.1) * 0.05;
       p.vy -= 0.01;
+    } else if (p.type === "blossom") {
+      // Cherry blossom petals — gentle swaying descent
+      p.vx = Math.sin(p.life * 0.035) * 0.4 + 0.15;
+      p.vy += 0.005; // very slow gravity
+      p.vy = Math.min(p.vy, 0.6); // terminal velocity
+    } else if (p.type === "leaf") {
+      // Autumn leaves — tumbling, swaying fall with gusts
+      p.vx += Math.sin(p.life * 0.05) * 0.12;
+      p.vy += 0.015; // gentle gravity
+      p.vy = Math.min(p.vy, 0.8);
+      // Occasional gust
+      if (Math.random() < 0.02) p.vx += (Math.random() - 0.3) * 0.5;
+    } else if (p.type === "snowflake") {
+      // Snowflakes — slow drifting descent with gentle sway
+      p.vx = Math.sin(p.life * 0.025 + p.x * 0.05) * 0.25;
+      p.vy += 0.003;
+      p.vy = Math.min(p.vy, 0.4); // very slow terminal velocity
     }
     p.vx *= 0.99;
     p.life--;
@@ -5019,6 +5263,12 @@ function draw(): void {
       drawRaindrop(p.x, p.y, p.size, alpha);
     } else if (p.type === "happy_trail") {
       drawHappyTrail(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "blossom") {
+      drawBlossom(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "leaf") {
+      drawLeaf(p.x, p.y, p.size, alpha, p.life);
+    } else if (p.type === "snowflake") {
+      drawSnowflake(p.x, p.y, p.size, alpha, p.life);
     }
   }
 

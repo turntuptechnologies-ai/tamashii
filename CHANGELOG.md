@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.33.0] — 2026-04-02 — Seasonal Awareness
+
+### Added
+- **Seasonal awareness** — the pet now reacts to the current calendar season (spring, summer, autumn, winter) with unique ambient visual effects
+- **Cherry blossom petals** (Spring, Mar–May) — delicate five-petal pink blossoms drift gently across the screen with a swaying, floating descent
+- **Falling leaves** (Autumn, Sep–Nov) — warm-colored leaves in orange, red, and gold tumble down with realistic swaying and occasional gusts of wind
+- **Snowflakes** (Winter, Dec–Feb) — intricate six-armed crystalline snowflakes drift slowly downward with gentle side-to-side sway
+- **Enhanced summer** (Summer, Jun–Aug) — extra fireflies appear at night and golden sparkles shimmer during the day
+- **Seasonal ambient tint** — the background glow subtly shifts color based on season: pink-cherry in spring, warm gold in summer, amber-orange in autumn, icy blue-white in winter
+- **Seasonal speech bubbles** — ~15% chance for the pet to comment on the season ("Cherry blossoms~! 🌸", "The leaves are falling 🍂", "Snowflakes! ❄️", etc.)
+- **Season auto-detection** — uses the system date to determine the current season, checked every 60 seconds
+
+**Why this feature:** Tamashii already had rich time-of-day awareness — different moods, ambient particles, color schemes, and animations for morning, afternoon, evening, and night. But the pet lived in a world without seasons. Every day felt the same regardless of whether it was a snowy January or a blooming April. Seasonal awareness adds a whole new layer of atmospheric immersion. When cherry blossom petals drift past your pet in spring, or snowflakes fall around it in winter, the pet feels connected to the real world's rhythm. The seasonal tints are subtle enough not to clash with the existing time-of-day system, but noticeable enough to make each season feel distinct. And the seasonal speech bubbles give the pet personality — it notices and comments on the world around it. Now your pet doesn't just know what time it is; it knows what time of year it is.
+
 ## [v0.32.0] — 2026-04-02 — Memory Match Mini-game
 
 ### Added
