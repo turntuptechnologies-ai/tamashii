@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog, globalShortcut } from "electron";
+import { app, BrowserWindow, screen, ipcMain, Menu, Tray, nativeImage, dialog, globalShortcut, Notification } from "electron";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
@@ -194,7 +194,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.34.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.35.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -271,7 +271,7 @@ function buildTrayMenu(): Menu {
             type: "info",
             title: "About Tamashii",
             message: "Tamashii — Desktop Pet",
-            detail: "Version 0.34.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+            detail: "Version 0.35.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
             buttons: ["OK"],
           });
         }
@@ -394,6 +394,25 @@ ipcMain.handle("load-save-data", () => {
     console.warn("Failed to load save data:", err);
   }
   return null;
+});
+
+// --- Desktop Notifications ---
+ipcMain.on("show-notification", (_event, data: { title: string; body: string }) => {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: data.title,
+      body: data.body,
+      silent: true, // pet has its own sounds
+    });
+    notification.on("click", () => {
+      // Clicking notification shows the pet
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    notification.show();
+  }
 });
 
 ipcMain.on("save-data", (_event, data: unknown) => {

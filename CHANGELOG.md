@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.35.0] — 2026-04-02 — Desktop Notifications
+
+### Added
+- **Desktop notifications** — native OS notifications for pet milestones, keeping you connected even when the pet window isn't focused
+- **Evolution notifications** — when your pet evolves to a new growth stage (Child, Teen, Adult), a notification celebrates the milestone with your pet's name
+- **Achievement notifications** — unlocking any achievement triggers a notification showing the achievement name, icon, and description
+- **Mini-game record notifications** — beating your high score in Star Catcher or Memory Match sends a congratulatory notification
+- **Click-to-focus** — clicking any notification brings the pet window to the foreground and focuses it
+- **Silent notifications** — notifications use the OS notification sound disabled since the pet already has its own audio feedback
+
+**Why this feature:** Tamashii has accumulated dozens of meaningful milestones — four growth stages, 17 achievements, two mini-game high scores — but all celebration happened inside a tiny 200x200 window. If you weren't looking at the pet when it evolved or when you unlocked an achievement, you'd miss the moment entirely. Desktop notifications bridge that gap. Now when your pet grows from a Teen to an Adult after hundreds of care points, or when you finally unlock the "Night Owl" achievement, you'll see it in your system notification center even if you're working in another app. And because clicking the notification brings the pet window into focus, it creates a natural "come check on your pet" moment. The notifications are silent (no OS ding) because the pet already plays its own celebratory sounds — no double-notification noise.
+
 ## [v0.34.0] — 2026-04-02 — Keyboard Shortcuts
 
 ### Added

@@ -58,4 +58,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onStartMemoryGame: (callback: () => void) => {
     ipcRenderer.on("start-memory-game", () => callback());
   },
+  showNotification: (title: string, body: string) => {
+    ipcRenderer.send("show-notification", { title, body });
+  },
 });

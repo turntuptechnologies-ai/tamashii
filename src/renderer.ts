@@ -20,6 +20,7 @@ declare global {
       onPetNap: (callback: () => void) => void;
       onViewStats: (callback: () => void) => void;
       onStartMemoryGame: (callback: () => void) => void;
+      showNotification: (title: string, body: string) => void;
     };
   }
 }
@@ -958,6 +959,13 @@ function celebrateEvolution(stage: GrowthStage): void {
     speechBubble = { text: msgs[Math.floor(Math.random() * msgs.length)], life: 240, maxLife: 240 };
   }
 
+  // Desktop notification for evolution milestone
+  const displayName = petName || "Your pet";
+  window.tamashii.showNotification(
+    `${displayName} evolved!`,
+    `${displayName} grew into a ${GROWTH_STAGE_NAMES[stage]}! Keep caring for your pet to help it grow even more.`
+  );
+
   // Happy reaction
   squishAmount = 0.8;
   isHappy = true;
@@ -1234,6 +1242,7 @@ function endMinigame(): void {
   }
   if (isNewRecord && minigameScore > 0) {
     msg = `New record: ${minigameScore}! ⭐`;
+    window.tamashii.showNotification("⭐ New Star Catcher Record!", `You caught ${minigameScore} stars! Can you beat it next time?`);
   }
   speechBubble = { text: msg, life: 240, maxLife: 240 };
 
@@ -1514,6 +1523,7 @@ function endMemoryGame(): void {
   }
   if (isNewRecord && memoryGameScore > 0) {
     msg = `New record: round ${memoryGameScore}! 🧠`;
+    window.tamashii.showNotification("🧠 New Memory Match Record!", `You reached round ${memoryGameScore}! Think you can go further?`);
   }
   speechBubble = { text: msg, life: 240, maxLife: 240 };
 
@@ -1894,6 +1904,12 @@ function celebrateAchievement(a: Achievement): void {
   squishAmount = 0.8;
   isHappy = true;
   happyTimer = 80;
+
+  // Desktop notification for achievement
+  window.tamashii.showNotification(
+    `${a.icon} Achievement Unlocked!`,
+    `${a.name} — ${a.description}`
+  );
 
   // Report to main process for context menu
   reportAchievements();
