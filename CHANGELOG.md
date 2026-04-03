@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.37.0] — 2026-04-03 — Pet Personality Traits
+
+### Added
+- **Five personality types** — each pet is randomly assigned one of five distinct personalities on first creation: Shy, Energetic, Curious, Sleepy, or Gluttonous
+- **Personality-adjusted stat decay** — each personality changes how fast hunger, happiness, and energy drain: energetic pets burn food and energy faster but stay happier; gluttonous pets get hungry quickly; shy pets lose happiness faster and need more reassurance; sleepy pets drain energy fast but have low metabolism
+- **Weighted idle animations** — personality influences which idle animations your pet prefers: curious pets peek and look around more, energetic pets hop and wiggle constantly, sleepy pets mostly stretch, shy pets do cautious peeks
+- **Personality idle frequency** — energetic pets animate 1.8x more often, while sleepy pets animate half as often as normal
+- **Personality speech bubbles** — ~20% of speech bubbles now reflect personality: shy pets say "D-don't stare..." and "...", energetic pets shout "LET'S GOOOO!", curious pets wonder "How does this work?", sleepy pets mumble "*yaaawn*", and gluttonous pets beg "Feed me~!"
+- **Stats panel personality display** — the stats panel now shows your pet's personality with a unique icon, name, and flavor description in a soft purple accent
+- **"True Self" achievement** — unlocked when you view the stats panel and discover your pet's personality (achievement #18)
+- **Persistent personality** — personality is saved to disk and persists across sessions; once assigned, your pet keeps its personality forever
+
+**Why this feature:** After 36 features, every Tamashii pet behaved identically — same animations, same stat curves, same speech patterns. The only individuality came from the name you gave it and the accessory you chose. Personality traits change that fundamentally. Now when you create a new pet, it rolls one of five personalities that genuinely affects how it behaves. An energetic pet bounces constantly and shouts with excitement; a sleepy pet barely moves and mumbles about naps; a shy pet hides and whispers. The stat decay differences mean you'll care for each personality differently — a gluttonous pet needs more feeding, a shy pet needs more attention. Your pet isn't just a sprite anymore; it has character.
+
 ## [v0.36.0] — 2026-04-03 — Evolution Visual Variants
 
 ### Added

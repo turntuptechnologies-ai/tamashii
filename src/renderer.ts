@@ -345,9 +345,8 @@ const idleAnimMessages: Record<string, string[]> = {
 
 function startIdleAnimation(): void {
   if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive) return;
-  // Pick a random animation
-  const anims: IdleAnimation[] = ["stretch", "look_around", "wiggle", "curious_peek", "hop"];
-  idleAnim = anims[Math.floor(Math.random() * anims.length)];
+  // Pick animation weighted by personality
+  idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
   if (idleAnim === "look_around") {
     idleLookDirection = Math.random() < 0.5 ? -1 : 1;
@@ -375,6 +374,105 @@ function getIdleAnimDuration(): number {
     case "hop": return 50;           // ~0.8 seconds
     default: return 60;
   }
+}
+
+// --- Pet Personality ---
+type Personality = "shy" | "energetic" | "curious" | "sleepy" | "gluttonous";
+let petPersonality: Personality | null = null; // null = not yet assigned
+
+const PERSONALITY_NAMES: Record<Personality, string> = {
+  shy: "Shy",
+  energetic: "Energetic",
+  curious: "Curious",
+  sleepy: "Sleepy",
+  gluttonous: "Gluttonous",
+};
+
+const PERSONALITY_ICONS: Record<Personality, string> = {
+  shy: "🫣",
+  energetic: "⚡",
+  curious: "🔍",
+  sleepy: "😴",
+  gluttonous: "🍔",
+};
+
+const PERSONALITY_DESCRIPTIONS: Record<Personality, string> = {
+  shy: "Blushes easily, quiet but sweet",
+  energetic: "Always bouncing, never slows down",
+  curious: "Loves peeking around and exploring",
+  sleepy: "Drowsy dreamer, loves naps",
+  gluttonous: "Lives to eat, always hungry",
+};
+
+// Stat decay multipliers per personality
+const PERSONALITY_DECAY: Record<Personality, { hunger: number; happiness: number; energy: number }> = {
+  shy:        { hunger: 1.0,  happiness: 1.3,  energy: 1.0  }, // loses happiness faster (needs reassurance)
+  energetic:  { hunger: 1.2,  happiness: 0.7,  energy: 1.4  }, // burns energy & food fast, stays happy
+  curious:    { hunger: 1.0,  happiness: 1.0,  energy: 1.1  }, // balanced, slightly more energy use
+  sleepy:     { hunger: 0.8,  happiness: 1.0,  energy: 1.5  }, // low metabolism but drains energy fast
+  gluttonous: { hunger: 1.6,  happiness: 0.9,  energy: 0.9  }, // gets hungry fast, otherwise content
+};
+
+// Idle animation weights per personality (higher = more likely to pick that anim)
+const PERSONALITY_IDLE_WEIGHTS: Record<Personality, Record<string, number>> = {
+  shy:        { stretch: 1, look_around: 0.5, wiggle: 0.5, curious_peek: 2, hop: 0.3 },
+  energetic:  { stretch: 0.5, look_around: 1, wiggle: 2, curious_peek: 1, hop: 2.5 },
+  curious:    { stretch: 0.5, look_around: 2.5, wiggle: 1, curious_peek: 2.5, hop: 1 },
+  sleepy:     { stretch: 2.5, look_around: 0.5, wiggle: 0.5, curious_peek: 0.5, hop: 0.3 },
+  gluttonous: { stretch: 1.5, look_around: 1, wiggle: 1.5, curious_peek: 1, hop: 1 },
+};
+
+// Personality-specific speech bubbles
+const PERSONALITY_MESSAGES: Record<Personality, string[]> = {
+  shy: [
+    "...", "D-don't stare...", "You're... nice.", "*hides*", "Eep~!",
+    "I-I like you...", "So embarrassing...", "Please be gentle...",
+  ],
+  energetic: [
+    "LET'S GOOOO!", "I can't sit still~!", "ZOOM ZOOM!", "More! More!",
+    "Energy overload!!", "Race you~!", "Woohoo~!", "So pumped!!",
+  ],
+  curious: [
+    "What's that?!", "Ooh, interesting~", "Tell me more!", "I wonder...",
+    "Let me see!", "How does this work?", "Fascinating~!", "Hmm hmm hmm~",
+  ],
+  sleepy: [
+    "*yaaawn*", "Five more minutes...", "So comfy...", "Naptime?",
+    "zzz... huh?", "I dreamt of clouds~", "Sleepy...", "*dozes off*",
+  ],
+  gluttonous: [
+    "Is it snack time?", "I smell food~!", "Nom nom nom!", "Feed me~!",
+    "My tummy spoke!", "Yummy thoughts~", "Seconds please!", "Hungry again...",
+  ],
+};
+
+// Idle animation frequency multiplier per personality
+const PERSONALITY_IDLE_FREQUENCY: Record<Personality, number> = {
+  shy: 0.7,        // less frequent — shy pets are still
+  energetic: 1.8,  // much more frequent
+  curious: 1.4,    // moderately more frequent
+  sleepy: 0.5,     // rare — too tired to move
+  gluttonous: 1.0, // normal
+};
+
+function assignPersonality(): Personality {
+  const types: Personality[] = ["shy", "energetic", "curious", "sleepy", "gluttonous"];
+  return types[Math.floor(Math.random() * types.length)];
+}
+
+function pickWeightedIdleAnimation(): IdleAnimation {
+  const anims: IdleAnimation[] = ["stretch", "look_around", "wiggle", "curious_peek", "hop"];
+  if (!petPersonality) {
+    return anims[Math.floor(Math.random() * anims.length)];
+  }
+  const weights = PERSONALITY_IDLE_WEIGHTS[petPersonality];
+  const totalWeight = anims.reduce((sum, a) => sum + (weights[a] || 1), 0);
+  let roll = Math.random() * totalWeight;
+  for (const a of anims) {
+    roll -= (weights[a] || 1);
+    if (roll <= 0) return a;
+  }
+  return anims[anims.length - 1];
 }
 
 // --- Hold-Click Charge-Up ---
@@ -616,6 +714,12 @@ function spawnSpeechBubble(): void {
       winter: ["Snowflakes! ❄️", "It's so cold~!", "Winter wonderland!", "Brrr... cuddle me?", "Hot cocoa time~!"],
     };
     text = seasonalMsgs[currentSeason][Math.floor(Math.random() * seasonalMsgs[currentSeason].length)];
+  }
+
+  // ~20% chance to use a personality-flavored message
+  if (!useStress && petPersonality && Math.random() < 0.2) {
+    const pMsgs = PERSONALITY_MESSAGES[petPersonality];
+    text = pMsgs[Math.floor(Math.random() * pMsgs.length)];
   }
 
   // ~25% chance to use a name-aware message if the pet has a name
@@ -1083,19 +1187,22 @@ function updatePetStats(): void {
     const intervals = Math.floor(elapsed / STAT_DECAY_INTERVAL);
     lastStatDecayTime = now;
 
+    // Personality-adjusted decay multipliers
+    const pDecay = petPersonality ? PERSONALITY_DECAY[petPersonality] : { hunger: 1, happiness: 1, energy: 1 };
+
     // Hunger decays ~1 point per 3 minutes (1 per 3 intervals)
-    petHunger = Math.max(0, petHunger - intervals * 0.33);
+    petHunger = Math.max(0, petHunger - intervals * 0.33 * pDecay.hunger);
 
     // Happiness decays ~1 point per 5 minutes (1 per 5 intervals)
-    petHappiness = Math.max(0, petHappiness - intervals * 0.2);
+    petHappiness = Math.max(0, petHappiness - intervals * 0.2 * pDecay.happiness);
 
     // Energy: decays during day, recharges at night
     if (currentTimeOfDay === "night") {
       petEnergy = Math.min(100, petEnergy + intervals * 0.5); // recharge at night
     } else if (currentTimeOfDay === "morning") {
-      petEnergy = Math.max(0, petEnergy - intervals * 0.15); // slow drain in morning
+      petEnergy = Math.max(0, petEnergy - intervals * 0.15 * pDecay.energy); // slow drain in morning
     } else {
-      petEnergy = Math.max(0, petEnergy - intervals * 0.25); // faster drain afternoon/evening
+      petEnergy = Math.max(0, petEnergy - intervals * 0.25 * pDecay.energy); // faster drain afternoon/evening
     }
   }
 
@@ -1853,6 +1960,11 @@ const achievements: Achievement[] = [
     icon: "⌨", unlockMessage: "Keyboard ninja!",
     condition: () => shortcutUsageCount >= 10, unlocked: false,
   },
+  {
+    id: "true_self", name: "True Self", description: "Discover your pet's personality",
+    icon: "🪞", unlockMessage: "You really know me~!",
+    condition: () => petPersonality !== null && statsPanelOpen, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2132,6 +2244,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = moodColor;
   ctx.fillText(moodStr, panelX + panelW - 14, y);
 
+  // Personality row
+  if (petPersonality) {
+    y += rowHeight;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(200, 215, 255, 0.7)";
+    ctx.fillText("Personality", panelX + 14, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#c4a0ff";
+    ctx.fillText(`${PERSONALITY_ICONS[petPersonality]} ${PERSONALITY_NAMES[petPersonality]}`, panelX + panelW - 14, y);
+    // Description on next line
+    y += 9;
+    ctx.textAlign = "center";
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "rgba(200, 180, 255, 0.5)";
+    ctx.fillText(PERSONALITY_DESCRIPTIONS[petPersonality], w / 2, y);
+  }
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -2160,6 +2289,7 @@ interface SaveData {
   bestCombo: number;
   totalCarePoints: number;
   memoryGameHighScore: number;
+  personality: string | null;
   version: number;
 }
 
@@ -2187,6 +2317,7 @@ function buildSaveData(): SaveData {
     bestCombo,
     totalCarePoints,
     memoryGameHighScore,
+    personality: petPersonality,
     version: 1,
   };
 }
@@ -2237,6 +2368,15 @@ function applySaveData(data: SaveData): void {
   }
   currentGrowthStage = getGrowthStage(totalCarePoints);
   previousGrowthStage = currentGrowthStage; // don't celebrate on load
+
+  // Restore or assign personality
+  const validPersonalities: Personality[] = ["shy", "energetic", "curious", "sleepy", "gluttonous"];
+  if (data.personality && validPersonalities.includes(data.personality as Personality)) {
+    petPersonality = data.personality as Personality;
+  } else {
+    // First time — assign a random personality
+    petPersonality = assignPersonality();
+  }
 
   // Restore pet stats with offline decay
   if (typeof data.petHunger === "number") {
@@ -2289,6 +2429,9 @@ window.tamashii.loadSaveData().then((raw) => {
       isHappy = true;
       happyTimer = 60;
     }
+  } else {
+    // Brand new pet — assign personality
+    petPersonality = assignPersonality();
   }
 });
 
@@ -3997,10 +4140,11 @@ function update(): void {
     const timeSinceInteraction = Date.now() - lastInteractionTime;
     if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive && !memoryGameActive) {
       idleAnimTimer++;
-      if (idleAnimTimer >= IDLE_ANIM_COOLDOWN) {
+      const idleFreqMult = petPersonality ? PERSONALITY_IDLE_FREQUENCY[petPersonality] : 1;
+      if (idleAnimTimer >= IDLE_ANIM_COOLDOWN / idleFreqMult) {
         idleAnimTimer = 0;
-        // 40% chance per check — keeps them occasional and unpredictable
-        if (Math.random() < 0.4) {
+        // 40% base chance per check, scaled by personality
+        if (Math.random() < 0.4 * idleFreqMult) {
           startIdleAnimation();
         }
       }
