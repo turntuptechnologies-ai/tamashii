@@ -212,7 +212,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.38.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.39.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

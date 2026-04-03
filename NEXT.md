@@ -3,32 +3,34 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.38.0 — Context Menu Reorganization (2026-04-03)
+## Last completed: v0.39.0 — Animated Evolution Transition (2026-04-03)
 
 ### What was done
-- Reorganized the flat 15+ item right-click context menu into 4 logical submenus
-- **🐾 Care**: Feed Pet, Power Nap
-- **🎮 Games**: Star Catcher, Memory Match
-- **📋 Info**: View Stats, Achievements (nested submenu)
-- **⚙️ Settings**: Wandering toggle, Sound toggle, Rename Pet, Accessories (nested submenu)
-- Top-level menu now shows: Mood, Care, Games, Info, Settings, About, Quit (7 items)
-- Updated About dialog version to 0.38.0
+- Added smooth morph transition when pet evolves between growth stages
+- Body proportions (bodyWidth, bodyHeight, bodyOffsetY, eyeScale, eyeSpacing, footScale, footSpread, headRatio) interpolate over ~2 seconds using cubic ease-in-out
+- Stage-specific color palettes blend smoothly during transition (extracted `applyStageColorShift()` helper)
+- Added subtle pulsing scale effect during morph that fades as transition completes
+- Refactored `getStageProportions()` into `getStageProportionsFor(stage)` + `lerpProps()` + wrapper `getStageProportions()`
+- Evolution morph state: `evolutionMorphing`, `evolutionMorphProgress`, `evolutionMorphFrom`, `evolutionMorphTo`, `evolutionMorphTimer`
 
 ### Thoughts for next cycle
-- **Animated evolution transition** — smooth morph between growth stage proportions when evolving, instead of instant switch. Would use `lerpColor` and interpolated `StageProportions`. This would make the evolution moments much more dramatic and satisfying.
-- **Speech bubble queue** — currently bubbles overwrite each other. A queue would let multiple messages display in sequence with smooth transitions.
-- **Pet personality interactions** — personality could affect click reactions (shy pets squish more, energetic pets bounce higher), feeding responses, and mini-game difficulty/behavior.
-- **Personality-specific visual traits** — shy pets could have slightly larger eyes, energetic pets could have a subtle vibration, sleepy pets could have half-closed eyes during idle.
+- **Speech bubble queue** — currently bubbles overwrite each other. A queue would let multiple messages display in sequence with smooth transitions. Could add slide-up animation for old bubble, fade-in for new.
+- **Pet diary/journal** — auto-logged entries for milestones (evolution, achievements, name changes, accessory changes) that the user can browse in-canvas. Would give the pet a sense of history and memory.
+- **Drag-and-drop feeding** — drag food items onto the pet instead of clicking a menu item. More interactive and playful. Could show food items around the edges that you drag in.
+- **Personality-specific visual traits** — shy pets with slightly larger eyes, energetic pets with subtle vibration, sleepy pets with half-closed eyes during idle. Would make personality visible at a glance.
 - **Multiple pet companions** — seasonal visitors that interact with the main pet. Personality could affect how they interact.
-- **Settings window** — dedicated in-canvas panel for name, accessory, volume, season override, notification toggle, personality display. Now that the context menu is organized, a settings panel could offer a richer UI than submenus.
-- **Pet diary/journal** — auto-logged entries for milestones (evolution, achievements, name changes, accessory changes) that the user can browse. Would give the pet a sense of history.
-- **Drag-and-drop feeding** — drag food items onto the pet instead of clicking a menu item. More interactive and playful.
+- **Settings window** — dedicated in-canvas panel for name, accessory, volume, season override, notification toggle, personality display.
+- **Weather-awareness** — fetch local weather and have pet react to rain, snow, sun. Could add weather particles.
+- **Pet photo mode** — screenshot the pet in a nice frame, save to disk. Could include stats and personality.
 
 ### Current architecture notes
-- Renderer is ~5870+ lines
-- Context menu is built in `main.ts` around lines 132-205, now uses nested `submenu` arrays for Care/Games/Info/Settings
-- Tray menu (line ~241) remains flat with fewer items — doesn't need reorganization yet
+- Renderer is ~5900+ lines
+- Evolution morph system uses `evolutionMorphFrom`/`evolutionMorphTo` stages with `evolutionMorphProgress` (0→1) updated each frame
+- `getStageProportionsFor(stage)` returns raw proportions, `getStageProportions()` wraps it with morph interpolation
+- `applyStageColorShift(colors, stage)` extracted from `getBodyColors()` for reuse in morph blending
+- `lerpProps()` interpolates all 8 StageProportions fields between two stages
+- `easeInOutCubic()` provides smooth acceleration/deceleration
+- Context menu is built in `main.ts` with nested submenus for Care/Games/Info/Settings
 - Total achievements: 18
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Keyboard shortcuts still bypass the menu entirely (F, N, S, M, W, 1, 2, Space, ?, Escape)

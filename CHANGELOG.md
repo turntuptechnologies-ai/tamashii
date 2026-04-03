@@ -3,6 +3,17 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.39.0] — 2026-04-03 — Animated Evolution Transition
+
+### Added
+- **Smooth morph transition** — when your pet evolves to a new growth stage, its body proportions now smoothly interpolate from the old stage to the new over ~2 seconds instead of snapping instantly
+- **Color palette blending** — stage-specific color shifts (baby pastels → child default → teen deep → adult regal) blend smoothly during the transition using the same interpolation
+- **Morph pulse effect** — during the transition, the pet's body subtly pulses with a breathing scale effect that fades out as the morph completes, adding visual drama
+- **Cubic easing** — the morph uses ease-in-out cubic interpolation for an organic, natural-feeling transformation
+- **All 8 proportions interpolated** — body width/height, vertical offset, eye scale/spacing, foot scale/spread, and head ratio all transition smoothly
+
+**Why this feature:** Evolution is the most emotionally significant moment in Tamashii — your pet growing from baby to child, teen, and finally adult after accumulating hundreds of care points. But until now, that transformation was a jarring instant switch: one frame it's a round baby with big eyes, the next it's a tall adult. The animated morph transition makes evolution feel like a real metamorphosis. You see the body grow taller, the eyes shift, the colors deepen — all over two smooth seconds with a gentle pulsing glow. Combined with the existing sparkle burst, golden ring, and fanfare sound, evolution now feels truly magical.
+
 ## [v0.38.0] — 2026-04-03 — Context Menu Reorganization
 
 ### Added
