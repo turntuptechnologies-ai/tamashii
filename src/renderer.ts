@@ -2443,6 +2443,35 @@ function lerpColor(hex: string, target: string, t: number): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
+// --- Growth Stage Visual Proportions ---
+interface StageProportions {
+  bodyWidth: number;   // multiplier for body ellipse width
+  bodyHeight: number;  // multiplier for body ellipse height
+  bodyOffsetY: number; // vertical offset for body center
+  eyeScale: number;    // multiplier for eye sizes
+  eyeSpacing: number;  // multiplier for eye spacing
+  footScale: number;   // multiplier for foot size
+  footSpread: number;  // multiplier for foot horizontal spread
+  headRatio: number;   // how much the head "sticks up" (body pushed down)
+}
+
+function getStageProportions(): StageProportions {
+  switch (currentGrowthStage) {
+    case "baby":
+      // Round, small, big head relative to body
+      return { bodyWidth: 0.40, bodyHeight: 0.35, bodyOffsetY: 8, eyeScale: 1.1, eyeSpacing: 0.13, footScale: 0.7, footSpread: 0.7, headRatio: 0.92 };
+    case "child":
+      // Slightly larger, still round
+      return { bodyWidth: 0.44, bodyHeight: 0.38, bodyOffsetY: 6, eyeScale: 1.0, eyeSpacing: 0.15, footScale: 0.9, footSpread: 0.85, headRatio: 0.96 };
+    case "teen":
+      // Taller, more defined
+      return { bodyWidth: 0.45, bodyHeight: 0.42, bodyOffsetY: 4, eyeScale: 1.0, eyeSpacing: 0.16, footScale: 1.0, footSpread: 1.0, headRatio: 1.0 };
+    case "adult":
+      // Full size, slightly taller and wider, majestic proportions
+      return { bodyWidth: 0.48, bodyHeight: 0.44, bodyOffsetY: 3, eyeScale: 1.05, eyeSpacing: 0.16, footScale: 1.1, footSpread: 1.1, headRatio: 1.02 };
+  }
+}
+
 function getBodyColors(): { body: string; stroke: string; belly: string; foot: string } {
   let colors: { body: string; stroke: string; belly: string; foot: string };
   switch (currentTimeOfDay) {
@@ -2454,6 +2483,26 @@ function getBodyColors(): { body: string; stroke: string; belly: string; foot: s
       colors = { body: "#5577CC", stroke: "#3A5AAA", belly: "#7799DD", foot: "#4466BB" }; break;
     case "night":
       colors = { body: "#4A66AA", stroke: "#334D88", belly: "#6688CC", foot: "#3B5599" }; break;
+  }
+  // Growth stage color shifts — each stage has a subtly different palette
+  if (currentGrowthStage === "baby") {
+    // Softer, lighter, more pastel — baby is gentle
+    colors.body = lerpColor(colors.body, "#A8C8FF", 0.25);
+    colors.stroke = lerpColor(colors.stroke, "#7BA8E8", 0.2);
+    colors.belly = lerpColor(colors.belly, "#C8DFFF", 0.3);
+    colors.foot = lerpColor(colors.foot, "#90B8F0", 0.2);
+  } else if (currentGrowthStage === "teen") {
+    // Slightly deeper, more saturated — growing confidence
+    colors.body = lerpColor(colors.body, "#4A7AE8", 0.15);
+    colors.stroke = lerpColor(colors.stroke, "#2A5ABB", 0.15);
+    colors.belly = lerpColor(colors.belly, "#7AA0F0", 0.1);
+    colors.foot = lerpColor(colors.foot, "#3A6ACC", 0.15);
+  } else if (currentGrowthStage === "adult") {
+    // Rich, deep, regal — fully mature with a touch of indigo
+    colors.body = lerpColor(colors.body, "#4466CC", 0.2);
+    colors.stroke = lerpColor(colors.stroke, "#2244AA", 0.2);
+    colors.belly = lerpColor(colors.belly, "#7090E8", 0.15);
+    colors.foot = lerpColor(colors.foot, "#3355BB", 0.2);
   }
   // When stressed, shift body color toward warm/red
   if (stressLevel > 0.3) {
@@ -2477,18 +2526,36 @@ function getBodyColors(): { body: string; stroke: string; belly: string; foot: s
 
 function drawBody(cx: number, cy: number, size: number): void {
   const colors = getBodyColors();
-  // Body (round blob)
+  const props = getStageProportions();
+
+  // Adult stage: subtle radiant body outline glow
+  if (currentGrowthStage === "adult") {
+    ctx.save();
+    ctx.globalAlpha = 0.12 + 0.05 * Math.sin(frame * 0.03);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + props.bodyOffsetY, size * props.bodyWidth + 4, size * props.bodyHeight + 3, 0, 0, Math.PI * 2);
+    const glowGrad = ctx.createRadialGradient(cx, cy + props.bodyOffsetY, size * props.bodyWidth * 0.5, cx, cy + props.bodyOffsetY, size * props.bodyWidth + 4);
+    glowGrad.addColorStop(0, "rgba(100, 140, 255, 0)");
+    glowGrad.addColorStop(1, "rgba(100, 140, 255, 0.6)");
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Body (shape varies by growth stage)
   ctx.beginPath();
-  ctx.ellipse(cx, cy + 5, size * 0.45, size * 0.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + props.bodyOffsetY, size * props.bodyWidth, size * props.bodyHeight, 0, 0, Math.PI * 2);
   ctx.fillStyle = colors.body;
   ctx.fill();
   ctx.strokeStyle = colors.stroke;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = currentGrowthStage === "adult" ? 2.5 : 2;
   ctx.stroke();
 
-  // Belly highlight
+  // Belly highlight (scales with body)
+  const bellyScale = currentGrowthStage === "baby" ? 0.65 : currentGrowthStage === "adult" ? 0.58 : 0.56;
+  const bellyY = cy + props.bodyOffsetY + size * props.bodyHeight * 0.3;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + 12, size * 0.25, size * 0.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, bellyY, size * props.bodyWidth * bellyScale, size * props.bodyHeight * 0.5, 0, 0, Math.PI * 2);
   ctx.fillStyle = colors.belly;
   ctx.fill();
 }
@@ -2524,8 +2591,10 @@ function drawSleepyEyes(cx: number, eyeY: number, eyeSpacing: number): void {
 }
 
 function drawFace(cx: number, cy: number, size: number): void {
+  const props = getStageProportions();
   const eyeY = cy - 5;
-  const eyeSpacing = size * 0.15;
+  const eyeSpacing = size * props.eyeSpacing;
+  const es = props.eyeScale; // eye scale factor
 
   // Determine stat-driven visual states
   const isSadFromStats = !isHappy && petHappiness < 25;
@@ -2626,13 +2695,13 @@ function drawFace(cx: number, cy: number, size: number): void {
   } else if (isHappy) {
     // Happy eyes (^_^ arcs)
     ctx.beginPath();
-    ctx.arc(cx - eyeSpacing, eyeY, 7, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.arc(cx - eyeSpacing, eyeY, 7 * es, Math.PI * 1.1, Math.PI * 1.9);
     ctx.strokeStyle = "#1a1a2e";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(cx + eyeSpacing, eyeY, 7, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.arc(cx + eyeSpacing, eyeY, 7 * es, Math.PI * 1.1, Math.PI * 1.9);
     ctx.strokeStyle = "#1a1a2e";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
@@ -2651,37 +2720,49 @@ function drawFace(cx: number, cy: number, size: number): void {
   } else if (isSleepy()) {
     drawSleepyEyes(cx, eyeY, eyeSpacing);
   } else {
-    // Open eyes
+    // Open eyes (scaled by growth stage)
     // White
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing, eyeY, 8, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing, eyeY, 8 * es, 9 * es, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing, eyeY, 8, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing, eyeY, 8 * es, 9 * es, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
 
     // Pupils — shift when doing look_around idle animation
     const pupilShift = idleAnim === "look_around" ? Math.sin(idleAnimProgress * Math.PI) * 3 * idleLookDirection : 0;
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing + 1 + pupilShift, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing + 1 + pupilShift, eyeY + 1, 4 * es, 5 * es, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing + 1 + pupilShift, eyeY + 1, 4, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing + 1 + pupilShift, eyeY + 1, 4 * es, 5 * es, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
 
     // Eye shine
+    const shineSize = 2 * es;
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing + 3 + pupilShift, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing + 3 + pupilShift, eyeY - 2, shineSize, shineSize, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing + 3 + pupilShift, eyeY - 2, 2, 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing + 3 + pupilShift, eyeY - 2, shineSize, shineSize, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
+    // Adult gets a second smaller eye shine for extra sparkle
+    if (currentGrowthStage === "adult") {
+      ctx.beginPath();
+      ctx.ellipse(cx - eyeSpacing - 1 + pupilShift, eyeY + 2, 1.2, 1.2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + eyeSpacing - 1 + pupilShift, eyeY + 2, 1.2, 1.2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fill();
+    }
   }
 
   // Mouth
@@ -2743,33 +2824,39 @@ function drawFace(cx: number, cy: number, size: number): void {
     ctx.stroke();
   }
 
-  // Cheeks (blush — brighter when happy, dimmer at night, faded when sad/drained)
+  // Cheeks (blush — brighter when happy, dimmer at night, faded when sad/drained, scales with stage)
   let blushAlpha = isHappy ? 0.55 : 0.35;
   if (currentTimeOfDay === "night") blushAlpha *= 0.6;
   if (isSadFromStats) blushAlpha *= 0.4; // barely blushing when sad
   if (isDrainedFromStats) blushAlpha *= 0.5; // pale when drained
-  const blushSize = isHappy ? 7 : 6;
+  // Baby has rosier cheeks, adult has subtler blush
+  if (currentGrowthStage === "baby") blushAlpha = Math.min(blushAlpha * 1.3, 0.7);
+  const blushSize = (isHappy ? 7 : 6) * es;
   ctx.beginPath();
-  ctx.ellipse(cx - eyeSpacing - 10, cy + 5, blushSize, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - eyeSpacing - 10 * es, cy + 5, blushSize, 4 * es, 0, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(255, 130, 130, ${blushAlpha})`;
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(cx + eyeSpacing + 10, cy + 5, blushSize, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + eyeSpacing + 10 * es, cy + 5, blushSize, 4 * es, 0, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(255, 130, 130, ${blushAlpha})`;
   ctx.fill();
 }
 
 function drawFeet(cx: number, cy: number, size: number): void {
   const colors = getBodyColors();
+  const props = getStageProportions();
   const footY = cy + size * 0.35;
+  const footW = 12 * props.footScale;
+  const footH = 6 * props.footScale;
+  const spread = 15 * props.footSpread;
   // Left foot
   ctx.beginPath();
-  ctx.ellipse(cx - 15, footY, 12, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - spread, footY, footW, footH, 0, 0, Math.PI * 2);
   ctx.fillStyle = colors.foot;
   ctx.fill();
   // Right foot
   ctx.beginPath();
-  ctx.ellipse(cx + 15, footY, 12, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + spread, footY, footW, footH, 0, 0, Math.PI * 2);
   ctx.fillStyle = colors.foot;
   ctx.fill();
 }

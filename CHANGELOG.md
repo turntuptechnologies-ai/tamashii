@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.36.0] — 2026-04-03 — Evolution Visual Variants
+
+### Added
+- **Growth stage body proportions** — the pet's body shape now changes at each evolution stage: babies are small and round with big heads, children grow slightly larger, teens become taller and more defined, and adults reach full majestic proportions
+- **Stage-specific color palettes** — each growth stage subtly shifts the pet's color: babies are soft pastel blue, children are standard, teens are deeper and more saturated, and adults are rich regal indigo-blue
+- **Scaled eyes by stage** — baby eyes are proportionally larger (the classic cute look), while other stages have appropriately sized eyes with adjusted spacing
+- **Adult body glow** — fully grown adults have a subtle pulsing radiant outline around their body, signaling their maturity
+- **Adult double eye shine** — adult pets get a second smaller highlight in each eye, giving them extra sparkle and presence
+- **Scaled feet** — baby feet are tiny, growing proportionally through each stage to adult-sized feet with wider spread
+- **Rosier baby cheeks** — babies have extra-rosy blush marks, fading to more subtle cheek coloring as they grow
+- **Proportional belly highlight** — the belly marking scales with body size and adjusts position per growth stage
+
+**Why this feature:** Tamashii already had four growth stages with care point thresholds, celebration effects, and forehead marks to distinguish them — but the pet's actual body looked identical at every stage. A baby and an adult were the same blob with different forehead decorations. That undermined the emotional reward of evolution. Now, when your pet evolves from a baby to a child, you'll see it physically grow — its body gets larger, its proportions shift, its colors deepen. The baby's oversized eyes and rosy cheeks make it adorable and fragile-looking. The adult's richer colors, body glow, and double eye shine make it feel powerful and mature. Growth isn't just a number anymore; it's visible, tangible, and satisfying.
+
 ## [v0.35.0] — 2026-04-02 — Desktop Notifications
 
 ### Added
