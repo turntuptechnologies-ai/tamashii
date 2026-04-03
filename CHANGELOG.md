@@ -3,6 +3,18 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.38.0] — 2026-04-03 — Context Menu Reorganization
+
+### Added
+- **Organized context menu with submenus** — the flat 15+ item right-click menu is now grouped into four logical categories
+- **🐾 Care submenu** — Feed Pet and Power Nap are grouped together for quick access to pet care actions
+- **🎮 Games submenu** — Star Catcher and Memory Match are grouped under a dedicated games menu
+- **📋 Info submenu** — View Stats and Achievements are grouped together for all pet information at a glance
+- **⚙️ Settings submenu** — Wandering toggle, Sound toggle, Rename Pet, and Accessories are organized under settings
+- **Clean top-level menu** — the right-click menu now shows just Mood, Care, Games, Info, Settings, About, and Quit — 7 items instead of 15+
+
+**Why this feature:** Over 37 features, the right-click context menu had grown into a sprawling flat list of 15+ items. Finding what you wanted meant scanning through feed, nap, wandering, sound, rename, accessories, two mini-games, stats, achievements, about, and quit — all at the same level. This reorganization groups related actions into intuitive submenus. Care actions (feed, nap) are together. Games are together. Info (stats, achievements) is together. Settings (wandering, sound, rename, accessories) are together. The top-level menu is now clean and scannable: you see the category you want, hover to expand, and pick your action. It's the same functionality, just properly organized. Keyboard shortcuts (F, N, S, M, W, 1, 2) still work for power users who skip the menu entirely.
+
 ## [v0.37.0] — 2026-04-03 — Pet Personality Traits
 
 ### Added

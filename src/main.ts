@@ -133,58 +133,76 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
     { label: `Mood: ${moodLabel}`, enabled: false },
     { type: "separator" },
     {
-      label: wanderingEnabled ? "🚶 Disable Wandering" : "🧍 Enable Wandering",
-      click: () => { mainWindow?.webContents.send("toggle-wandering"); },
-    },
-    {
-      label: soundEnabled ? "🔊 Disable Sounds" : "🔇 Enable Sounds",
-      click: () => { mainWindow?.webContents.send("toggle-sound"); },
-    },
-    {
-      label: petName ? `✏️ Rename Pet (${petName})` : "✏️ Name Your Pet",
-      click: () => { mainWindow?.webContents.send("prompt-name"); },
-    },
-    {
-      label: "👒 Accessories",
+      label: "🐾 Care",
       submenu: [
-        { label: "None", type: "radio" as const, checked: accessory === "none", click: () => { mainWindow?.webContents.send("set-accessory", "none"); } },
-        { type: "separator" as const },
-        { label: "👑 Crown", type: "radio" as const, checked: accessory === "crown", click: () => { mainWindow?.webContents.send("set-accessory", "crown"); } },
-        { label: "🎀 Bow", type: "radio" as const, checked: accessory === "bow", click: () => { mainWindow?.webContents.send("set-accessory", "bow"); } },
-        { label: "👓 Glasses", type: "radio" as const, checked: accessory === "glasses", click: () => { mainWindow?.webContents.send("set-accessory", "glasses"); } },
-        { label: "🌸 Flower", type: "radio" as const, checked: accessory === "flower", click: () => { mainWindow?.webContents.send("set-accessory", "flower"); } },
-        { label: "🎉 Party Hat", type: "radio" as const, checked: accessory === "party_hat", click: () => { mainWindow?.webContents.send("set-accessory", "party_hat"); } },
-        { label: "😺 Cat Ears", type: "radio" as const, checked: accessory === "cat_ears", click: () => { mainWindow?.webContents.send("set-accessory", "cat_ears"); } },
-        { label: "🎩 Top Hat", type: "radio" as const, checked: accessory === "top_hat", click: () => { mainWindow?.webContents.send("set-accessory", "top_hat"); } },
-        { label: "⭐ Star Headband", type: "radio" as const, checked: accessory === "headband_star", click: () => { mainWindow?.webContents.send("set-accessory", "headband_star"); } },
+        {
+          label: "🍎 Feed Pet",
+          click: () => { mainWindow?.webContents.send("feed-pet"); },
+        },
+        {
+          label: "💤 Power Nap",
+          click: () => { mainWindow?.webContents.send("pet-nap"); },
+        },
       ],
     },
-    { type: "separator" },
     {
-      label: "🍎 Feed Pet",
-      click: () => { mainWindow?.webContents.send("feed-pet"); },
+      label: "🎮 Games",
+      submenu: [
+        {
+          label: "⭐ Star Catcher",
+          click: () => { mainWindow?.webContents.send("start-minigame"); },
+        },
+        {
+          label: "🧠 Memory Match",
+          click: () => { mainWindow?.webContents.send("start-memory-game"); },
+        },
+      ],
     },
     {
-      label: "💤 Power Nap",
-      click: () => { mainWindow?.webContents.send("pet-nap"); },
+      label: "📋 Info",
+      submenu: [
+        {
+          label: "📊 View Stats",
+          click: () => { mainWindow?.webContents.send("view-stats"); },
+        },
+        {
+          label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
+          submenu: achievementItems,
+        },
+      ],
     },
-    { type: "separator" },
     {
-      label: "⭐ Play Star Catcher",
-      click: () => { mainWindow?.webContents.send("start-minigame"); },
-    },
-    {
-      label: "🧠 Play Memory Match",
-      click: () => { mainWindow?.webContents.send("start-memory-game"); },
-    },
-    {
-      label: "📊 View Stats",
-      click: () => { mainWindow?.webContents.send("view-stats"); },
-    },
-    { type: "separator" },
-    {
-      label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
-      submenu: achievementItems,
+      label: "⚙️ Settings",
+      submenu: [
+        {
+          label: wanderingEnabled ? "🚶 Disable Wandering" : "🧍 Enable Wandering",
+          click: () => { mainWindow?.webContents.send("toggle-wandering"); },
+        },
+        {
+          label: soundEnabled ? "🔊 Disable Sounds" : "🔇 Enable Sounds",
+          click: () => { mainWindow?.webContents.send("toggle-sound"); },
+        },
+        { type: "separator" as const },
+        {
+          label: petName ? `✏️ Rename Pet (${petName})` : "✏️ Name Your Pet",
+          click: () => { mainWindow?.webContents.send("prompt-name"); },
+        },
+        {
+          label: "👒 Accessories",
+          submenu: [
+            { label: "None", type: "radio" as const, checked: accessory === "none", click: () => { mainWindow?.webContents.send("set-accessory", "none"); } },
+            { type: "separator" as const },
+            { label: "👑 Crown", type: "radio" as const, checked: accessory === "crown", click: () => { mainWindow?.webContents.send("set-accessory", "crown"); } },
+            { label: "🎀 Bow", type: "radio" as const, checked: accessory === "bow", click: () => { mainWindow?.webContents.send("set-accessory", "bow"); } },
+            { label: "👓 Glasses", type: "radio" as const, checked: accessory === "glasses", click: () => { mainWindow?.webContents.send("set-accessory", "glasses"); } },
+            { label: "🌸 Flower", type: "radio" as const, checked: accessory === "flower", click: () => { mainWindow?.webContents.send("set-accessory", "flower"); } },
+            { label: "🎉 Party Hat", type: "radio" as const, checked: accessory === "party_hat", click: () => { mainWindow?.webContents.send("set-accessory", "party_hat"); } },
+            { label: "😺 Cat Ears", type: "radio" as const, checked: accessory === "cat_ears", click: () => { mainWindow?.webContents.send("set-accessory", "cat_ears"); } },
+            { label: "🎩 Top Hat", type: "radio" as const, checked: accessory === "top_hat", click: () => { mainWindow?.webContents.send("set-accessory", "top_hat"); } },
+            { label: "⭐ Star Headband", type: "radio" as const, checked: accessory === "headband_star", click: () => { mainWindow?.webContents.send("set-accessory", "headband_star"); } },
+          ],
+        },
+      ],
     },
     { type: "separator" },
     {
@@ -194,7 +212,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.36.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.38.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

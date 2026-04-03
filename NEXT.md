@@ -3,34 +3,32 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.37.0 — Pet Personality Traits (2026-04-03)
+## Last completed: v0.38.0 — Context Menu Reorganization (2026-04-03)
 
 ### What was done
-- Added 5 personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Each personality modifies stat decay rates via `PERSONALITY_DECAY` multipliers
-- Idle animations are weighted by personality via `pickWeightedIdleAnimation()` using `PERSONALITY_IDLE_WEIGHTS`
-- Idle animation frequency is scaled by `PERSONALITY_IDLE_FREQUENCY` (energetic = 1.8x, sleepy = 0.5x)
-- `spawnSpeechBubble()` now has a ~20% chance to use personality-flavored messages from `PERSONALITY_MESSAGES`
-- Personality is saved/loaded in `SaveData.personality` — assigned on first creation, persists forever
-- Stats panel shows personality with icon, name, and description in purple accent
-- Added "True Self" achievement (#18) — unlocks when stats panel is open and personality exists
+- Reorganized the flat 15+ item right-click context menu into 4 logical submenus
+- **🐾 Care**: Feed Pet, Power Nap
+- **🎮 Games**: Star Catcher, Memory Match
+- **📋 Info**: View Stats, Achievements (nested submenu)
+- **⚙️ Settings**: Wandering toggle, Sound toggle, Rename Pet, Accessories (nested submenu)
+- Top-level menu now shows: Mood, Care, Games, Info, Settings, About, Quit (7 items)
+- Updated About dialog version to 0.38.0
 
 ### Thoughts for next cycle
-- **Context menu reorganization** — still the most pressing UX issue. 15+ items in a flat list. Submenus would help: Actions (feed/nap), Games (star catcher/memory match), Info (stats/achievements), Settings (sound/wandering/name/accessories).
-- **Animated evolution transition** — smooth morph between growth stage proportions when evolving, instead of instant switch. Would use `lerpColor` and interpolated `StageProportions`.
-- **Speech bubble queue** — currently bubbles overwrite each other. A queue would let multiple messages display in sequence.
-- **Pet personality interactions** — personality could affect click reactions (shy pets squish more, energetic pets bounce higher), feeding responses, and even which accessories they "prefer."
-- **Multiple pet companions** — seasonal visitors that interact with the main pet. Personality could affect how they interact (shy pet hides from visitors, curious pet approaches them).
-- **Settings window** — dedicated panel for name, accessory, volume, season override, notification toggle, personality reroll(?).
+- **Animated evolution transition** — smooth morph between growth stage proportions when evolving, instead of instant switch. Would use `lerpColor` and interpolated `StageProportions`. This would make the evolution moments much more dramatic and satisfying.
+- **Speech bubble queue** — currently bubbles overwrite each other. A queue would let multiple messages display in sequence with smooth transitions.
+- **Pet personality interactions** — personality could affect click reactions (shy pets squish more, energetic pets bounce higher), feeding responses, and mini-game difficulty/behavior.
 - **Personality-specific visual traits** — shy pets could have slightly larger eyes, energetic pets could have a subtle vibration, sleepy pets could have half-closed eyes during idle.
+- **Multiple pet companions** — seasonal visitors that interact with the main pet. Personality could affect how they interact.
+- **Settings window** — dedicated in-canvas panel for name, accessory, volume, season override, notification toggle, personality display. Now that the context menu is organized, a settings panel could offer a richer UI than submenus.
+- **Pet diary/journal** — auto-logged entries for milestones (evolution, achievements, name changes, accessory changes) that the user can browse. Would give the pet a sense of history.
+- **Drag-and-drop feeding** — drag food items onto the pet instead of clicking a menu item. More interactive and playful.
 
 ### Current architecture notes
-- Renderer is now ~5870+ lines
-- `Personality` type and all personality config tables are defined around line 380-480 (after idle animations, before charge-up)
-- `pickWeightedIdleAnimation()` replaces the old random picker in `startIdleAnimation()`
-- `PERSONALITY_DECAY` multipliers are applied in `updatePetStats()` to hunger/happiness/energy decay rates
-- `PERSONALITY_IDLE_FREQUENCY` scales both the cooldown divisor and the chance in the game loop idle check
-- Personality is assigned in `applySaveData()` (for existing saves without personality) and in the load-on-startup else branch (for brand-new pets)
+- Renderer is ~5870+ lines
+- Context menu is built in `main.ts` around lines 132-205, now uses nested `submenu` arrays for Care/Games/Info/Settings
+- Tray menu (line ~241) remains flat with fewer items — doesn't need reorganization yet
 - Total achievements: 18
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
-- Context menu still has ~15 items — reorganization remains the most pressing UX improvement
+- Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
+- Keyboard shortcuts still bypass the menu entirely (F, N, S, M, W, 1, 2, Space, ?, Escape)
