@@ -61,4 +61,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   showNotification: (title: string, body: string) => {
     ipcRenderer.send("show-notification", { title, body });
   },
+  onViewDiary: (callback: () => void) => {
+    ipcRenderer.on("view-diary", () => callback());
+  },
 });

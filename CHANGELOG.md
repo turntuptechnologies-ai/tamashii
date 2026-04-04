@@ -3,6 +3,20 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.42.0] — 2026-04-04 — Pet Diary / Journal
+
+### Added
+- **Pet diary system** — your pet now keeps an auto-logged journal of all significant life events, creating a personal history you can browse
+- **Diary entries for milestones** — evolution (stage changes), achievement unlocks, name changes, accessory changes, and personality assignment are all automatically recorded with timestamps
+- **In-canvas diary panel** — press **D** or select **📖 Pet Diary** from the Info context menu to open a warm amber-themed panel showing all diary entries in reverse chronological order (newest first)
+- **Scrollable diary** — use the mouse wheel to scroll through older entries when the diary grows beyond what fits on screen, with up/down arrow indicators
+- **Diary persistence** — all entries are saved to disk and persist across sessions (up to 50 entries, oldest trimmed first)
+- **New "Diary Keeper" achievement** — unlocked when your pet accumulates 10 diary entries (achievement #19)
+- **Panel management** — opening the diary auto-closes the stats panel and vice versa; right-click or Escape closes the diary
+- **New pet birth entry** — brand new pets get their first diary entries automatically: their birth and personality assignment
+
+**Why this feature:** After 41 features, Tamashii pets live rich lives — they evolve through growth stages, unlock achievements, get named and accessorized, develop personalities, and react to dozens of events. But all of that history was ephemeral. Close the app and reopen it, and there's no record of when your pet evolved, when you gave it a name, or when it unlocked its first achievement. The diary changes that. Every significant moment is now timestamped and logged. Browsing the diary feels like flipping through a scrapbook of your pet's life — "Jan 15, given the name Mochi for the first time!", "Feb 3, evolved into a Teen!", "Mar 12, unlocked Combo Legend". It gives your pet a sense of memory and continuity that stats alone can't capture.
+
 ## [v0.41.0] — 2026-04-04 — Speech Bubble Queue
 
 ### Added

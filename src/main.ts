@@ -166,6 +166,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           click: () => { mainWindow?.webContents.send("view-stats"); },
         },
         {
+          label: "📖 Pet Diary",
+          click: () => { mainWindow?.webContents.send("view-diary"); },
+        },
+        {
           label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
           submenu: achievementItems,
         },
@@ -212,7 +216,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.39.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.42.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

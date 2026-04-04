@@ -21,6 +21,7 @@ declare global {
       onViewStats: (callback: () => void) => void;
       onStartMemoryGame: (callback: () => void) => void;
       showNotification: (title: string, body: string) => void;
+      onViewDiary: (callback: () => void) => void;
     };
   }
 }
@@ -591,6 +592,54 @@ function queueSpeechBubble(text: string, life: number, immediate = false): void 
   }
 }
 
+// --- Pet Diary / Journal ---
+interface DiaryEntry {
+  timestamp: number;   // Date.now() when event occurred
+  type: "evolution" | "achievement" | "name" | "accessory" | "milestone" | "personality" | "general";
+  icon: string;
+  text: string;
+}
+
+let petDiary: DiaryEntry[] = [];
+const DIARY_MAX_ENTRIES = 50;
+let diaryPanelOpen = false;
+let diaryPanelFade = 0;
+const DIARY_PANEL_FADE_SPEED = 0.06;
+let diaryScrollOffset = 0; // for scrolling through entries
+
+function addDiaryEntry(type: DiaryEntry["type"], icon: string, text: string): void {
+  petDiary.push({ timestamp: Date.now(), type, icon, text });
+  if (petDiary.length > DIARY_MAX_ENTRIES) {
+    petDiary = petDiary.slice(petDiary.length - DIARY_MAX_ENTRIES);
+  }
+  saveGame();
+}
+
+function formatDiaryDate(timestamp: number): string {
+  const d = new Date(timestamp);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, "0");
+  const ampm = h >= 12 ? "pm" : "am";
+  const h12 = h % 12 || 12;
+  return `${months[d.getMonth()]} ${d.getDate()} ${h12}:${m}${ampm}`;
+}
+
+function toggleDiaryPanel(): void {
+  if (minigameActive || memoryGameActive) return;
+  // Close stats panel if open
+  if (statsPanelOpen) statsPanelOpen = false;
+  diaryPanelOpen = !diaryPanelOpen;
+  diaryScrollOffset = 0; // reset scroll on toggle
+  if (diaryPanelOpen) {
+    playTone(500, 0.1, "sine", 0.08);
+    setTimeout(() => playTone(700, 0.12, "sine", 0.08), 60);
+  } else {
+    playTone(700, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(500, 0.1, "sine", 0.06), 60);
+  }
+}
+
 // --- Gravity & Falling ---
 let isFalling = false;
 let velocityY = 0;
@@ -950,6 +999,11 @@ function startFalling(): void {
 // --- Right-click Context Menu ---
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+  // Close diary panel on right-click instead of opening context menu
+  if (diaryPanelOpen) {
+    toggleDiaryPanel();
+    return;
+  }
   window.tamashii.showContextMenu({
     timeOfDay: currentTimeOfDay,
     wanderingEnabled,
@@ -984,6 +1038,7 @@ type AccessoryType = "none" | "crown" | "bow" | "glasses" | "flower" | "party_ha
 let currentAccessory: AccessoryType = "none";
 
 window.tamashii.onSetAccessory((accessory: string) => {
+  const oldAccessory = currentAccessory;
   currentAccessory = accessory as AccessoryType;
   saveGame();
   // Happy reaction when putting on an accessory
@@ -1000,6 +1055,14 @@ window.tamashii.onSetAccessory((accessory: string) => {
     squishAmount = 0.5;
     isHappy = true;
     happyTimer = 45;
+    // Diary entry for accessory
+    const accessoryNames: Record<string, string> = {
+      crown: "Crown", bow: "Bow", glasses: "Glasses", flower: "Flower",
+      party_hat: "Party Hat", cat_ears: "Cat Ears", top_hat: "Top Hat", headband_star: "Star Headband",
+    };
+    addDiaryEntry("accessory", "👒", `Put on the ${accessoryNames[currentAccessory] || currentAccessory}!`);
+  } else if (oldAccessory !== "none") {
+    addDiaryEntry("accessory", "👒", "Took off accessory — going natural!");
   }
 });
 
@@ -1015,6 +1078,12 @@ window.tamashii.onPromptName(async () => {
       squishAmount = 0.7;
       isHappy = true;
       happyTimer = 60;
+      // Diary entry for name
+      if (oldName) {
+        addDiaryEntry("name", "✏️", `Renamed from "${oldName}" to "${petName}"`);
+      } else {
+        addDiaryEntry("name", "🏷️", `Given the name "${petName}" for the first time!`);
+      }
     }
   }
 });
@@ -1098,6 +1167,11 @@ function celebrateEvolution(stage: GrowthStage): void {
   if (msgs.length > 0) {
     queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 240);
   }
+
+  // Diary entry for evolution
+  const diaryName = petName || "Pet";
+  const evoEmojis: Record<GrowthStage, string> = { baby: "🥚", child: "🌱", teen: "🌟", adult: "👑" };
+  addDiaryEntry("evolution", evoEmojis[stage], `${diaryName} evolved into a ${GROWTH_STAGE_NAMES[stage]}!`);
 
   // Desktop notification for evolution milestone
   const displayName = petName || "Your pet";
@@ -2001,6 +2075,11 @@ const achievements: Achievement[] = [
     icon: "🪞", unlockMessage: "You really know me~!",
     condition: () => petPersonality !== null && statsPanelOpen, unlocked: false,
   },
+  {
+    id: "diary_keeper", name: "Diary Keeper", description: "Accumulate 10 diary entries",
+    icon: "📖", unlockMessage: "So many memories~!",
+    condition: () => petDiary.length >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2053,6 +2132,9 @@ function celebrateAchievement(a: Achievement): void {
   isHappy = true;
   happyTimer = 80;
 
+  // Diary entry for achievement
+  addDiaryEntry("achievement", a.icon, `Unlocked "${a.name}" — ${a.description}`);
+
   // Desktop notification for achievement
   window.tamashii.showNotification(
     `${a.icon} Achievement Unlocked!`,
@@ -2086,6 +2168,8 @@ const STATS_PANEL_FADE_SPEED = 0.06;
 
 function toggleStatsPanel(): void {
   if (minigameActive || memoryGameActive) return; // don't open during mini-game
+  // Close diary panel if open
+  if (diaryPanelOpen) diaryPanelOpen = false;
   statsPanelOpen = !statsPanelOpen;
   if (statsPanelOpen) {
     playTone(600, 0.1, "sine", 0.08);
@@ -2098,6 +2182,10 @@ function toggleStatsPanel(): void {
 
 window.tamashii.onViewStats(() => {
   toggleStatsPanel();
+});
+
+window.tamashii.onViewDiary(() => {
+  toggleDiaryPanel();
 });
 
 function formatTime(ms: number): string {
@@ -2306,6 +2394,156 @@ function drawStatsPanel(): void {
   ctx.restore();
 }
 
+// --- Diary Panel ---
+function drawDiaryPanel(): void {
+  // Animate fade
+  if (diaryPanelOpen && diaryPanelFade < 1) {
+    diaryPanelFade = Math.min(1, diaryPanelFade + DIARY_PANEL_FADE_SPEED);
+  } else if (!diaryPanelOpen && diaryPanelFade > 0) {
+    diaryPanelFade = Math.max(0, diaryPanelFade - DIARY_PANEL_FADE_SPEED);
+  }
+  if (diaryPanelFade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = diaryPanelFade;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = 8;
+  const panelX = pad;
+  const panelY = pad;
+  const panelW = w - pad * 2;
+  const panelH = h - pad * 2;
+  const cornerR = 10;
+
+  // Panel background — rounded rect
+  ctx.beginPath();
+  ctx.moveTo(panelX + cornerR, panelY);
+  ctx.lineTo(panelX + panelW - cornerR, panelY);
+  ctx.quadraticCurveTo(panelX + panelW, panelY, panelX + panelW, panelY + cornerR);
+  ctx.lineTo(panelX + panelW, panelY + panelH - cornerR);
+  ctx.quadraticCurveTo(panelX + panelW, panelY + panelH, panelX + panelW - cornerR, panelY + panelH);
+  ctx.lineTo(panelX + cornerR, panelY + panelH);
+  ctx.quadraticCurveTo(panelX, panelY + panelH, panelX, panelY + panelH - cornerR);
+  ctx.lineTo(panelX, panelY + cornerR);
+  ctx.quadraticCurveTo(panelX, panelY, panelX + cornerR, panelY);
+  ctx.closePath();
+
+  // Warm gradient background (different from stats panel)
+  const bgGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+  bgGrad.addColorStop(0, "rgba(35, 20, 45, 0.94)");
+  bgGrad.addColorStop(1, "rgba(20, 25, 40, 0.94)");
+  ctx.fillStyle = bgGrad;
+  ctx.fill();
+
+  // Border glow — warm amber
+  ctx.strokeStyle = "rgba(232, 180, 100, 0.5)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Clip to panel for entries
+  ctx.save();
+  ctx.clip();
+
+  // Title
+  let y = panelY + 20;
+  ctx.textAlign = "center";
+  ctx.font = "bold 11px monospace";
+  ctx.fillStyle = "#e8c87b";
+  ctx.shadowColor = "rgba(232, 200, 123, 0.6)";
+  ctx.shadowBlur = 6;
+  ctx.fillText("PET DIARY", w / 2, y);
+  ctx.shadowBlur = 0;
+
+  // Divider line
+  y += 6;
+  ctx.strokeStyle = "rgba(232, 180, 100, 0.3)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+
+  y += 8;
+
+  // Entry area
+  const entryAreaTop = y;
+  const entryAreaBottom = panelY + panelH - 18;
+  const entryHeight = 28; // height per diary entry
+  const maxVisibleEntries = Math.floor((entryAreaBottom - entryAreaTop) / entryHeight);
+
+  if (petDiary.length === 0) {
+    ctx.textAlign = "center";
+    ctx.font = "8px monospace";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.fillText("No entries yet...", w / 2, entryAreaTop + 20);
+    ctx.fillText("Your pet's story will be", w / 2, entryAreaTop + 34);
+    ctx.fillText("written here!", w / 2, entryAreaTop + 48);
+  } else {
+    // Show entries in reverse chronological order (newest first)
+    const entries = [...petDiary].reverse();
+    // Clamp scroll offset
+    const maxScroll = Math.max(0, entries.length - maxVisibleEntries);
+    diaryScrollOffset = Math.max(0, Math.min(diaryScrollOffset, maxScroll));
+
+    for (let i = 0; i < maxVisibleEntries && i + diaryScrollOffset < entries.length; i++) {
+      const entry = entries[i + diaryScrollOffset];
+      const entryY = entryAreaTop + i * entryHeight;
+
+      // Date label
+      ctx.textAlign = "left";
+      ctx.font = "6px monospace";
+      ctx.fillStyle = "rgba(200, 180, 140, 0.5)";
+      ctx.fillText(formatDiaryDate(entry.timestamp), panelX + 14, entryY + 2);
+
+      // Icon + text
+      ctx.font = "8px monospace";
+      ctx.fillStyle = "#fff";
+      // Truncate text to fit panel width
+      const maxTextWidth = panelW - 42;
+      let displayText = `${entry.icon} ${entry.text}`;
+      while (ctx.measureText(displayText).width > maxTextWidth && displayText.length > 10) {
+        displayText = displayText.slice(0, -4) + "...";
+      }
+      ctx.fillText(displayText, panelX + 14, entryY + 14);
+
+      // Subtle divider between entries
+      if (i < maxVisibleEntries - 1 && i + diaryScrollOffset < entries.length - 1) {
+        ctx.strokeStyle = "rgba(200, 180, 140, 0.1)";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(panelX + 20, entryY + entryHeight - 2);
+        ctx.lineTo(panelX + panelW - 20, entryY + entryHeight - 2);
+        ctx.stroke();
+      }
+    }
+
+    // Scroll indicators
+    if (diaryScrollOffset > 0) {
+      ctx.textAlign = "center";
+      ctx.font = "8px monospace";
+      ctx.fillStyle = "rgba(232, 200, 123, 0.6)";
+      ctx.fillText("▲ newer", w / 2, entryAreaTop - 2);
+    }
+    if (diaryScrollOffset < maxScroll) {
+      ctx.textAlign = "center";
+      ctx.font = "8px monospace";
+      ctx.fillStyle = "rgba(232, 200, 123, 0.6)";
+      ctx.fillText("▼ older", w / 2, entryAreaBottom + 2);
+    }
+  }
+
+  ctx.restore(); // restore clip
+
+  // Entry count and close hint
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.fillText(`${petDiary.length} entries — right-click to close`, w / 2, panelY + panelH - 6);
+
+  ctx.restore();
+}
+
 // --- Persistent Save/Load ---
 interface SaveData {
   totalClicks: number;
@@ -2326,6 +2564,7 @@ interface SaveData {
   totalCarePoints: number;
   memoryGameHighScore: number;
   personality: string | null;
+  diary: DiaryEntry[];
   version: number;
 }
 
@@ -2354,6 +2593,7 @@ function buildSaveData(): SaveData {
     totalCarePoints,
     memoryGameHighScore,
     personality: petPersonality,
+    diary: petDiary,
     version: 1,
   };
 }
@@ -2433,6 +2673,11 @@ function applySaveData(data: SaveData): void {
     lastStatDecayTime = Date.now();
   }
 
+  // Restore diary
+  if (Array.isArray(data.diary)) {
+    petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
+  }
+
   // Restore unlocked achievements
   if (data.unlockedAchievements) {
     for (const id of data.unlockedAchievements) {
@@ -2468,6 +2713,8 @@ window.tamashii.loadSaveData().then((raw) => {
   } else {
     // Brand new pet — assign personality
     petPersonality = assignPersonality();
+    addDiaryEntry("personality", PERSONALITY_ICONS[petPersonality], `Born with a ${PERSONALITY_NAMES[petPersonality]} personality!`);
+    addDiaryEntry("general", "🐣", "A new Tamashii was born! The adventure begins~");
   }
 });
 
@@ -5756,6 +6003,9 @@ function draw(): void {
   // Stats panel overlay (topmost layer)
   drawStatsPanel();
 
+  // Diary panel overlay
+  drawDiaryPanel();
+
   // Shortcut help overlay (above everything)
   // Animate fade
   if (shortcutHelpOpen && shortcutHelpFade < 1) {
@@ -6014,6 +6264,7 @@ function drawShortcutHelp(): void {
     ["F", "Feed Pet"],
     ["N", "Power Nap"],
     ["S", "Toggle Stats"],
+    ["D", "Pet Diary"],
     ["M", "Toggle Sound"],
     ["W", "Toggle Wandering"],
     ["1", "Star Catcher"],
@@ -6074,6 +6325,10 @@ window.addEventListener("keydown", (e) => {
       toggleShortcutHelp();
       return;
     }
+    if (diaryPanelOpen) {
+      toggleDiaryPanel();
+      return;
+    }
     if (statsPanelOpen) {
       toggleStatsPanel();
       return;
@@ -6097,6 +6352,9 @@ window.addEventListener("keydown", (e) => {
   // Don't process shortcuts during mini-games (except Esc)
   if (minigameActive || memoryGameActive) return;
 
+  // Don't process shortcuts while diary panel is open (except Esc and D)
+  if (diaryPanelOpen && key !== "d") return;
+
   // Don't process shortcuts while stats panel is open (except Esc and S)
   if (statsPanelOpen && key !== "s") return;
 
@@ -6119,6 +6377,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "s":
       toggleStatsPanel();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "d":
+      toggleDiaryPanel();
       shortcutUsageCount++;
       checkAchievements();
       break;
@@ -6149,6 +6412,15 @@ window.addEventListener("keydown", (e) => {
       break;
   }
 });
+
+// Scroll diary panel with mouse wheel
+canvas.addEventListener("wheel", (e) => {
+  if (diaryPanelOpen) {
+    e.preventDefault();
+    diaryScrollOffset += e.deltaY > 0 ? 1 : -1;
+    diaryScrollOffset = Math.max(0, diaryScrollOffset);
+  }
+}, { passive: false });
 
 // Save when window is about to close
 window.addEventListener("beforeunload", () => {
