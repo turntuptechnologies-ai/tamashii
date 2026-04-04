@@ -64,4 +64,10 @@ contextBridge.exposeInMainWorld("tamashii", {
   onViewDiary: (callback: () => void) => {
     ipcRenderer.on("view-diary", () => callback());
   },
+  onTakePhoto: (callback: () => void) => {
+    ipcRenderer.on("take-photo", () => callback());
+  },
+  savePhoto: (dataUrl: string): Promise<string | null> => {
+    return ipcRenderer.invoke("save-photo", dataUrl);
+  },
 });

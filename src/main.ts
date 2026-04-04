@@ -170,6 +170,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           click: () => { mainWindow?.webContents.send("view-diary"); },
         },
         {
+          label: "📸 Take Photo",
+          click: () => { mainWindow?.webContents.send("take-photo"); },
+        },
+        {
           label: `🏆 Achievements (${achievementData.progress.unlocked}/${achievementData.progress.total})`,
           submenu: achievementItems,
         },
@@ -216,7 +220,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.42.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.43.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
@@ -435,6 +439,20 @@ ipcMain.on("show-notification", (_event, data: { title: string; body: string }) 
     });
     notification.show();
   }
+});
+
+ipcMain.handle("save-photo", async (_event, dataUrl: string) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Save Pet Photo",
+    defaultPath: path.join(app.getPath("pictures"), `tamashii-photo-${Date.now()}.png`),
+    filters: [{ name: "PNG Image", extensions: ["png"] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  // Strip the data URL prefix and write the PNG
+  const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+  fs.writeFileSync(result.filePath, Buffer.from(base64Data, "base64"));
+  return result.filePath;
 });
 
 ipcMain.on("save-data", (_event, data: unknown) => {

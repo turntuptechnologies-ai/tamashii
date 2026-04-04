@@ -22,6 +22,8 @@ declare global {
       onStartMemoryGame: (callback: () => void) => void;
       showNotification: (title: string, body: string) => void;
       onViewDiary: (callback: () => void) => void;
+      onTakePhoto: (callback: () => void) => void;
+      savePhoto: (dataUrl: string) => Promise<string | null>;
     };
   }
 }
@@ -638,6 +640,112 @@ function toggleDiaryPanel(): void {
     playTone(700, 0.08, "sine", 0.06);
     setTimeout(() => playTone(500, 0.1, "sine", 0.06), 60);
   }
+}
+
+// --- Pet Photo Mode ---
+let totalPhotos = 0;
+let photoFlashAlpha = 0; // 0-1 white flash overlay when taking a photo
+let photoFlashDecay = 0.06;
+
+function playShutterSound(): void {
+  // Camera shutter: sharp click followed by a mechanical slide
+  playTone(2000, 0.03, "square", 0.1);
+  setTimeout(() => playTone(800, 0.06, "square", 0.06), 30);
+  setTimeout(() => playTone(400, 0.1, "sine", 0.04), 60);
+}
+
+function takePhoto(): void {
+  if (minigameActive || memoryGameActive) return;
+  if (statsPanelOpen || diaryPanelOpen || shortcutHelpOpen) return;
+
+  // Flash effect
+  photoFlashAlpha = 1.0;
+  playShutterSound();
+
+  // Brief delay so the flash looks natural, then capture
+  setTimeout(() => {
+    captureAndSavePhoto();
+  }, 100);
+}
+
+function captureAndSavePhoto(): void {
+  // Create offscreen canvas with polaroid-style frame
+  const photoW = 280;
+  const photoH = 340;
+  const border = 20;
+  const bottomBorder = 60;
+
+  const offscreen = document.createElement("canvas");
+  offscreen.width = photoW;
+  offscreen.height = photoH;
+  const oc = offscreen.getContext("2d")!;
+
+  // Polaroid white frame with subtle shadow
+  oc.fillStyle = "#FAFAFA";
+  oc.shadowColor = "rgba(0, 0, 0, 0.2)";
+  oc.shadowBlur = 12;
+  oc.shadowOffsetY = 4;
+  oc.beginPath();
+  oc.roundRect(0, 0, photoW, photoH, 6);
+  oc.fill();
+  oc.shadowColor = "transparent";
+
+  // Inner photo area — copy from the main canvas
+  const innerW = photoW - border * 2;
+  const innerH = photoH - border - bottomBorder;
+  oc.drawImage(canvas, 0, 0, canvas.width, canvas.height, border, border, innerW, innerH);
+
+  // Subtle inner border
+  oc.strokeStyle = "rgba(0, 0, 0, 0.08)";
+  oc.lineWidth = 1;
+  oc.strokeRect(border, border, innerW, innerH);
+
+  // Pet name and date at the bottom
+  const now = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+  oc.fillStyle = "#666";
+  oc.font = "italic 13px Georgia, serif";
+  oc.textAlign = "center";
+  const label = petName ? `${petName} — ${dateStr}` : `Tamashii — ${dateStr}`;
+  oc.fillText(label, photoW / 2, photoH - bottomBorder / 2 + 6);
+
+  // Small heart decoration
+  oc.fillStyle = "#E88";
+  oc.font = "11px sans-serif";
+  oc.fillText("♥", photoW / 2 - oc.measureText(label).width / 2 - 12, photoH - bottomBorder / 2 + 6);
+
+  // Export and save
+  const dataUrl = offscreen.toDataURL("image/png");
+  window.tamashii.savePhoto(dataUrl).then((filePath) => {
+    if (filePath) {
+      totalPhotos++;
+      queueSpeechBubble("📸 Say cheese~!", 150, true);
+      addDiaryEntry("milestone", "📸", `Photo saved! (Photo #${totalPhotos})`);
+
+      // Sparkle burst for celebration
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+        particles.push({
+          x: cx + Math.cos(angle) * 10,
+          y: cy + Math.sin(angle) * 10,
+          vx: Math.cos(angle) * 1.5,
+          vy: Math.sin(angle) * 1.2,
+          life: 40 + Math.random() * 20,
+          maxLife: 40 + Math.random() * 20,
+          size: 3 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+
+      checkAchievements();
+      saveGame();
+    } else {
+      queueSpeechBubble("Maybe next time~", 120, true);
+    }
+  });
 }
 
 // --- Gravity & Falling ---
@@ -2080,6 +2188,11 @@ const achievements: Achievement[] = [
     icon: "📖", unlockMessage: "So many memories~!",
     condition: () => petDiary.length >= 10, unlocked: false,
   },
+  {
+    id: "say_cheese", name: "Say Cheese!", description: "Take your first pet photo",
+    icon: "📸", unlockMessage: "I'm photogenic~!",
+    condition: () => totalPhotos >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2186,6 +2299,10 @@ window.tamashii.onViewStats(() => {
 
 window.tamashii.onViewDiary(() => {
   toggleDiaryPanel();
+});
+
+window.tamashii.onTakePhoto(() => {
+  takePhoto();
 });
 
 function formatTime(ms: number): string {
@@ -2565,6 +2682,7 @@ interface SaveData {
   memoryGameHighScore: number;
   personality: string | null;
   diary: DiaryEntry[];
+  totalPhotos: number;
   version: number;
 }
 
@@ -2594,6 +2712,7 @@ function buildSaveData(): SaveData {
     memoryGameHighScore,
     personality: petPersonality,
     diary: petDiary,
+    totalPhotos,
     version: 1,
   };
 }
@@ -2671,6 +2790,11 @@ function applySaveData(data: SaveData): void {
       petEnergy = Math.max(5, petEnergy - cappedMinutes * 0.1);
     }
     lastStatDecayTime = Date.now();
+  }
+
+  // Restore photo count
+  if (typeof data.totalPhotos === "number") {
+    totalPhotos = data.totalPhotos;
   }
 
   // Restore diary
@@ -6006,6 +6130,16 @@ function draw(): void {
   // Diary panel overlay
   drawDiaryPanel();
 
+  // Photo flash overlay
+  if (photoFlashAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = photoFlashAlpha;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    photoFlashAlpha = Math.max(0, photoFlashAlpha - photoFlashDecay);
+  }
+
   // Shortcut help overlay (above everything)
   // Animate fade
   if (shortcutHelpOpen && shortcutHelpFade < 1) {
@@ -6269,6 +6403,7 @@ function drawShortcutHelp(): void {
     ["W", "Toggle Wandering"],
     ["1", "Star Catcher"],
     ["2", "Memory Match"],
+    ["P", "Take Photo"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -6407,6 +6542,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "2":
       startMemoryGame();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "p":
+      takePhoto();
       shortcutUsageCount++;
       checkAchievements();
       break;

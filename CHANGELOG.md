@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.43.0] — 2026-04-04 — Pet Photo Mode
+
+### Added
+- **Pet photo mode** — capture a polaroid-style snapshot of your pet and save it as a PNG image to your computer
+- **Polaroid frame** — photos are rendered with a clean white frame, subtle shadow, and your pet's name and date printed at the bottom in elegant italic serif font
+- **Camera flash effect** — taking a photo triggers a bright white flash overlay that fades out naturally, just like a real camera
+- **Camera shutter sound** — a satisfying mechanical click-and-slide sound effect plays when you snap a photo
+- **Keyboard shortcut P** — press P at any time to take a quick photo of your pet
+- **Context menu integration** — "📸 Take Photo" added to the Info submenu for mouse-driven access
+- **Sparkle celebration** — a burst of sparkles surrounds your pet after a photo is successfully saved
+- **Diary logging** — each photo is logged in your pet's diary with a numbered photo count
+- **New "Say Cheese!" achievement** — unlocked when you take your first pet photo (achievement #20)
+- **Photo counter persistence** — your total photo count is saved across sessions
+- **Shortcut help updated** — P for Take Photo now appears in the keyboard shortcuts overlay
+
+**Why this feature:** Tamashii pets live rich visual lives — they wear accessories, show personality-specific visual traits, evolve through growth stages, and express moods. But there was no way to capture these moments. The stats panel tracks numbers, the diary logs events as text, but neither preserves what your pet actually looked like at a given moment. Photo mode fills that gap. Press P or pick "Take Photo" from the menu, and your pet is captured in a charming polaroid frame with its name and today's date. Save it to your pictures folder, share it with friends, or build a collection of snapshots documenting your pet's life. The flash effect and shutter sound make the act of photographing feel satisfying and tactile, while the sparkle burst and diary entry make it feel like a celebration.
+
 ## [v0.42.0] — 2026-04-04 — Pet Diary / Journal
 
 ### Added
