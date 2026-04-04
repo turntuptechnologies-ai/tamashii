@@ -3,6 +3,17 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.41.0] — 2026-04-04 — Speech Bubble Queue
+
+### Added
+- **Speech bubble queue system** — when multiple messages are triggered in quick succession, they now queue up and display in sequence instead of overwriting each other
+- **Smooth slide-up transitions** — each new queued bubble slides up into position with a smooth ease-out animation instead of popping in abruptly
+- **Queue indicator dots** — small dots appear below the bubble when more messages are waiting, showing 1-3 dots depending on queue depth (max 5 queued)
+- **Priority/immediate messages** — user-initiated actions (feeding, napping, renaming, achievements, game starts) display immediately and clear the queue, ensuring important feedback is never delayed
+- **Automatic queue drain** — queued messages play in order with no cooldown between them; the normal 15-30 second cooldown only applies after all queued messages have been shown
+
+**Why this feature:** Speech bubbles are the pet's voice — how it communicates reactions, greetings, status updates, and personality quips. But until now, every new message instantly replaced the current one. If you fed your pet right as a time-of-day greeting was playing, the greeting vanished mid-sentence. If you unlocked an achievement during a combo streak, the achievement message obliterated the combo callout. Rapid events like evolution (which triggers stat bubbles, celebration text, and personality quips in quick succession) meant most messages were never seen. The queue system preserves every message, playing them in order with smooth transitions. Important user actions still get priority — feeding your pet will always show "Yummy!" immediately — but ambient messages like personality quips and idle chatter now queue up politely instead of fighting for the single bubble slot.
+
 ## [v0.40.0] — 2026-04-04 — Personality-Specific Visual Traits
 
 ### Added

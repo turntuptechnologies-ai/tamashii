@@ -234,7 +234,7 @@ function startTimeTransition(from: TimeOfDay, to: TimeOfDay): void {
     night: ["Night night~ 🌙", "The stars are out!", "Sleepy time..."],
   };
   const msgs = messages[to];
-  speechBubble = { text: msgs[Math.floor(Math.random() * msgs.length)], life: 180, maxLife: 180 };
+  queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 180);
 }
 
 // --- Time of Day ---
@@ -361,7 +361,7 @@ function startIdleAnimation(): void {
   if (!speechBubble && Math.random() < 0.4) {
     const msgs = idleAnimMessages[idleAnim];
     const msg = msgs[Math.floor(Math.random() * msgs.length)];
-    speechBubble = { text: msg, life: 90, maxLife: 90 };
+    queueSpeechBubble(msg, 90);
   }
 }
 
@@ -569,10 +569,27 @@ interface SpeechBubble {
   text: string;
   life: number;
   maxLife: number;
+  slideOffset: number; // vertical slide offset for transition animation
 }
 
 let speechBubble: SpeechBubble | null = null;
+let speechBubbleQueue: { text: string; life: number }[] = [];
+const SPEECH_QUEUE_MAX = 5;
 let speechCooldown = 300; // Start with a short cooldown so first bubble comes soon
+
+function queueSpeechBubble(text: string, life: number, immediate = false): void {
+  if (immediate || !speechBubble) {
+    // Show immediately — replace current bubble
+    speechBubble = { text, life, maxLife: life, slideOffset: 0 };
+    // Clear queue when showing an immediate/priority bubble
+    if (immediate) speechBubbleQueue = [];
+  } else {
+    // Queue it up if there's already a bubble showing
+    if (speechBubbleQueue.length < SPEECH_QUEUE_MAX) {
+      speechBubbleQueue.push({ text, life });
+    }
+  }
+}
 
 // --- Gravity & Falling ---
 let isFalling = false;
@@ -669,7 +686,7 @@ const shortcutGreetings = [
 window.tamashii.onShortcutToggled((shown) => {
   if (shown) {
     const msg = shortcutGreetings[Math.floor(Math.random() * shortcutGreetings.length)];
-    speechBubble = { text: msg, life: 150, maxLife: 150 };
+    queueSpeechBubble(msg, 150);
     playGreetingSound();
     // Happy reaction
     squishAmount = 0.7;
@@ -735,7 +752,7 @@ function spawnSpeechBubble(): void {
     text = nameMessages[Math.floor(Math.random() * nameMessages.length)];
   }
 
-  speechBubble = { text, life: 180, maxLife: 180 }; // ~3 seconds
+  queueSpeechBubble(text, 180);
 }
 
 // --- Drag ---
@@ -862,7 +879,7 @@ function releaseCharge(): void {
     petHappiness = Math.min(100, petHappiness + 1);
   }
 
-  speechBubble = { text: msg, life: 150, maxLife: 150 };
+  queueSpeechBubble(msg, 150);
   squishAmount = 0.5 + chargeReleaseLevel * 0.5;
   isHappy = true;
   happyTimer = 60 + Math.floor(chargeReleaseLevel * 60);
@@ -978,7 +995,7 @@ window.tamashii.onSetAccessory((accessory: string) => {
       "Fashion icon!",
       "Looking good!",
     ];
-    speechBubble = { text: accessoryMessages[Math.floor(Math.random() * accessoryMessages.length)], life: 180, maxLife: 180 };
+    queueSpeechBubble(accessoryMessages[Math.floor(Math.random() * accessoryMessages.length)], 180);
     playGreetingSound();
     squishAmount = 0.5;
     isHappy = true;
@@ -993,7 +1010,7 @@ window.tamashii.onPromptName(async () => {
     petName = result;
     saveGame();
     if (petName) {
-      speechBubble = { text: oldName ? `Call me ${petName} now!` : `I'm ${petName}! Nice to meet you!`, life: 200, maxLife: 200 };
+      queueSpeechBubble(oldName ? `Call me ${petName} now!` : `I'm ${petName}! Nice to meet you!`, 200, true);
       playGreetingSound();
       squishAmount = 0.7;
       isHappy = true;
@@ -1079,7 +1096,7 @@ function celebrateEvolution(stage: GrowthStage): void {
   };
   const msgs = messages[stage];
   if (msgs.length > 0) {
-    speechBubble = { text: msgs[Math.floor(Math.random() * msgs.length)], life: 240, maxLife: 240 };
+    queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 240);
   }
 
   // Desktop notification for evolution milestone
@@ -1181,7 +1198,7 @@ function feedPet(): void {
   isHappy = true;
   happyTimer = 60;
   const feedMessages = ["Yummy!", "Nom nom~!", "Delicious! ♥", "Thank you!", "So tasty~!"];
-  speechBubble = { text: feedMessages[Math.floor(Math.random() * feedMessages.length)], life: 150, maxLife: 150 };
+  queueSpeechBubble(feedMessages[Math.floor(Math.random() * feedMessages.length)], 150, true);
   // Feeding also gives a small happiness boost
   petHappiness = Math.min(100, petHappiness + 5);
   saveGame();
@@ -1194,7 +1211,7 @@ function petNap(): void {
   playNapSound();
   squishAmount = 0.3;
   const napMessages = ["*zzz*... Refreshed!", "Power nap~!", "That was nice...", "Feel better now!"];
-  speechBubble = { text: napMessages[Math.floor(Math.random() * napMessages.length)], life: 150, maxLife: 150 };
+  queueSpeechBubble(napMessages[Math.floor(Math.random() * napMessages.length)], 150, true);
   saveGame();
 }
 
@@ -1240,7 +1257,7 @@ function updatePetStats(): void {
       }
     }
     if (lowStatMsg && Math.random() < 0.3) { // 30% chance when eligible
-      speechBubble = { text: lowStatMsg, life: 150, maxLife: 150 };
+      queueSpeechBubble(lowStatMsg, 150);
       lowStatSpeechCooldown = 600; // 10 second cooldown
     }
   }
@@ -1331,7 +1348,7 @@ function startMinigame(): void {
   minigameSpawnTimer = 0;
   minigameCombo = 0;
   minigameBestCombo = 0;
-  speechBubble = { text: "Catch the stars!", life: 120, maxLife: 120 };
+  queueSpeechBubble("Catch the stars!", 120, true);
   playGreetingSound();
   squishAmount = 0.5;
   isHappy = true;
@@ -1370,7 +1387,7 @@ function endMinigame(): void {
     msg = `New record: ${minigameScore}! ⭐`;
     window.tamashii.showNotification("⭐ New Star Catcher Record!", `You caught ${minigameScore} stars! Can you beat it next time?`);
   }
-  speechBubble = { text: msg, life: 240, maxLife: 240 };
+  queueSpeechBubble(msg, 240);
 
   // Celebration sparkles
   const cx = canvas.width / 2;
@@ -1467,9 +1484,9 @@ function tryClickMinigameStar(clickX: number, clickY: number): boolean {
 
       // Combo speech bubbles at milestones
       if (minigameCombo === 5) {
-        speechBubble = { text: "5 combo!", life: 60, maxLife: 60 };
+        queueSpeechBubble("5 combo!", 60);
       } else if (minigameCombo === 10) {
-        speechBubble = { text: "10 combo! On fire!", life: 60, maxLife: 60 };
+        queueSpeechBubble("10 combo! On fire!", 60);
       }
 
       minigameStars.splice(i, 1);
@@ -1602,7 +1619,7 @@ function startMemoryGame(): void {
   memoryGameRound = 0;
   memoryGameScore = 0;
   memoryGameOrbPulse = 0;
-  speechBubble = { text: "Watch closely!", life: 90, maxLife: 90 };
+  queueSpeechBubble("Watch closely!", 90, true);
   playGreetingSound();
   squishAmount = 0.5;
   isHappy = true;
@@ -1651,7 +1668,7 @@ function endMemoryGame(): void {
     msg = `New record: round ${memoryGameScore}! 🧠`;
     window.tamashii.showNotification("🧠 New Memory Match Record!", `You reached round ${memoryGameScore}! Think you can go further?`);
   }
-  speechBubble = { text: msg, life: 240, maxLife: 240 };
+  queueSpeechBubble(msg, 240);
 
   // Celebration sparkles
   const cx = canvas.width / 2;
@@ -1732,7 +1749,7 @@ function updateMemoryGame(): void {
         memoryGameFlashTimer = 40;
         memoryGameScore = memoryGameRound;
         const msgs = ["Nice!", "Good memory!", "Keep going~", "Perfect! ✨", "Impressive!"];
-        speechBubble = { text: msgs[Math.min(memoryGameRound - 1, msgs.length - 1)], life: 50, maxLife: 50 };
+        queueSpeechBubble(msgs[Math.min(memoryGameRound - 1, msgs.length - 1)], 50);
       } else {
         memoryGamePhase = "waiting";
       }
@@ -1998,7 +2015,7 @@ function checkAchievements(): void {
 function celebrateAchievement(a: Achievement): void {
   // Show achievement speech bubble
   playAchievementSound();
-  speechBubble = { text: `${a.icon} ${a.unlockMessage}`, life: 240, maxLife: 240 };
+  queueSpeechBubble(`${a.icon} ${a.unlockMessage}`, 240, true);
 
   // Big sparkle + heart burst
   achievementCelebrating = true;
@@ -2443,7 +2460,7 @@ window.tamashii.loadSaveData().then((raw) => {
     const data = raw as SaveData;
     if (data.totalClicks > 0 || data.totalSpins > 0) {
       const greeting = petName ? `Hi! It's me, ${petName}! ♥` : "I remember you! ♥";
-      speechBubble = { text: greeting, life: 180, maxLife: 180 };
+      queueSpeechBubble(greeting, 180);
       squishAmount = 0.5;
       isHappy = true;
       happyTimer = 60;
@@ -2468,7 +2485,7 @@ function startSpin(): void {
 
   // Speech bubble
   const msg = spinMessages[Math.floor(Math.random() * spinMessages.length)];
-  speechBubble = { text: msg, life: 120, maxLife: 120 };
+  queueSpeechBubble(msg, 120);
 
   // Burst of sparkles around the pet
   const cx = canvas.width / 2;
@@ -2521,29 +2538,29 @@ function onPetClicked(): void {
 
   // Combo milestones
   if (comboCount === 5) {
-    speechBubble = { text: "Nice combo~!", life: 120, maxLife: 120 };
+    queueSpeechBubble("Nice combo~!", 120);
     spawnComboSparkles(8);
     comboShakeAmount = 2;
   } else if (comboCount === 10) {
-    speechBubble = { text: "MEGA COMBO!!", life: 150, maxLife: 150 };
+    queueSpeechBubble("MEGA COMBO!!", 150);
     playComboMilestoneSound();
     spawnComboSparkles(16);
     petHappiness = Math.min(100, petHappiness + 5);
     comboShakeAmount = 4;
   } else if (comboCount === 15) {
-    speechBubble = { text: "UNSTOPPABLE!!!", life: 150, maxLife: 150 };
+    queueSpeechBubble("UNSTOPPABLE!!!", 150);
     playComboMilestoneSound();
     spawnComboSparkles(24);
     petHappiness = Math.min(100, petHappiness + 8);
     comboShakeAmount = 6;
   } else if (comboCount === 20) {
-    speechBubble = { text: "LEGENDARY!!!! ♥♥♥", life: 180, maxLife: 180 };
+    queueSpeechBubble("LEGENDARY!!!! ♥♥♥", 180);
     playComboMilestoneSound();
     spawnComboSparkles(32);
     petHappiness = Math.min(100, petHappiness + 10);
     comboShakeAmount = 8;
   } else if (comboCount > 20 && comboCount % 10 === 0) {
-    speechBubble = { text: `${comboCount}x COMBO!!!`, life: 150, maxLife: 150 };
+    queueSpeechBubble(`${comboCount}x COMBO!!!`, 150);
     playComboMilestoneSound();
     spawnComboSparkles(24);
     comboShakeAmount = 6;
@@ -4057,7 +4074,7 @@ function drawSpeechBubble(cx: number, petTopY: number): void {
   const bubbleW = textWidth + padding * 2;
   const bubbleH = 22;
   const bubbleX = cx - bubbleW / 2;
-  const bubbleY = petTopY - bubbleH - 10;
+  const bubbleY = petTopY - bubbleH - 10 - speechBubble.slideOffset;
   const radius = 8;
 
   // Bubble background
@@ -4088,6 +4105,20 @@ function drawSpeechBubble(cx: number, petTopY: number): void {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(speechBubble.text, cx, bubbleY + bubbleH / 2);
+
+  // Queue indicator dots — show how many messages are waiting
+  if (speechBubbleQueue.length > 0) {
+    const dotCount = Math.min(speechBubbleQueue.length, 3);
+    const dotY = bubbleY + bubbleH + 12;
+    const dotSpacing = 5;
+    const startX = cx - ((dotCount - 1) * dotSpacing) / 2;
+    ctx.fillStyle = `rgba(100, 100, 120, ${alpha * 0.4})`;
+    for (let i = 0; i < dotCount; i++) {
+      ctx.beginPath();
+      ctx.arc(startX + i * dotSpacing, dotY, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   ctx.restore();
 }
@@ -4279,11 +4310,11 @@ function update(): void {
 
       // Speech bubbles at charge thresholds
       if (chargeLevel > 0.2 && chargeLevel < 0.25 && !speechBubble) {
-        speechBubble = { text: "Charging~!", life: 60, maxLife: 60 };
+        queueSpeechBubble("Charging~!", 60);
       } else if (chargeLevel > 0.5 && chargeLevel < 0.55 && !speechBubble) {
-        speechBubble = { text: "More power...!", life: 60, maxLife: 60 };
+        queueSpeechBubble("More power...!", 60);
       } else if (chargeLevel >= 0.99 && !speechBubble) {
-        speechBubble = { text: "MAX CHARGE!! ✨", life: 60, maxLife: 60 };
+        queueSpeechBubble("MAX CHARGE!! ✨", 60);
       }
     }
   } else if (!isDragging && isCharging) {
@@ -4485,10 +4516,21 @@ function update(): void {
   // Speech bubble logic
   if (speechBubble) {
     speechBubble.life--;
+    // Animate slide offset toward 0 (smooth entrance)
+    if (speechBubble.slideOffset > 0) {
+      speechBubble.slideOffset *= 0.85;
+      if (speechBubble.slideOffset < 0.5) speechBubble.slideOffset = 0;
+    }
     if (speechBubble.life <= 0) {
-      speechBubble = null;
-      // Cooldown before next bubble: 15-30 seconds
-      speechCooldown = 900 + Math.floor(Math.random() * 900);
+      // Check queue for next bubble
+      if (speechBubbleQueue.length > 0) {
+        const next = speechBubbleQueue.shift()!;
+        speechBubble = { text: next.text, life: next.life, maxLife: next.life, slideOffset: 15 };
+      } else {
+        speechBubble = null;
+        // Cooldown before next bubble: 15-30 seconds
+        speechCooldown = 900 + Math.floor(Math.random() * 900);
+      }
     }
   } else {
     speechCooldown--;
