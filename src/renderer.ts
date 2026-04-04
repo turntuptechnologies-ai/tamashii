@@ -2643,13 +2643,38 @@ function lerpProps(a: StageProportions, b: StageProportions, t: number): StagePr
   };
 }
 
+// Personality-based proportion adjustments
+function applyPersonalityProportions(props: StageProportions): StageProportions {
+  if (!petPersonality) return props;
+  const p = { ...props };
+  switch (petPersonality) {
+    case "shy":
+      // Shy pets have slightly larger, rounder eyes
+      p.eyeScale *= 1.12;
+      break;
+    case "gluttonous":
+      // Gluttonous pets are a bit wider/rounder
+      p.bodyWidth *= 1.08;
+      p.bodyHeight *= 1.04;
+      break;
+    case "curious":
+      // Curious pets have slightly wider eye spacing (alert, scanning)
+      p.eyeSpacing *= 1.06;
+      break;
+  }
+  return p;
+}
+
 function getStageProportions(): StageProportions {
+  let props: StageProportions;
   if (evolutionMorphing) {
     const from = getStageProportionsFor(evolutionMorphFrom);
     const to = getStageProportionsFor(evolutionMorphTo);
-    return lerpProps(from, to, easeInOutCubic(evolutionMorphProgress));
+    props = lerpProps(from, to, easeInOutCubic(evolutionMorphProgress));
+  } else {
+    props = getStageProportionsFor(currentGrowthStage);
   }
-  return getStageProportionsFor(currentGrowthStage);
+  return applyPersonalityProportions(props);
 }
 
 function applyStageColorShift(colors: { body: string; stroke: string; belly: string; foot: string }, stage: GrowthStage): { body: string; stroke: string; belly: string; foot: string } {
@@ -2929,12 +2954,16 @@ function drawFace(cx: number, cy: number, size: number): void {
 
     // Pupils — shift when doing look_around idle animation
     const pupilShift = idleAnim === "look_around" ? Math.sin(idleAnimProgress * Math.PI) * 3 * idleLookDirection : 0;
+    // Shy personality: pupils avert gaze (shift outward, looking away)
+    const shyAvert = petPersonality === "shy" ? 1.5 : 0;
+    // Curious personality: dilated pupils (bigger)
+    const curiousPupilScale = petPersonality === "curious" ? 1.15 : 1;
     ctx.beginPath();
-    ctx.ellipse(cx - eyeSpacing + 1 + pupilShift, eyeY + 1, 4 * es, 5 * es, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - eyeSpacing + 1 + pupilShift - shyAvert, eyeY + 1, 4 * es * curiousPupilScale, 5 * es * curiousPupilScale, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(cx + eyeSpacing + 1 + pupilShift, eyeY + 1, 4 * es, 5 * es, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + eyeSpacing + 1 + pupilShift + shyAvert, eyeY + 1, 4 * es * curiousPupilScale, 5 * es * curiousPupilScale, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#1a1a2e";
     ctx.fill();
 
@@ -2958,6 +2987,21 @@ function drawFace(cx: number, cy: number, size: number): void {
       ctx.ellipse(cx + eyeSpacing - 1 + pupilShift, eyeY + 2, 1.2, 1.2, 0, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
       ctx.fill();
+    }
+
+    // Sleepy personality: light droopy eyelids even during daytime
+    if (petPersonality === "sleepy" && !isSleepy()) {
+      const droopiness = 0.2;
+      for (const side of [-1, 1]) {
+        const ex = cx + side * eyeSpacing;
+        ctx.beginPath();
+        ctx.moveTo(ex - 9 * es, eyeY - 3 + droopiness * 5);
+        ctx.quadraticCurveTo(ex, eyeY - 7 + droopiness * 9, ex + 9 * es, eyeY - 3 + droopiness * 5);
+        ctx.strokeStyle = "#1a1a2e";
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      }
     }
   }
 
@@ -3020,6 +3064,16 @@ function drawFace(cx: number, cy: number, size: number): void {
     ctx.stroke();
   }
 
+  // Gluttonous personality: drool drop when hungry
+  if (petPersonality === "gluttonous" && petHunger < 60) {
+    const droolAlpha = Math.min((60 - petHunger) / 60, 0.7);
+    const droolBob = Math.sin(frame * 0.05) * 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx + 6, cy + 17 + droolBob, 2, 3 + droolBob * 0.3, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(140, 200, 255, ${droolAlpha})`;
+    ctx.fill();
+  }
+
   // Cheeks (blush — brighter when happy, dimmer at night, faded when sad/drained, scales with stage)
   let blushAlpha = isHappy ? 0.55 : 0.35;
   if (currentTimeOfDay === "night") blushAlpha *= 0.6;
@@ -3027,6 +3081,8 @@ function drawFace(cx: number, cy: number, size: number): void {
   if (isDrainedFromStats) blushAlpha *= 0.5; // pale when drained
   // Baby has rosier cheeks, adult has subtler blush
   if (currentGrowthStage === "baby") blushAlpha = Math.min(blushAlpha * 1.3, 0.7);
+  // Shy personality: permanently rosier cheeks
+  if (petPersonality === "shy") blushAlpha = Math.min(blushAlpha * 1.5, 0.75);
   const blushSize = (isHappy ? 7 : 6) * es;
   ctx.beginPath();
   ctx.ellipse(cx - eyeSpacing - 10 * es, cy + 5, blushSize, 4 * es, 0, 0, Math.PI * 2);
@@ -4255,12 +4311,16 @@ function update(): void {
     }
   }
 
-  // Spawn zzz particles when sleepy
-  if (currentTimeOfDay === "night") {
+  // Spawn zzz particles when sleepy (nighttime, or sleepy personality during day)
+  const shouldSpawnZzz = currentTimeOfDay === "night" || (petPersonality === "sleepy" && idleAnim === "none" && !isHappy);
+  if (shouldSpawnZzz) {
     zzzSpawnTimer++;
-    if (zzzSpawnTimer > 90 + Math.random() * 60) {
+    // Sleepy personality spawns less frequently during daytime
+    const zzzInterval = (currentTimeOfDay === "night") ? 90 : 200;
+    if (zzzSpawnTimer > zzzInterval + Math.random() * 60) {
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
+      const zzzSize = (currentTimeOfDay === "night") ? 10 + Math.random() * 6 : 7 + Math.random() * 4;
       particles.push({
         x: cx + 25,
         y: cy - 25,
@@ -4268,7 +4328,7 @@ function update(): void {
         vy: -(0.5 + Math.random() * 0.3),
         life: 90,
         maxLife: 90,
-        size: 10 + Math.random() * 6,
+        size: zzzSize,
         type: "zzz",
       });
       zzzSpawnTimer = 0;
@@ -5513,6 +5573,21 @@ function draw(): void {
     const morphPulse = Math.sin(evolutionMorphProgress * Math.PI * 3) * 0.04 * (1 - evolutionMorphProgress);
     ctx.translate(cx, feetY);
     ctx.scale(1 + morphPulse, 1 - morphPulse * 0.5);
+    ctx.translate(-cx, -feetY);
+  }
+
+  // Personality visual transforms
+  if (petPersonality === "energetic" && !isSpinning && !isDragging && idleAnim === "none") {
+    // Energetic pets have a subtle micro-jitter when standing still
+    const jitterX = (Math.sin(frame * 0.8) + Math.sin(frame * 1.3)) * 0.4;
+    const jitterY = (Math.cos(frame * 0.9) + Math.cos(frame * 1.1)) * 0.3;
+    ctx.translate(jitterX, jitterY);
+  }
+  if (petPersonality === "curious" && !isSpinning && idleAnim === "none") {
+    // Curious pets have a subtle persistent head tilt
+    const tilt = Math.sin(frame * 0.015) * 0.04;
+    ctx.translate(cx, feetY);
+    ctx.rotate(tilt);
     ctx.translate(-cx, -feetY);
   }
 

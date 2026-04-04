@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.40.0] — 2026-04-04 — Personality-Specific Visual Traits
+
+### Added
+- **Shy larger eyes** — shy pets have 12% larger eyes, making them look more timid and adorable
+- **Shy averted gaze** — shy pet pupils shift outward, looking away as if too bashful to make direct eye contact
+- **Shy enhanced blush** — shy pets have permanently rosier cheeks (50% stronger blush), always looking flustered
+- **Energetic micro-jitter** — energetic pets have a subtle body vibration when standing still, as if they can't contain their energy
+- **Curious head tilt** — curious pets gently tilt their head back and forth with a slow, inquisitive sway
+- **Curious dilated pupils** — curious pets have 15% larger pupils, wide-eyed with wonder and interest
+- **Curious wider eye spacing** — curious pets have slightly wider-set eyes (6% more spacing), giving an alert, scanning look
+- **Sleepy daytime droopy eyelids** — sleepy pets have subtly drooping eyelids even during the day, always looking half-asleep
+- **Sleepy daytime Z particles** — sleepy pets emit small, occasional floating Z particles during the day (smaller and less frequent than nighttime)
+- **Gluttonous rounder body** — gluttonous pets have an 8% wider and 4% taller body, giving them a plumper, well-fed appearance
+- **Gluttonous drool drop** — when hungry (below 60%), gluttonous pets show a small bobbing drool drop by their mouth
+
+**Why this feature:** Personality was introduced in v0.37.0 and fundamentally changed how each pet behaves — different stat decay rates, animation preferences, and speech patterns. But visually, a shy pet and an energetic pet looked identical at rest. You had to open the stats panel to even know what personality your pet had. Now personality is visible at a glance. A shy pet's big averted eyes and rosy cheeks are unmistakable. An energetic pet practically vibrates in place. A curious pet tilts its head like a puppy examining something new. A sleepy pet's droopy lids and floating Z's tell you it's perpetually drowsy. A gluttonous pet's round body and drool drop when hungry make its priorities clear. Each personality now has a distinct visual identity that you can recognize without checking any menu.
+
 ## [v0.39.0] — 2026-04-03 — Animated Evolution Transition
 
 ### Added
