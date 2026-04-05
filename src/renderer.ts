@@ -3,12 +3,13 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => Promise<void>;
       onSetColor: (callback: (colorId: string) => void) => void;
       promptPetName: (currentName: string) => Promise<string | null>;
       onPromptName: (callback: () => void) => void;
       onToggleWandering: (callback: () => void) => void;
       onToggleSound: (callback: () => void) => void;
+      onToggleNotifications: (callback: () => void) => void;
       onSetAccessory: (callback: (accessory: string) => void) => void;
       updateMood: (mood: string) => void;
       onSystemStats: (callback: (stats: { cpu: number; mem: number }) => void) => void;
@@ -34,6 +35,7 @@ const ctx = canvas.getContext("2d")!;
 
 // --- Sound Effects (Web Audio API) ---
 let soundEnabled = true;
+let notificationsEnabled = true;
 const audioCtx = new AudioContext();
 
 function playTone(freq: number, duration: number, type: OscillatorType = "sine", volume = 0.15, detune = 0): void {
@@ -1117,6 +1119,7 @@ canvas.addEventListener("contextmenu", (e) => {
     timeOfDay: currentTimeOfDay,
     wanderingEnabled,
     soundEnabled,
+    notificationsEnabled,
     petName,
     accessory: currentAccessory,
     colorPalette: currentColorPalette,
@@ -1138,6 +1141,14 @@ window.tamashii.onToggleSound(() => {
   if (soundEnabled) {
     playClickSound(); // Confirm sound is on
   }
+});
+
+// Listen for toggle-notifications from main process
+window.tamashii.onToggleNotifications(() => {
+  notificationsEnabled = !notificationsEnabled;
+  const msg = notificationsEnabled ? "🔔 Notifications on!" : "🔕 Notifications off";
+  queueSpeechBubble(msg, 120, true);
+  saveGame();
 });
 
 // --- Pet Name ---
@@ -1461,6 +1472,15 @@ let lastStatDecayTime = Date.now();
 const STAT_DECAY_INTERVAL = 60000; // check decay every 60 seconds
 let lowStatSpeechCooldown = 0; // prevent spam of low-stat messages
 
+// --- Notification Reminders ---
+const NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between notifications per stat
+const NOTIFICATION_THRESHOLD = 15; // notify when stat drops below this
+let lastHungerNotifTime = 0;
+let lastHappinessNotifTime = 0;
+let lastEnergyNotifTime = 0;
+let lastNotifSentTime = 0; // timestamp of most recent notification (any stat)
+let careAfterNotifCount = 0; // times user responded to low-stat notification with care
+
 const hungryMessages = [
   "I'm hungry...",
   "Feed me please~",
@@ -1485,7 +1505,15 @@ const tiredMessages = [
   "Sleepy...",
 ];
 
+function trackCareAfterNotification(): void {
+  if (lastNotifSentTime > 0 && Date.now() - lastNotifSentTime < 60000) {
+    careAfterNotifCount++;
+    lastNotifSentTime = 0; // reset so a single notification only counts once
+  }
+}
+
 function feedPet(): void {
+  trackCareAfterNotification();
   lastInteractionTime = Date.now();
   petHunger = Math.min(100, petHunger + 25);
   addCarePoints(3);
@@ -1501,6 +1529,7 @@ function feedPet(): void {
 }
 
 function petNap(): void {
+  trackCareAfterNotification();
   lastInteractionTime = Date.now();
   petEnergy = Math.min(100, petEnergy + 20);
   addCarePoints(2);
@@ -1558,6 +1587,39 @@ function updatePetStats(): void {
     }
   }
   if (lowStatSpeechCooldown > 0) lowStatSpeechCooldown--;
+
+  // --- Desktop notification reminders for critically low stats ---
+  if (notificationsEnabled) {
+    const now = Date.now();
+    const petDisplayName = petName || "Your pet";
+
+    if (petHunger < NOTIFICATION_THRESHOLD && now - lastHungerNotifTime > NOTIFICATION_COOLDOWN_MS) {
+      window.tamashii.showNotification(
+        `🍽️ ${petDisplayName} is hungry!`,
+        `Hunger is at ${Math.round(petHunger)}%. Press F or right-click to feed.`
+      );
+      lastHungerNotifTime = now;
+      lastNotifSentTime = now;
+    }
+
+    if (petHappiness < NOTIFICATION_THRESHOLD && now - lastHappinessNotifTime > NOTIFICATION_COOLDOWN_MS) {
+      window.tamashii.showNotification(
+        `😢 ${petDisplayName} is sad!`,
+        `Happiness is at ${Math.round(petHappiness)}%. Click, pet, or play a game!`
+      );
+      lastHappinessNotifTime = now;
+      lastNotifSentTime = now;
+    }
+
+    if (petEnergy < NOTIFICATION_THRESHOLD && currentTimeOfDay !== "night" && now - lastEnergyNotifTime > NOTIFICATION_COOLDOWN_MS) {
+      window.tamashii.showNotification(
+        `😴 ${petDisplayName} is exhausted!`,
+        `Energy is at ${Math.round(petEnergy)}%. Press N for a power nap!`
+      );
+      lastEnergyNotifTime = now;
+      lastNotifSentTime = now;
+    }
+  }
 }
 
 function drawStatBars(): void {
@@ -2312,6 +2374,11 @@ const achievements: Achievement[] = [
     icon: "🎨", unlockMessage: "Showing my true colors~!",
     condition: () => currentColorPalette !== "default", unlocked: false,
   },
+  {
+    id: "attentive_owner", name: "Attentive Owner", description: "Respond to 3 notification reminders",
+    icon: "🔔", unlockMessage: "You always come when I call~!",
+    condition: () => careAfterNotifCount >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2803,6 +2870,8 @@ interface SaveData {
   diary: DiaryEntry[];
   totalPhotos: number;
   colorPalette: string;
+  notificationsEnabled: boolean;
+  careAfterNotifCount: number;
   version: number;
 }
 
@@ -2834,6 +2903,8 @@ function buildSaveData(): SaveData {
     diary: petDiary,
     totalPhotos,
     colorPalette: currentColorPalette,
+    notificationsEnabled,
+    careAfterNotifCount,
     version: 1,
   };
 }
@@ -2923,6 +2994,16 @@ function applySaveData(data: SaveData): void {
     currentColorPalette = data.colorPalette as ColorPaletteId;
   }
 
+  // Restore notifications preference
+  if (typeof data.notificationsEnabled === "boolean") {
+    notificationsEnabled = data.notificationsEnabled;
+  }
+
+  // Restore care-after-notification count
+  if (typeof data.careAfterNotifCount === "number") {
+    careAfterNotifCount = data.careAfterNotifCount;
+  }
+
   // Restore diary
   if (Array.isArray(data.diary)) {
     petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
@@ -3003,6 +3084,7 @@ function startSpin(): void {
 }
 
 function onPetClicked(): void {
+  trackCareAfterNotification();
   const now = Date.now();
   const timeSinceLastClick = now - lastClickTime;
   lastClickTime = now;

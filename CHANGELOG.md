@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.45.0] — 2026-04-05 — Notification Reminders
+
+### Added
+- **Desktop notification reminders** — when your pet's hunger, happiness, or energy drops below 15%, a desktop notification pops up to let you know, even if the pet window is minimized or behind other apps
+- **Smart cooldowns** — each stat has its own 5-minute cooldown to prevent notification spam; you'll only be reminded once per stat per 5 minutes
+- **Actionable notifications** — each notification tells you exactly what to do: "Press F to feed", "Click or play a game", "Press N for a power nap"
+- **Pet name in notifications** — notifications use your pet's name ("Mochi is hungry!") for a personal touch, or "Your pet" if unnamed
+- **Energy notification skips nighttime** — energy notifications are suppressed at night since energy naturally recharges then
+- **Context menu toggle** — enable or disable notifications from the Settings right-click menu ("🔔 Disable Notifications" / "🔕 Enable Notifications")
+- **Speech bubble feedback** — toggling notifications shows a confirmation bubble ("🔔 Notifications on!" / "🔕 Notifications off")
+- **Notification preference persistence** — your notification toggle is saved across sessions
+- **Attentive Owner achievement** — respond to 3 notification reminders within 60 seconds by feeding, napping, or petting your pet to unlock achievement #22
+- **Care tracking** — the system tracks when you respond to notifications with care actions (feeding, napping, clicking), rewarding attentive owners
+
+**Why this feature:** Tamashii already had low-stat speech bubbles that play when your pet is hungry, sad, or tired — but only if the pet window is visible and you happen to be looking at it. If the window is minimized, behind other apps, or on another virtual desktop, your pet suffers silently. Notification reminders fix that. Now when a stat drops critically low, a desktop notification appears no matter what you're doing. Click it and the pet window comes to the front. The notifications are respectful — each stat can only trigger once every 5 minutes, energy notifications are suppressed at night, and the whole system can be toggled off. The "Attentive Owner" achievement rewards users who respond quickly, turning stat management from a chore into a gentle, rewarding loop.
+
 ## [v0.44.0] — 2026-04-05 — Pet Color Customization
 
 ### Added

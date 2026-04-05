@@ -109,9 +109,9 @@ ipcMain.handle("prompt-pet-name", async (_event, currentName: string) => {
   });
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => {
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled, soundEnabled, petName, accessory, colorPalette } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled, notificationsEnabled, petName, accessory, colorPalette } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -190,6 +190,10 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           label: soundEnabled ? "🔊 Disable Sounds" : "🔇 Enable Sounds",
           click: () => { mainWindow?.webContents.send("toggle-sound"); },
         },
+        {
+          label: notificationsEnabled ? "🔔 Disable Notifications" : "🔕 Enable Notifications",
+          click: () => { mainWindow?.webContents.send("toggle-notifications"); },
+        },
         { type: "separator" as const },
         {
           label: petName ? `✏️ Rename Pet (${petName})` : "✏️ Name Your Pet",
@@ -234,7 +238,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.44.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.45.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
