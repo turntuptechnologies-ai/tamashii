@@ -3,43 +3,45 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.46.0 — Pet Toy System (2026-04-05)
+## Last completed: v0.47.0 — Pet Tricks (2026-04-05)
 
 ### What was done
-- Added 4 interactive toys: Bouncy Ball, Yarn Ball, Plush Bear, Squeaky Bone
-- Pet autonomously plays with its toy every 10-30 seconds with unique animations per toy type
-- Personality-based toy preferences: Energetic→ball, Curious→yarn, Shy/Sleepy→plush, Gluttonous→bone
-- Favorite toy grants double happiness (+8 vs +4) and extra sparkle particles
-- Context menu "🧸 Toys" submenu under Care with radio selection
-- Keyboard shortcut T to cycle through toys
-- `ToyType`, `ToyInfo`, `TOYS` array, `PERSONALITY_TOY_PREF` map for toy definitions
-- `setToy()`, `drawToy()`, `updateToy()`, `playToySqueak()` functions
-- Toy play state machine: idle → approaching → playing → celebrating → idle
-- `currentToy`, `totalToyPlays` added to SaveData interface, buildSaveData, applySaveData
-- `onSetToy` IPC channel added to preload bridge and renderer
-- Achievement #23: "Playtime!" (🧸) — watch your pet play with a toy 5 times
-- Diary entry logged when pet gets its first toy
+- Added 4 learnable tricks: Wave, Dance, Backflip, Twirl
+- Practice-to-master system: 3 practice sessions per trick, wobbly animations during learning, smooth when mastered
+- Unique animations per trick using transform-based rendering (rotation, scale, offset)
+- `TrickId`, `TrickInfo`, `TRICKS` array for trick definitions
+- `trickProgress` record tracking practice count per trick (0-3)
+- `performTrick()`, `completeTrickAnimation()`, `handleTrickShortcut()`, `updateTricks()`, `getTrickTransform()` functions
+- Active trick state: `activeTrick`, `trickAnimProgress`, `trickAnimFrame`, `trickIsPractice`
+- Autonomous trick performance every 45-90 seconds for mastered tricks
+- Context menu "🎪 Tricks" submenu under Care showing progress (0/3 → ✅)
+- Keyboard shortcut K to practice next unlearned trick or perform random mastered trick
+- `trickProgress` added to SaveData interface, buildSaveData, applySaveData
+- `onPerformTrick` IPC channel added to preload bridge and renderer
+- Achievement #24: "Trick Master" (🎪) — learn all 4 tricks
+- Diary entry logged when a trick is mastered
+- Guards added: idle animations, toy play, and other activities blocked during trick performance
 
 ### Thoughts for next cycle
-- **Settings window** — a dedicated in-canvas settings panel to consolidate name, accessory, color, toy, volume, notifications, wandering into one polished UI. The context menu submenus work but a panel would be more cohesive.
-- **Drag-and-drop feeding** — drag food items from a tray onto the pet. More interactive and playful than a menu click.
-- **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos. Track photo paths in save data.
-- **Toy interactions with butterfly** — the butterfly could land on the toy or fly away when the pet plays.
-- **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet.
-- **Weather-awareness** — fetch local weather and have pet react to rain, snow, sun with weather particles.
-- **Custom color mixer** — let users define their own RGB palette instead of presets only.
-- **Pet mood journal** — auto-log mood over time and show a mood graph/chart in stats panel.
-- **Toy collection / unlock system** — unlock new toys by reaching milestones (e.g., rare golden ball at 100 care points).
-- **Pet tricks** — teach the pet tricks (dance, wave, backflip) through repeated interaction patterns.
+- **Settings window** — a dedicated in-canvas settings panel to consolidate name, accessory, color, toy, volume, notifications, wandering into one polished UI
+- **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
+- **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos, track photo paths in save data
+- **Trick combos** — perform tricks in specific sequences for bonus effects (wave→dance→twirl = special combo animation)
+- **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet
+- **Weather-awareness** — fetch local weather and have pet react to rain, snow, sun with weather particles
+- **Custom color mixer** — let users define their own RGB palette instead of presets only
+- **Pet mood journal** — auto-log mood over time and show a mood graph/chart in stats panel
+- **Toy collection / unlock system** — unlock new toys by reaching milestones
+- **Mini-game: Trick Performance** — a rhythm game where you time trick performances for high scores
 
 ### Current architecture notes
-- Renderer is ~7000+ lines
-- Toy system is defined after the DreamBubble section (~line 558)
-- Toy play state machine: `toyPlayState` cycles through "idle" → "approaching" → "playing" → "celebrating"
-- `TOY_PLAY_INTERVAL_MIN` = 600 frames (~10s), `TOY_PLAY_INTERVAL_MAX` = 1800 frames (~30s)
-- Toy is drawn after footprints but before the shadow in draw()
-- `updateToy()` is called at end of update(), after updatePetStats()
-- Context menu data now includes `currentToy` alongside `wanderingEnabled`, `soundEnabled`, `notificationsEnabled`
-- Total achievements: 23
+- Renderer is ~7200+ lines
+- Trick system is defined after the Toy system section (~line 860)
+- Trick animation uses `getTrickTransform()` returning {rotation, scaleX, scaleY, offsetX, offsetY}
+- Transform is applied in draw() alongside spin/squish/wander transforms
+- `updateTricks()` is called at end of update(), after updateToy()
+- `activeTrick !== null` guards are added to startIdleAnimation, idle anim timer check, and toy play start
+- Context menu data now includes `trickProgress` alongside other state
+- Total achievements: 24
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

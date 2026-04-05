@@ -109,9 +109,9 @@ ipcMain.handle("prompt-pet-name", async (_event, currentName: string) => {
   });
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string }) => {
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string; trickProgress: Record<string, number> }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled, soundEnabled, notificationsEnabled, petName, accessory, colorPalette, currentToy } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled, notificationsEnabled, petName, accessory, colorPalette, currentToy, trickProgress } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -153,6 +153,28 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
             { label: "🧶 Yarn Ball", type: "radio" as const, checked: currentToy === "yarn", click: () => { mainWindow?.webContents.send("set-toy", "yarn"); } },
             { label: "🧸 Plush Bear", type: "radio" as const, checked: currentToy === "plush", click: () => { mainWindow?.webContents.send("set-toy", "plush"); } },
             { label: "🦴 Squeaky Bone", type: "radio" as const, checked: currentToy === "bone", click: () => { mainWindow?.webContents.send("set-toy", "bone"); } },
+          ],
+        },
+        { type: "separator" as const },
+        {
+          label: "🎪 Tricks",
+          submenu: [
+            {
+              label: (trickProgress?.wave >= 3 ? "✅" : `${trickProgress?.wave || 0}/3`) + " 👋 Wave",
+              click: () => { mainWindow?.webContents.send("perform-trick", "wave"); },
+            },
+            {
+              label: (trickProgress?.dance >= 3 ? "✅" : `${trickProgress?.dance || 0}/3`) + " 💃 Dance",
+              click: () => { mainWindow?.webContents.send("perform-trick", "dance"); },
+            },
+            {
+              label: (trickProgress?.backflip >= 3 ? "✅" : `${trickProgress?.backflip || 0}/3`) + " 🤸 Backflip",
+              click: () => { mainWindow?.webContents.send("perform-trick", "backflip"); },
+            },
+            {
+              label: (trickProgress?.twirl >= 3 ? "✅" : `${trickProgress?.twirl || 0}/3`) + " 🌀 Twirl",
+              click: () => { mainWindow?.webContents.send("perform-trick", "twirl"); },
+            },
           ],
         },
       ],
@@ -250,7 +272,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.46.0\nA cute autonomous desktop companion.\nBuilt with love by Claude Code & NOTO Ai.",
+          detail: "Version 0.47.0\nA cute autonomous desktop companion.\nBuilt with love by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

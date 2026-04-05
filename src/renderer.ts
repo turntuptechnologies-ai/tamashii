@@ -3,7 +3,7 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string; trickProgress: Record<string, number> }) => Promise<void>;
       onSetColor: (callback: (colorId: string) => void) => void;
       promptPetName: (currentName: string) => Promise<string | null>;
       onPromptName: (callback: () => void) => void;
@@ -27,6 +27,7 @@ declare global {
       onTakePhoto: (callback: () => void) => void;
       savePhoto: (dataUrl: string) => Promise<string | null>;
       onSetToy: (callback: (toyId: string) => void) => void;
+      onPerformTrick: (callback: (trickId: string) => void) => void;
     };
   }
 }
@@ -351,7 +352,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null) return;
   // Pick animation weighted by personality
   idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
@@ -753,7 +754,7 @@ function updateToy(): void {
 
   if (toyPlayState === "idle") {
     toyPlayTimer--;
-    if (toyPlayTimer <= 0 && idleAnim === "none" && !isSpinning && !isCharging) {
+    if (toyPlayTimer <= 0 && idleAnim === "none" && !isSpinning && !isCharging && activeTrick === null) {
       toyPlayState = "approaching";
       toyPlayAnimTimer = 0;
     }
@@ -854,6 +855,272 @@ function updateToy(): void {
       toyX = canvas.width / 2 + 50;
       toyY = canvas.height / 2 + 35;
     }
+  }
+}
+
+// --- Pet Tricks System ---
+type TrickId = "wave" | "dance" | "backflip" | "twirl";
+
+interface TrickInfo {
+  id: TrickId;
+  name: string;
+  icon: string;
+  duration: number;       // frames for full animation
+  practiceMessages: string[];
+  masteredMessages: string[];
+}
+
+const TRICKS: TrickInfo[] = [
+  {
+    id: "wave", name: "Wave", icon: "👋", duration: 50,
+    practiceMessages: ["Like this...? 👋", "Am I doing it?", "Wave... wave..."],
+    masteredMessages: ["Hi there! 👋", "Hello~! 👋", "*waves excitedly*"],
+  },
+  {
+    id: "dance", name: "Dance", icon: "💃", duration: 70,
+    practiceMessages: ["One two... three?", "Is this dancing?", "*stumbles a bit*"],
+    masteredMessages: ["♪ Dance time! ♪", "Watch me groove~!", "💃 Ta-da~!"],
+  },
+  {
+    id: "backflip", name: "Backflip", icon: "🤸", duration: 45,
+    practiceMessages: ["Okay here goes...", "Almost...!", "*wobbles* Whoa!"],
+    masteredMessages: ["FLIP! 🤸", "Nailed it!", "Watch this~!"],
+  },
+  {
+    id: "twirl", name: "Twirl", icon: "🌀", duration: 55,
+    practiceMessages: ["Round and... round...", "*dizzy*", "Whoa spinny~"],
+    masteredMessages: ["✨ Twirl~! ✨", "So graceful~!", "Round and round!"],
+  },
+];
+
+const TRICK_PRACTICES_TO_MASTER = 3;
+
+// Trick learning state: maps trick ID to number of practice sessions completed (3 = mastered)
+let trickProgress: Record<TrickId, number> = { wave: 0, dance: 0, backflip: 0, twirl: 0 };
+
+// Active trick animation state
+let activeTrick: TrickId | null = null;
+let trickAnimProgress = 0;       // 0 to 1
+let trickAnimFrame = 0;
+let trickIsPractice = false;     // true = wobbly learning animation
+
+// Autonomous trick performance timer
+let trickAutoTimer = 0;
+const TRICK_AUTO_MIN = 2700;  // ~45 seconds at 60fps
+const TRICK_AUTO_MAX = 5400;  // ~90 seconds at 60fps
+
+function isTrickMastered(trickId: TrickId): boolean {
+  return trickProgress[trickId] >= TRICK_PRACTICES_TO_MASTER;
+}
+
+function getMasteredTricks(): TrickId[] {
+  return TRICKS.filter(t => isTrickMastered(t.id)).map(t => t.id);
+}
+
+function getNextUnlearnedTrick(): TrickId | null {
+  for (const t of TRICKS) {
+    if (!isTrickMastered(t.id)) return t.id;
+  }
+  return null;
+}
+
+function playTrickSound(mastered: boolean): void {
+  if (mastered) {
+    // Bright triumphant jingle
+    playTone(600, 0.1, "sine", 0.1);
+    setTimeout(() => playTone(750, 0.1, "sine", 0.1), 80);
+    setTimeout(() => playTone(900, 0.15, "sine", 0.12), 160);
+  } else {
+    // Tentative learning sound — wobbly ascending
+    playTone(400, 0.1, "sine", 0.07);
+    setTimeout(() => playTone(480, 0.08, "sine", 0.06), 100);
+    setTimeout(() => playTone(520, 0.1, "sine", 0.08), 200);
+  }
+}
+
+function playTrickLearnedSound(): void {
+  // Celebration fanfare — longer and more excited than regular trick sound
+  playTone(523, 0.12, "sine", 0.1);
+  setTimeout(() => playTone(659, 0.12, "sine", 0.1), 80);
+  setTimeout(() => playTone(784, 0.12, "sine", 0.1), 160);
+  setTimeout(() => playTone(1047, 0.25, "sine", 0.14), 240);
+  setTimeout(() => playTone(1175, 0.3, "sine", 0.12), 360);
+}
+
+function performTrick(trickId: TrickId, practice: boolean): void {
+  if (activeTrick !== null || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive) return;
+
+  const trick = TRICKS.find(t => t.id === trickId)!;
+  activeTrick = trickId;
+  trickAnimProgress = 0;
+  trickAnimFrame = 0;
+  trickIsPractice = practice;
+  lastInteractionTime = Date.now();
+
+  isHappy = true;
+  happyTimer = trick.duration + 20;
+
+  if (practice) {
+    playTrickSound(false);
+    const msgs = trick.practiceMessages;
+    queueSpeechBubble(`${trick.icon} ${msgs[Math.floor(Math.random() * msgs.length)]}`, 120, true);
+  } else {
+    playTrickSound(true);
+    const msgs = trick.masteredMessages;
+    queueSpeechBubble(`${trick.icon} ${msgs[Math.floor(Math.random() * msgs.length)]}`, 120, true);
+    petHappiness = Math.min(100, petHappiness + 4);
+    addCarePoints(2);
+  }
+
+  // Sparkle particles
+  const pcx = canvas.width / 2;
+  const pcy = canvas.height / 2;
+  const sparkleCount = practice ? 3 : 6;
+  for (let i = 0; i < sparkleCount; i++) {
+    const angle = (i / sparkleCount) * Math.PI * 2;
+    particles.push({
+      x: pcx + Math.cos(angle) * 18,
+      y: pcy + Math.sin(angle) * 12,
+      vx: Math.cos(angle) * 1.2,
+      vy: Math.sin(angle) * 0.8,
+      life: 40 + Math.random() * 20,
+      maxLife: 40 + Math.random() * 20,
+      size: 2.5 + Math.random() * 2,
+      type: "sparkle",
+    });
+  }
+}
+
+function completeTrickAnimation(): void {
+  if (activeTrick === null) return;
+
+  const trickId = activeTrick;
+  const trick = TRICKS.find(t => t.id === trickId)!;
+
+  if (trickIsPractice) {
+    trickProgress[trickId] = Math.min(TRICK_PRACTICES_TO_MASTER, trickProgress[trickId] + 1);
+
+    if (isTrickMastered(trickId)) {
+      // Just mastered this trick!
+      playTrickLearnedSound();
+      queueSpeechBubble(`${trick.icon} I learned ${trick.name}!!! ✨`, 200, true);
+      squishAmount = 0.7;
+      addDiaryEntry("milestone", trick.icon, `Learned the ${trick.name} trick!`);
+
+      // Celebration particles
+      const pcx = canvas.width / 2;
+      const pcy = canvas.height / 2;
+      for (let i = 0; i < 8; i++) {
+        particles.push({
+          x: pcx + (Math.random() - 0.5) * 40,
+          y: pcy - 10,
+          vx: (Math.random() - 0.5) * 2,
+          vy: -(1.5 + Math.random() * 1.5),
+          life: 60 + Math.random() * 30,
+          maxLife: 60 + Math.random() * 30,
+          size: 5 + Math.random() * 3,
+          type: "heart",
+        });
+      }
+    } else {
+      const remaining = TRICK_PRACTICES_TO_MASTER - trickProgress[trickId];
+      queueSpeechBubble(`${trick.icon} ${remaining} more practice${remaining > 1 ? "s" : ""}!`, 100, false);
+    }
+  }
+
+  squishAmount = Math.max(squishAmount, 0.4);
+  activeTrick = null;
+  trickAnimProgress = 0;
+  trickAnimFrame = 0;
+  checkAchievements();
+  saveGame();
+}
+
+function handleTrickShortcut(): void {
+  if (activeTrick !== null || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive) return;
+
+  // If there's an unlearned trick, practice it; otherwise perform a random mastered trick
+  const nextUnlearned = getNextUnlearnedTrick();
+  if (nextUnlearned) {
+    performTrick(nextUnlearned, true);
+  } else {
+    const mastered = getMasteredTricks();
+    if (mastered.length > 0) {
+      const randomTrick = mastered[Math.floor(Math.random() * mastered.length)];
+      performTrick(randomTrick, false);
+    }
+  }
+}
+
+function updateTricks(): void {
+  // Update active trick animation
+  if (activeTrick !== null) {
+    const trick = TRICKS.find(t => t.id === activeTrick)!;
+    trickAnimFrame++;
+    trickAnimProgress = trickAnimFrame / trick.duration;
+    if (trickAnimProgress >= 1) {
+      completeTrickAnimation();
+    }
+    return; // Don't auto-trigger while performing
+  }
+
+  // Don't auto-trigger during other activities
+  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || shortcutHelpOpen || isSpinning || isCharging || toyPlayState !== "idle" || idleAnim !== "none") return;
+
+  // Autonomous trick performance — only mastered tricks
+  const mastered = getMasteredTricks();
+  if (mastered.length === 0) return;
+
+  trickAutoTimer--;
+  if (trickAutoTimer <= 0) {
+    const randomTrick = mastered[Math.floor(Math.random() * mastered.length)];
+    performTrick(randomTrick, false);
+    trickAutoTimer = TRICK_AUTO_MIN + Math.floor(Math.random() * (TRICK_AUTO_MAX - TRICK_AUTO_MIN));
+  }
+}
+
+// Get trick animation transform values for the draw function
+function getTrickTransform(): { rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number } | null {
+  if (activeTrick === null) return null;
+
+  const t = trickAnimProgress;
+  // Eased progress (ease-in-out)
+  const eased = 0.5 - 0.5 * Math.cos(t * Math.PI);
+  // Wobble factor for practice (adds jitter)
+  const wobble = trickIsPractice ? Math.sin(t * Math.PI * 12) * 0.08 * (1 - t) : 0;
+
+  switch (activeTrick) {
+    case "wave": {
+      // Tilt side to side like waving
+      const waveCycles = 3;
+      const tiltAngle = Math.sin(t * Math.PI * waveCycles * 2) * 0.25;
+      const hop = Math.sin(t * Math.PI) * 3;
+      return { rotation: tiltAngle + wobble, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: -hop };
+    }
+    case "dance": {
+      // Bounce up and down with left-right sway
+      const bounceCycles = 4;
+      const bounce = Math.abs(Math.sin(t * Math.PI * bounceCycles)) * 12;
+      const sway = Math.sin(t * Math.PI * bounceCycles) * 0.15;
+      const squishDanceY = 1 - Math.abs(Math.sin(t * Math.PI * bounceCycles)) * 0.1;
+      const squishDanceX = 1 + Math.abs(Math.sin(t * Math.PI * bounceCycles)) * 0.08;
+      return { rotation: sway + wobble, scaleX: squishDanceX, scaleY: squishDanceY, offsetX: 0, offsetY: -bounce };
+    }
+    case "backflip": {
+      // Full rotation with a parabolic jump arc
+      const jumpHeight = Math.sin(t * Math.PI) * 30;
+      const rotation = eased * Math.PI * 2;
+      return { rotation: rotation + wobble * 3, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: -jumpHeight };
+    }
+    case "twirl": {
+      // Graceful slow spin with slight vertical pulse
+      const twistAngle = eased * Math.PI * 3; // 1.5 full rotations
+      const pulse = Math.sin(t * Math.PI * 2) * 5;
+      const breathe = 1 + Math.sin(t * Math.PI * 4) * 0.05;
+      return { rotation: twistAngle + wobble * 2, scaleX: breathe, scaleY: breathe, offsetX: 0, offsetY: -pulse };
+    }
+    default:
+      return null;
   }
 }
 
@@ -1425,6 +1692,7 @@ canvas.addEventListener("contextmenu", (e) => {
     accessory: currentAccessory,
     colorPalette: currentColorPalette,
     currentToy,
+    trickProgress: { ...trickProgress },
   });
 });
 
@@ -1459,6 +1727,16 @@ window.tamashii.onSetToy((toyId: string) => {
   if (validToys.includes(toyId as ToyType)) {
     setToy(toyId as ToyType);
     checkAchievements();
+  }
+});
+
+// Listen for trick commands from main process context menu
+window.tamashii.onPerformTrick((trickId: string) => {
+  const validTricks: TrickId[] = ["wave", "dance", "backflip", "twirl"];
+  if (validTricks.includes(trickId as TrickId)) {
+    const tid = trickId as TrickId;
+    const mastered = isTrickMastered(tid);
+    performTrick(tid, !mastered);
   }
 });
 
@@ -2695,6 +2973,11 @@ const achievements: Achievement[] = [
     icon: "🧸", unlockMessage: "I love my toys~!",
     condition: () => totalToyPlays >= 5, unlocked: false,
   },
+  {
+    id: "trick_master", name: "Trick Master", description: "Learn all 4 pet tricks",
+    icon: "🎪", unlockMessage: "I know ALL the tricks~!",
+    condition: () => getMasteredTricks().length === TRICKS.length, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -3190,6 +3473,7 @@ interface SaveData {
   careAfterNotifCount: number;
   currentToy: string;
   totalToyPlays: number;
+  trickProgress: Record<string, number>;
   version: number;
 }
 
@@ -3225,6 +3509,7 @@ function buildSaveData(): SaveData {
     careAfterNotifCount,
     currentToy,
     totalToyPlays,
+    trickProgress: { ...trickProgress },
     version: 1,
   };
 }
@@ -3336,6 +3621,21 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof data.totalToyPlays === "number") {
     totalToyPlays = data.totalToyPlays;
+  }
+
+  // Restore trick progress
+  if (data.trickProgress && typeof data.trickProgress === "object") {
+    const validTricks: TrickId[] = ["wave", "dance", "backflip", "twirl"];
+    for (const tid of validTricks) {
+      const val = (data.trickProgress as Record<string, number>)[tid];
+      if (typeof val === "number") {
+        trickProgress[tid] = Math.min(TRICK_PRACTICES_TO_MASTER, Math.max(0, val));
+      }
+    }
+    // Initialize auto timer if any tricks are mastered
+    if (getMasteredTricks().length > 0) {
+      trickAutoTimer = TRICK_AUTO_MIN + Math.floor(Math.random() * (TRICK_AUTO_MAX - TRICK_AUTO_MIN));
+    }
   }
 
   // Restore diary
@@ -5182,7 +5482,7 @@ function update(): void {
   } else {
     // Check if it's time to try an idle animation
     const timeSinceInteraction = Date.now() - lastInteractionTime;
-    if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive && !memoryGameActive) {
+    if (timeSinceInteraction > IDLE_ANIM_IDLE_THRESHOLD && !isHappy && !isYawning && !isSpinning && !isDragging && !isCharging && !minigameActive && !memoryGameActive && activeTrick === null) {
       idleAnimTimer++;
       const idleFreqMult = petPersonality ? PERSONALITY_IDLE_FREQUENCY[petPersonality] : 1;
       if (idleAnimTimer >= IDLE_ANIM_COOLDOWN / idleFreqMult) {
@@ -5902,6 +6202,9 @@ function update(): void {
 
   // Toy interactions
   updateToy();
+
+  // Trick animations
+  updateTricks();
 }
 
 function drawGrowthMark(cx: number, cy: number, size: number): void {
@@ -6493,6 +6796,14 @@ function draw(): void {
     ctx.rotate(easedAngle);
     ctx.translate(-cx, -cy);
   }
+  // Trick animation transform
+  const trickTx = getTrickTransform();
+  if (trickTx) {
+    ctx.translate(cx + trickTx.offsetX, cy + trickTx.offsetY);
+    ctx.rotate(trickTx.rotation);
+    ctx.scale(trickTx.scaleX, trickTx.scaleY);
+    ctx.translate(-cx, -cy);
+  }
   // Lean tilt when wandering (rotate around feet)
   if (Math.abs(wanderLean) > 0.01 && !isSpinning) {
     ctx.translate(cx, feetY);
@@ -6945,6 +7256,7 @@ function drawShortcutHelp(): void {
     ["P", "Take Photo"],
     ["C", "Cycle Color"],
     ["T", "Cycle Toy"],
+    ["K", "Practice/Do Trick"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -7101,6 +7413,11 @@ window.addEventListener("keydown", (e) => {
       checkAchievements();
       break;
     }
+    case "k":
+      handleTrickShortcut();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
     case "c": {
       // Cycle to next color palette
       const paletteIds = COLOR_PALETTES.map(p => p.id);

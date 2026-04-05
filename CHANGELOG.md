@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.47.0] — 2026-04-05 — Pet Tricks
+
+### Added
+- **4 learnable tricks** — teach your pet Wave (👋), Dance (💃), Backflip (🤸), and Twirl (🌀), each with a unique animation
+- **Practice-to-master learning** — each trick needs 3 practice sessions to master; practice animations are endearingly wobbly and imperfect, while mastered tricks are smooth and confident
+- **Unique trick animations** — Wave tilts side-to-side, Dance bounces with sway, Backflip does a full aerial rotation with a parabolic jump arc, Twirl gracefully spins 1.5 rotations with a breathing pulse
+- **Keyboard shortcut K** — press K to practice the next unlearned trick, or perform a random mastered trick
+- **Context menu trick picker** — select any trick from the new "🎪 Tricks" submenu under Care, showing learning progress (0/3, 1/3, 2/3, ✅) for each trick
+- **Autonomous trick performance** — once mastered, the pet randomly performs learned tricks every 45-90 seconds when idle, showing off on its own
+- **Speech bubble reactions** — unique messages for practice ("Like this...? 👋", "*stumbles a bit*") and mastered performance ("♪ Dance time! ♪", "FLIP! 🤸")
+- **Sound effects** — tentative wobbly sounds during practice, bright triumphant jingles for mastered performances, and a special celebration fanfare when a trick is learned
+- **Happiness and care boosts** — performing mastered tricks grants +4 happiness and +2 care points
+- **Sparkle particles** — 3 sparkles during practice, 6 during mastered performance, plus a heart burst when a trick is newly learned
+- **Trick progress persistence** — all learning progress is saved across sessions
+- **Diary logging** — learning a new trick is recorded in the pet diary
+- **Trick Master achievement** — learn all 4 tricks to unlock achievement #24 (🎪)
+- **Shortcut help updated** — K for Practice/Do Trick now appears in the keyboard shortcuts overlay
+
+**Why this feature:** Tamashii pets already had a rich interaction model — clicking, feeding, toys, mini-games, and idle animations. But the pet's relationship with its owner was mostly one-directional: you do things to the pet, and it reacts. The trick system adds a two-way learning dynamic. You practice with your pet, watching it stumble through wobbly attempts, and over three sessions it masters each trick. The progression from clumsy practice to confident performance creates a genuine sense of teaching and bonding. Once learned, tricks become part of the pet's autonomous personality — it'll wave at you, break into a dance, or nail a backflip on its own, making the desktop feel alive with a companion that's truly growing and showing off what you taught it.
+
 ## [v0.46.0] — 2026-04-05 — Pet Toy System
 
 ### Added
