@@ -3,45 +3,41 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.43.0 — Pet Photo Mode (2026-04-04)
+## Last completed: v0.44.0 — Pet Color Customization (2026-04-05)
 
 ### What was done
-- Added `takePhoto()` function that captures the current canvas state into a polaroid-style framed PNG
-- Offscreen canvas rendering: white polaroid frame with rounded corners, subtle drop shadow, pet name + date in italic serif at the bottom, small heart decoration
-- Camera flash: `photoFlashAlpha` white overlay that decays at 0.06/frame, drawn after all other content in `draw()`
-- Shutter sound: three-tone click-slide effect using `playTone()`
-- Save dialog via Electron's `dialog.showSaveDialog()` — defaults to Pictures folder with timestamped filename
-- IPC: `save-photo` handle in main.ts (receives base64 data URL, writes PNG), `onTakePhoto` channel for context menu trigger
-- Preload bridge: `savePhoto(dataUrl)` and `onTakePhoto(callback)` exposed
-- Keyboard shortcut `P` triggers `takePhoto()`, added to shortcut help overlay
-- Context menu: "📸 Take Photo" added to Info submenu
-- `totalPhotos` counter persisted in SaveData, incremented on successful save
-- Diary entry logged on each photo save: "Photo saved! (Photo #N)"
-- Sparkle particle burst on successful save (6 sparkles)
-- Achievement #20: "Say Cheese!" — take your first pet photo
-- Speech bubble "📸 Say cheese~!" on successful save, "Maybe next time~" if cancelled
-- Photo mode blocked during mini-games, stats/diary/help overlays
+- Added 8 color palettes: Classic Blue (default), Rose Pink, Mint Green, Sunset Orange, Lavender, Golden, Midnight, Peach
+- Each palette defines body/stroke/belly/foot colors for all four times of day (morning, afternoon, evening, night)
+- `ColorPalette` interface and `COLOR_PALETTES` array defined near accessories section
+- `getColorPalette()` helper returns current palette; `getBodyColors()` now reads from palette instead of hardcoded switch
+- Context menu: "�� Colors" radio submenu added under Settings, after Accessories
+- IPC: `set-color` channel sends palette ID from main to renderer, `onSetColor` in preload bridge
+- Keyboard shortcut `C` cycles through palettes sequentially
+- `colorPalette` field added to `SaveData`, persisted in `buildSaveData()` and restored in `applySaveData()`
+- Diary entry logged on color change (type "accessory", icon "🎨")
+- Achievement #21: "True Colors" — customize your pet's color (condition: `currentColorPalette !== "default"`)
+- Speech bubble reaction + squish + happy animation on color change
+- Shortcut help overlay updated with `C` for Cycle Color
+- All existing color interactions preserved: growth stage shifts, stress warmth shift, hunger desaturation, evolution morph color blending
 
 ### Thoughts for next cycle
-- **Settings window** — a dedicated in-canvas settings panel to consolidate name, accessory, volume, wandering, and other toggles. The context menu works but a settings panel would be more polished.
-- **Drag-and-drop feeding** — drag food items onto the pet from a tray instead of clicking a menu item. More interactive and playful.
-- **Photo gallery** — an in-canvas gallery that displays thumbnails of saved photos. Could track photo paths in save data.
-- **Photo filters** — sepia, vintage, sparkle overlay, or seasonal frame styles when taking photos.
+- **Settings window** — a dedicated in-canvas settings panel to consolidate name, accessory, color, volume, wandering into one polished UI. The context menu submenus work but a panel would be more cohesive.
+- **Drag-and-drop feeding** — drag food items from a tray onto the pet. More interactive and playful than a menu click.
+- **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos. Track photo paths in save data.
+- **Photo filters** — sepia, vintage, sparkle overlay, or seasonal frame styles.
 - **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet.
-- **Diary milestone entries** — log feeding milestones (first feed, 50th, 100th), first spin, first game played, high score beaten, combo records. More events = richer diary history.
-- **Idle mini-animations expansion** — more variety for each personality type.
-- **Weather-awareness** — fetch local weather and have pet react to rain, snow, sun. Could add weather particles.
-- **Pet customization colors** — let users pick body color or unlock new color palettes through achievements.
+- **Weather-awareness** — fetch local weather and have pet react to rain, snow, sun with weather particles.
+- **Idle mini-animations expansion** — more variety per personality type.
+- **Notification reminders** — desktop notifications when stats get critically low (hungry, sad, tired).
+- **Custom color mixer** — let users define their own RGB palette instead of presets only.
 
 ### Current architecture notes
-- Renderer is ~6500+ lines
-- `takePhoto()` is the entry point — checks for blocking states, triggers flash, calls `captureAndSavePhoto()` after 100ms delay
-- `captureAndSavePhoto()` creates an offscreen 280x340 canvas, draws polaroid frame, copies main canvas content, adds name/date label, exports as data URL
-- `photoFlashAlpha` is drawn in `draw()` after diary panel and before shortcut help overlay
-- `totalPhotos` is a simple counter in SaveData, restored in `applySaveData()`
-- IPC pattern follows existing save-data model: `ipcMain.handle("save-photo")` returns filePath or null
-- Context menu is built in `main.ts` with nested submenus for Care/Games/Info/Settings
-- Info submenu now has: View Stats, Pet Diary, Take Photo, Achievements
-- Total achievements: 20
+- Renderer is ~6600+ lines
+- `COLOR_PALETTES` array holds all palette definitions near line ~1144
+- `getBodyColors()` reads `getColorPalette().colors[currentTimeOfDay]` as base, then applies stage shifts, stress, hunger
+- Color palette ID is a string stored in SaveData; `applySaveData()` validates against known palette IDs
+- Context menu data now includes `colorPalette` field alongside `accessory`
+- The `onSetColor` handler in renderer mirrors the `onSetAccessory` pattern
+- Total achievements: 21
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

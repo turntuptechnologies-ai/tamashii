@@ -3,7 +3,8 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => Promise<void>;
+      onSetColor: (callback: (colorId: string) => void) => void;
       promptPetName: (currentName: string) => Promise<string | null>;
       onPromptName: (callback: () => void) => void;
       onToggleWandering: (callback: () => void) => void;
@@ -1118,6 +1119,7 @@ canvas.addEventListener("contextmenu", (e) => {
     soundEnabled,
     petName,
     accessory: currentAccessory,
+    colorPalette: currentColorPalette,
   });
 });
 
@@ -1140,6 +1142,97 @@ window.tamashii.onToggleSound(() => {
 
 // --- Pet Name ---
 let petName = "";
+
+// --- Color Palettes ---
+type ColorPaletteId = "default" | "rose" | "mint" | "sunset" | "lavender" | "golden" | "midnight" | "peach";
+let currentColorPalette: ColorPaletteId = "default";
+
+interface ColorPalette {
+  id: ColorPaletteId;
+  name: string;
+  icon: string;
+  // Base colors for each time of day: { morning, afternoon, evening, night }
+  colors: Record<string, { body: string; stroke: string; belly: string; foot: string }>;
+}
+
+const COLOR_PALETTES: ColorPalette[] = [
+  {
+    id: "default", name: "Classic Blue", icon: "💙",
+    colors: {
+      morning:   { body: "#6B9DEF", stroke: "#4A7DD8", belly: "#99C4FF", foot: "#5A8AE0" },
+      afternoon: { body: "#5B8DEE", stroke: "#3A6DD1", belly: "#89B4FA", foot: "#4A7ADB" },
+      evening:   { body: "#5577CC", stroke: "#3A5AAA", belly: "#7799DD", foot: "#4466BB" },
+      night:     { body: "#4A66AA", stroke: "#334D88", belly: "#6688CC", foot: "#3B5599" },
+    },
+  },
+  {
+    id: "rose", name: "Rose Pink", icon: "🌹",
+    colors: {
+      morning:   { body: "#EF8BA5", stroke: "#D06A88", belly: "#FFB8CC", foot: "#DD7A98" },
+      afternoon: { body: "#EE7B9D", stroke: "#D15A80", belly: "#FFAAC2", foot: "#DB6A90" },
+      evening:   { body: "#CC6688", stroke: "#AA4466", belly: "#DD8899", foot: "#BB5577" },
+      night:     { body: "#AA5577", stroke: "#883355", belly: "#CC7799", foot: "#994466" },
+    },
+  },
+  {
+    id: "mint", name: "Mint Green", icon: "🌿",
+    colors: {
+      morning:   { body: "#7BCCA5", stroke: "#5AAA88", belly: "#A5EECA", foot: "#6ABB98" },
+      afternoon: { body: "#6BBB9D", stroke: "#4A9980", belly: "#95DDBA", foot: "#5AAA90" },
+      evening:   { body: "#559977", stroke: "#3A7755", belly: "#77BB99", foot: "#448866" },
+      night:     { body: "#447766", stroke: "#335544", belly: "#669988", foot: "#336655" },
+    },
+  },
+  {
+    id: "sunset", name: "Sunset Orange", icon: "🌅",
+    colors: {
+      morning:   { body: "#EFA06B", stroke: "#D8844A", belly: "#FFC499", foot: "#E0935A" },
+      afternoon: { body: "#EE905B", stroke: "#D1703A", belly: "#FAB489", foot: "#DB804A" },
+      evening:   { body: "#CC7755", stroke: "#AA553A", belly: "#DD9977", foot: "#BB6644" },
+      night:     { body: "#AA664A", stroke: "#884433", belly: "#CC8866", foot: "#995533" },
+    },
+  },
+  {
+    id: "lavender", name: "Lavender", icon: "💜",
+    colors: {
+      morning:   { body: "#A58BEF", stroke: "#886AD0", belly: "#C8B8FF", foot: "#987ADD" },
+      afternoon: { body: "#9D7BEE", stroke: "#805AD1", belly: "#BAAAFE", foot: "#906ADB" },
+      evening:   { body: "#8866CC", stroke: "#6644AA", belly: "#9988DD", foot: "#7755BB" },
+      night:     { body: "#7755AA", stroke: "#553388", belly: "#8877CC", foot: "#664499" },
+    },
+  },
+  {
+    id: "golden", name: "Golden", icon: "✨",
+    colors: {
+      morning:   { body: "#E8C44A", stroke: "#CCA830", belly: "#F5DD7A", foot: "#DDBB3A" },
+      afternoon: { body: "#DDC040", stroke: "#BBA020", belly: "#EEDD66", foot: "#CCB030" },
+      evening:   { body: "#BBA033", stroke: "#998020", belly: "#CCBB55", foot: "#AA9022" },
+      night:     { body: "#AA8828", stroke: "#886615", belly: "#BB9944", foot: "#997718" },
+    },
+  },
+  {
+    id: "midnight", name: "Midnight", icon: "🌑",
+    colors: {
+      morning:   { body: "#6A7A9E", stroke: "#4A5A7E", belly: "#8A9ABE", foot: "#5A6A8E" },
+      afternoon: { body: "#5A6A8E", stroke: "#3A4A6E", belly: "#7A8AAE", foot: "#4A5A7E" },
+      evening:   { body: "#445577", stroke: "#2A3A55", belly: "#667799", foot: "#334466" },
+      night:     { body: "#334466", stroke: "#1A2A44", belly: "#556688", foot: "#223355" },
+    },
+  },
+  {
+    id: "peach", name: "Peach", icon: "🍑",
+    colors: {
+      morning:   { body: "#F0A88A", stroke: "#D88A6A", belly: "#FFCCB8", foot: "#E89A7A" },
+      afternoon: { body: "#EE9880", stroke: "#D17A60", belly: "#FFBBAA", foot: "#DD8A70" },
+      evening:   { body: "#CC8066", stroke: "#AA6044", belly: "#DDA088", foot: "#BB7055" },
+      night:     { body: "#AA6655", stroke: "#884433", belly: "#CC8877", foot: "#995544" },
+    },
+  },
+];
+
+function getColorPalette(): ColorPalette {
+  return COLOR_PALETTES.find(p => p.id === currentColorPalette) || COLOR_PALETTES[0];
+}
 
 // --- Accessories ---
 type AccessoryType = "none" | "crown" | "bow" | "glasses" | "flower" | "party_hat" | "cat_ears" | "top_hat" | "headband_star";
@@ -1172,6 +1265,27 @@ window.tamashii.onSetAccessory((accessory: string) => {
   } else if (oldAccessory !== "none") {
     addDiaryEntry("accessory", "👒", "Took off accessory — going natural!");
   }
+});
+
+window.tamashii.onSetColor((colorId: string) => {
+  const oldPalette = currentColorPalette;
+  const palette = COLOR_PALETTES.find(p => p.id === colorId);
+  if (!palette || colorId === oldPalette) return;
+  currentColorPalette = colorId as ColorPaletteId;
+  saveGame();
+  const messages = [
+    "New look, who dis?",
+    "I love this color~!",
+    "So pretty!",
+    "Fashion forward!",
+    "Looking fresh!",
+  ];
+  queueSpeechBubble(`${palette.icon} ${messages[Math.floor(Math.random() * messages.length)]}`, 180, true);
+  playGreetingSound();
+  squishAmount = 0.5;
+  isHappy = true;
+  happyTimer = 45;
+  addDiaryEntry("accessory", "🎨", `Changed color to ${palette.name}!`);
 });
 
 window.tamashii.onPromptName(async () => {
@@ -2193,6 +2307,11 @@ const achievements: Achievement[] = [
     icon: "📸", unlockMessage: "I'm photogenic~!",
     condition: () => totalPhotos >= 1, unlocked: false,
   },
+  {
+    id: "true_colors", name: "True Colors", description: "Customize your pet's color",
+    icon: "🎨", unlockMessage: "Showing my true colors~!",
+    condition: () => currentColorPalette !== "default", unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2683,6 +2802,7 @@ interface SaveData {
   personality: string | null;
   diary: DiaryEntry[];
   totalPhotos: number;
+  colorPalette: string;
   version: number;
 }
 
@@ -2713,6 +2833,7 @@ function buildSaveData(): SaveData {
     personality: petPersonality,
     diary: petDiary,
     totalPhotos,
+    colorPalette: currentColorPalette,
     version: 1,
   };
 }
@@ -2795,6 +2916,11 @@ function applySaveData(data: SaveData): void {
   // Restore photo count
   if (typeof data.totalPhotos === "number") {
     totalPhotos = data.totalPhotos;
+  }
+
+  // Restore color palette
+  if (data.colorPalette && COLOR_PALETTES.some(p => p.id === data.colorPalette)) {
+    currentColorPalette = data.colorPalette as ColorPaletteId;
   }
 
   // Restore diary
@@ -3087,17 +3213,8 @@ function applyStageColorShift(colors: { body: string; stroke: string; belly: str
 }
 
 function getBodyColors(): { body: string; stroke: string; belly: string; foot: string } {
-  let baseColors: { body: string; stroke: string; belly: string; foot: string };
-  switch (currentTimeOfDay) {
-    case "morning":
-      baseColors = { body: "#6B9DEF", stroke: "#4A7DD8", belly: "#99C4FF", foot: "#5A8AE0" }; break;
-    case "afternoon":
-      baseColors = { body: "#5B8DEE", stroke: "#3A6DD1", belly: "#89B4FA", foot: "#4A7ADB" }; break;
-    case "evening":
-      baseColors = { body: "#5577CC", stroke: "#3A5AAA", belly: "#7799DD", foot: "#4466BB" }; break;
-    case "night":
-      baseColors = { body: "#4A66AA", stroke: "#334D88", belly: "#6688CC", foot: "#3B5599" }; break;
-  }
+  const palette = getColorPalette();
+  const baseColors = palette.colors[currentTimeOfDay] || palette.colors["afternoon"];
   // Growth stage color shifts — interpolate between stages during morph
   let colors: { body: string; stroke: string; belly: string; foot: string };
   if (evolutionMorphing) {
@@ -6404,6 +6521,7 @@ function drawShortcutHelp(): void {
     ["1", "Star Catcher"],
     ["2", "Memory Match"],
     ["P", "Take Photo"],
+    ["C", "Cycle Color"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -6550,6 +6668,24 @@ window.addEventListener("keydown", (e) => {
       shortcutUsageCount++;
       checkAchievements();
       break;
+    case "c": {
+      // Cycle to next color palette
+      const paletteIds = COLOR_PALETTES.map(p => p.id);
+      const currentIdx = paletteIds.indexOf(currentColorPalette);
+      const nextIdx = (currentIdx + 1) % paletteIds.length;
+      const nextPalette = COLOR_PALETTES[nextIdx];
+      currentColorPalette = nextPalette.id;
+      saveGame();
+      queueSpeechBubble(`${nextPalette.icon} ${nextPalette.name}!`, 120, true);
+      playClickSound();
+      squishAmount = 0.3;
+      if (currentColorPalette !== "default") {
+        addDiaryEntry("accessory", "🎨", `Changed color to ${nextPalette.name}!`);
+      }
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    }
   }
 });
 

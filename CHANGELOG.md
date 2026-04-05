@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.44.0] — 2026-04-05 — Pet Color Customization
+
+### Added
+- **8 color palettes** — choose from Classic Blue (default), Rose Pink, Mint Green, Sunset Orange, Lavender, Golden, Midnight, and Peach to give your pet a unique look
+- **Context menu color picker** — select your pet's color from the new "🎨 Colors" submenu under Settings, with radio buttons showing the current selection
+- **Keyboard shortcut C** — press C to quickly cycle through all available color palettes
+- **Time-of-day color adaptation** — each palette has four color variants (morning, afternoon, evening, night) that shift naturally with the time of day, just like the original blue
+- **Growth stage compatibility** — color palettes interact with the existing growth stage color shift system, so baby pastels, teen depths, and adult regal tones apply to every palette
+- **Color persistence** — your chosen palette is saved across sessions
+- **Diary logging** — color changes are recorded in the pet diary
+- **Speech bubble reactions** — your pet reacts with a happy message and squish animation when you change its color
+- **New "True Colors" achievement** — unlocked when you customize your pet's color for the first time (achievement #21)
+- **Shortcut help updated** — C for Cycle Color now appears in the keyboard shortcuts overlay
+
+**Why this feature:** Tamashii has grown into a deeply personal companion — you can name it, dress it with accessories, watch it develop a unique personality, and document its life through photos and diaries. But the one thing you couldn't change was its fundamental appearance. Every pet was blue. Color customization changes that. Pick Rose Pink for a warm, affectionate look. Choose Mint Green for a nature-loving vibe. Go Golden for a regal companion. Each palette has been carefully designed with four time-of-day variants that shift naturally from bright morning tones to deep nighttime hues, and all palettes work seamlessly with growth stage color shifts, stress reactions, and hunger desaturation. Your pet's color is now as personal as its name.
+
 ## [v0.43.0] — 2026-04-04 — Pet Photo Mode
 
 ### Added

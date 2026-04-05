@@ -109,9 +109,9 @@ ipcMain.handle("prompt-pet-name", async (_event, currentName: string) => {
   });
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string }) => {
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled, soundEnabled, petName, accessory } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled, petName, accessory, colorPalette } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -210,6 +210,20 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
             { label: "⭐ Star Headband", type: "radio" as const, checked: accessory === "headband_star", click: () => { mainWindow?.webContents.send("set-accessory", "headband_star"); } },
           ],
         },
+        {
+          label: "🎨 Colors",
+          submenu: [
+            { label: "💙 Classic Blue", type: "radio" as const, checked: colorPalette === "default", click: () => { mainWindow?.webContents.send("set-color", "default"); } },
+            { type: "separator" as const },
+            { label: "🌹 Rose Pink", type: "radio" as const, checked: colorPalette === "rose", click: () => { mainWindow?.webContents.send("set-color", "rose"); } },
+            { label: "🌿 Mint Green", type: "radio" as const, checked: colorPalette === "mint", click: () => { mainWindow?.webContents.send("set-color", "mint"); } },
+            { label: "🌅 Sunset Orange", type: "radio" as const, checked: colorPalette === "sunset", click: () => { mainWindow?.webContents.send("set-color", "sunset"); } },
+            { label: "💜 Lavender", type: "radio" as const, checked: colorPalette === "lavender", click: () => { mainWindow?.webContents.send("set-color", "lavender"); } },
+            { label: "✨ Golden", type: "radio" as const, checked: colorPalette === "golden", click: () => { mainWindow?.webContents.send("set-color", "golden"); } },
+            { label: "🌑 Midnight", type: "radio" as const, checked: colorPalette === "midnight", click: () => { mainWindow?.webContents.send("set-color", "midnight"); } },
+            { label: "🍑 Peach", type: "radio" as const, checked: colorPalette === "peach", click: () => { mainWindow?.webContents.send("set-color", "peach"); } },
+          ],
+        },
       ],
     },
     { type: "separator" },
@@ -220,7 +234,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.43.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.44.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

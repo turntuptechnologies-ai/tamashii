@@ -7,8 +7,11 @@ contextBridge.exposeInMainWorld("tamashii", {
   getScreenBounds: (): Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }> => {
     return ipcRenderer.invoke("get-screen-bounds");
   },
-  showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string }): Promise<void> => {
+  showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; petName: string; accessory: string; colorPalette: string }): Promise<void> => {
     return ipcRenderer.invoke("show-context-menu", menuData);
+  },
+  onSetColor: (callback: (colorId: string) => void) => {
+    ipcRenderer.on("set-color", (_event, colorId) => callback(colorId));
   },
   promptPetName: (currentName: string): Promise<string | null> => {
     return ipcRenderer.invoke("prompt-pet-name", currentName);
