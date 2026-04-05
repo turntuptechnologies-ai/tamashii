@@ -3,7 +3,7 @@ declare global {
     tamashii: {
       moveWindow: (deltaX: number, deltaY: number) => void;
       getScreenBounds: () => Promise<{ screenWidth: number; screenHeight: number; windowX: number; windowY: number }>;
-      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => Promise<void>;
+      showContextMenu: (menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string }) => Promise<void>;
       onSetColor: (callback: (colorId: string) => void) => void;
       promptPetName: (currentName: string) => Promise<string | null>;
       onPromptName: (callback: () => void) => void;
@@ -26,6 +26,7 @@ declare global {
       onViewDiary: (callback: () => void) => void;
       onTakePhoto: (callback: () => void) => void;
       savePhoto: (dataUrl: string) => Promise<string | null>;
+      onSetToy: (callback: (toyId: string) => void) => void;
     };
   }
 }
@@ -555,6 +556,306 @@ interface DreamBubble {
 const dreamBubbles: DreamBubble[] = [];
 let dreamSpawnTimer = 0;
 const DREAM_ICONS = ["star", "heart", "food", "butterfly", "moon", "fish", "flower", "music"];
+
+// --- Toy System ---
+type ToyType = "none" | "ball" | "yarn" | "plush" | "bone";
+
+interface ToyInfo {
+  id: ToyType;
+  name: string;
+  icon: string;
+}
+
+const TOYS: ToyInfo[] = [
+  { id: "none", name: "No Toy", icon: "❌" },
+  { id: "ball", name: "Bouncy Ball", icon: "🏐" },
+  { id: "yarn", name: "Yarn Ball", icon: "🧶" },
+  { id: "plush", name: "Plush Bear", icon: "🧸" },
+  { id: "bone", name: "Squeaky Bone", icon: "🦴" },
+];
+
+// Personality toy preferences — preferred toy gets extra happiness
+const PERSONALITY_TOY_PREF: Record<string, ToyType> = {
+  energetic: "ball",
+  curious: "yarn",
+  shy: "plush",
+  sleepy: "plush",
+  gluttonous: "bone",
+};
+
+let currentToy: ToyType = "none";
+let toyX = 0;         // toy position on canvas
+let toyY = 0;
+let toyBouncePhase = 0;   // animation phase for idle bobbing
+let toyPlayTimer = 0;     // countdown until pet plays with toy
+let toyPlayState: "idle" | "approaching" | "playing" | "celebrating" = "idle";
+let toyPlayAnimTimer = 0; // animation timer during play
+let totalToyPlays = 0;    // for achievement tracking
+const TOY_PLAY_INTERVAL_MIN = 600;  // ~10 seconds at 60fps minimum between plays
+const TOY_PLAY_INTERVAL_MAX = 1800; // ~30 seconds at 60fps maximum
+
+function setToy(toyId: ToyType): void {
+  const prevToy = currentToy;
+  currentToy = toyId;
+  // Place toy to the right of the pet
+  toyX = canvas.width / 2 + 50;
+  toyY = canvas.height / 2 + 35;
+  toyPlayState = "idle";
+  toyPlayTimer = TOY_PLAY_INTERVAL_MIN + Math.floor(Math.random() * (TOY_PLAY_INTERVAL_MAX - TOY_PLAY_INTERVAL_MIN));
+
+  if (toyId !== "none") {
+    const toyInfo = TOYS.find(t => t.id === toyId)!;
+    const isFavorite = petPersonality && PERSONALITY_TOY_PREF[petPersonality] === toyId;
+    const msg = isFavorite ? `${toyInfo.icon} My favorite! ${toyInfo.name}!` : `${toyInfo.icon} Ooh, a ${toyInfo.name}!`;
+    queueSpeechBubble(msg, 150, true);
+    playClickSound();
+    squishAmount = 0.4;
+    isHappy = true;
+    happyTimer = 45;
+    if (prevToy === "none") {
+      addDiaryEntry("milestone", toyInfo.icon, `Got first toy: ${toyInfo.name}!`);
+    }
+  } else if (prevToy !== "none") {
+    queueSpeechBubble("Toy put away~", 100, true);
+  }
+  saveGame();
+}
+
+function playToySqueak(): void {
+  // Quick squeaky sound
+  playTone(1400, 0.06, "sine", 0.08);
+  setTimeout(() => playTone(1800, 0.05, "sine", 0.06), 40);
+}
+
+function drawToy(cx: number, cy: number): void {
+  if (currentToy === "none") return;
+
+  const bobY = Math.sin(toyBouncePhase) * 2;
+  const tx = toyX;
+  const ty = toyY + bobY;
+
+  ctx.save();
+
+  if (currentToy === "ball") {
+    // Bouncy ball — round with highlight
+    const radius = 8;
+    const grad = ctx.createRadialGradient(tx - 2, ty - 2, 1, tx, ty, radius);
+    grad.addColorStop(0, "#FF6B6B");
+    grad.addColorStop(0.7, "#E84040");
+    grad.addColorStop(1, "#CC2020");
+    ctx.beginPath();
+    ctx.arc(tx, ty, radius, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = "#B01818";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Shine
+    ctx.beginPath();
+    ctx.arc(tx - 2.5, ty - 3, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fill();
+  } else if (currentToy === "yarn") {
+    // Yarn ball — round with cross-hatch lines
+    const radius = 8;
+    ctx.beginPath();
+    ctx.arc(tx, ty, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#E080D0";
+    ctx.fill();
+    ctx.strokeStyle = "#C060B0";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Cross-hatch yarn texture
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 0.6;
+    for (let i = -6; i <= 6; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(tx + i - 3, ty - 7);
+      ctx.lineTo(tx + i + 3, ty + 7);
+      ctx.stroke();
+    }
+    // Trailing yarn end
+    ctx.strokeStyle = "#E080D0";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(tx + 7, ty + 2);
+    ctx.quadraticCurveTo(tx + 14, ty + 6, tx + 12, ty + 10);
+    ctx.stroke();
+  } else if (currentToy === "plush") {
+    // Plush bear — simple teddy shape
+    const s = 9;
+    // Body
+    ctx.beginPath();
+    ctx.ellipse(tx, ty + 2, s * 0.7, s * 0.9, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#C89060";
+    ctx.fill();
+    ctx.strokeStyle = "#A07040";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Head
+    ctx.beginPath();
+    ctx.arc(tx, ty - 6, s * 0.55, 0, Math.PI * 2);
+    ctx.fillStyle = "#D0A070";
+    ctx.fill();
+    ctx.stroke();
+    // Ears
+    ctx.beginPath();
+    ctx.arc(tx - 4, ty - 10, 2.5, 0, Math.PI * 2);
+    ctx.arc(tx + 4, ty - 10, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#C89060";
+    ctx.fill();
+    ctx.stroke();
+    // Eyes
+    ctx.fillStyle = "#333";
+    ctx.beginPath();
+    ctx.arc(tx - 2, ty - 7, 1, 0, Math.PI * 2);
+    ctx.arc(tx + 2, ty - 7, 1, 0, Math.PI * 2);
+    ctx.fill();
+    // Nose
+    ctx.beginPath();
+    ctx.arc(tx, ty - 5, 1, 0, Math.PI * 2);
+    ctx.fillStyle = "#704030";
+    ctx.fill();
+  } else if (currentToy === "bone") {
+    // Bone shape
+    ctx.fillStyle = "#F0E8D8";
+    ctx.strokeStyle = "#C8B8A0";
+    ctx.lineWidth = 0.8;
+    // Shaft
+    ctx.beginPath();
+    ctx.roundRect(tx - 8, ty - 2.5, 16, 5, 2);
+    ctx.fill();
+    ctx.stroke();
+    // Left knobs
+    ctx.beginPath();
+    ctx.arc(tx - 8, ty - 3, 3.5, 0, Math.PI * 2);
+    ctx.arc(tx - 8, ty + 3, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Right knobs
+    ctx.beginPath();
+    ctx.arc(tx + 8, ty - 3, 3.5, 0, Math.PI * 2);
+    ctx.arc(tx + 8, ty + 3, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function updateToy(): void {
+  if (currentToy === "none") return;
+
+  toyBouncePhase += 0.03;
+
+  // Don't play during mini-games, panels, or when dragging
+  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || shortcutHelpOpen) return;
+
+  if (toyPlayState === "idle") {
+    toyPlayTimer--;
+    if (toyPlayTimer <= 0 && idleAnim === "none" && !isSpinning && !isCharging) {
+      toyPlayState = "approaching";
+      toyPlayAnimTimer = 0;
+    }
+  } else if (toyPlayState === "approaching") {
+    toyPlayAnimTimer++;
+    // Pet "looks" at toy for ~30 frames
+    if (toyPlayAnimTimer >= 30) {
+      toyPlayState = "playing";
+      toyPlayAnimTimer = 0;
+      playToySqueak();
+    }
+  } else if (toyPlayState === "playing") {
+    toyPlayAnimTimer++;
+    // Animate the toy being played with for ~60 frames
+    if (currentToy === "ball") {
+      // Ball bounces
+      toyY = canvas.height / 2 + 35 - Math.abs(Math.sin(toyPlayAnimTimer * 0.15)) * 15;
+      toyX = canvas.width / 2 + 50 + Math.sin(toyPlayAnimTimer * 0.08) * 8;
+    } else if (currentToy === "yarn") {
+      // Yarn rolls side to side
+      toyX = canvas.width / 2 + 50 + Math.sin(toyPlayAnimTimer * 0.1) * 12;
+    } else if (currentToy === "plush") {
+      // Plush gets gentle rocking
+      toyBouncePhase += 0.1; // faster bobbing during play
+    } else if (currentToy === "bone") {
+      // Bone slides and wobbles
+      toyX = canvas.width / 2 + 50 + Math.sin(toyPlayAnimTimer * 0.12) * 6;
+      toyY = canvas.height / 2 + 35 + Math.cos(toyPlayAnimTimer * 0.2) * 3;
+    }
+
+    if (toyPlayAnimTimer >= 60) {
+      toyPlayState = "celebrating";
+      toyPlayAnimTimer = 0;
+      totalToyPlays++;
+
+      // Happiness boost — more if it's the pet's favorite toy
+      const isFavorite = petPersonality && PERSONALITY_TOY_PREF[petPersonality] === currentToy;
+      const happinessGain = isFavorite ? 8 : 4;
+      petHappiness = Math.min(100, petHappiness + happinessGain);
+
+      // Spawn heart particles
+      const pcx = canvas.width / 2;
+      const pcy = canvas.height / 2;
+      for (let i = 0; i < 3; i++) {
+        particles.push({
+          x: pcx + (Math.random() - 0.5) * 30,
+          y: pcy - 15,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -(1 + Math.random()),
+          life: 50 + Math.random() * 20,
+          maxLife: 50 + Math.random() * 20,
+          size: 5 + Math.random() * 3,
+          type: "heart",
+        });
+      }
+
+      // Speech bubble about playing
+      const toyInfo = TOYS.find(t => t.id === currentToy)!;
+      const playMessages: Record<ToyType, string[]> = {
+        none: [],
+        ball: ["Bounce bounce!", "Wheee~!", "Catch!", "So bouncy!"],
+        yarn: ["*bat bat bat*", "Unravel~!", "So soft!", "Tangle time!"],
+        plush: ["*hugs tight*", "My friend~!", "Snuggle!", "So cuddly!"],
+        bone: ["*chomp chomp*", "Mine!", "Crunchy~!", "Good bone!"],
+      };
+      const msgs = playMessages[currentToy];
+      if (msgs.length > 0) {
+        queueSpeechBubble(`${toyInfo.icon} ${msgs[Math.floor(Math.random() * msgs.length)]}`, 120, false);
+      }
+
+      if (isFavorite) {
+        // Extra sparkles for favorite toy
+        for (let i = 0; i < 4; i++) {
+          particles.push({
+            x: pcx + (Math.random() - 0.5) * 40,
+            y: pcy + (Math.random() - 0.5) * 30,
+            vx: (Math.random() - 0.5) * 1,
+            vy: -(0.5 + Math.random() * 0.5),
+            life: 40 + Math.random() * 20,
+            maxLife: 40 + Math.random() * 20,
+            size: 3 + Math.random() * 2,
+            type: "sparkle",
+          });
+        }
+      }
+
+      checkAchievements();
+      saveGame();
+    }
+  } else if (toyPlayState === "celebrating") {
+    toyPlayAnimTimer++;
+    // Reset toy position smoothly
+    toyX += (canvas.width / 2 + 50 - toyX) * 0.1;
+    toyY += (canvas.height / 2 + 35 - toyY) * 0.1;
+    if (toyPlayAnimTimer >= 30) {
+      toyPlayState = "idle";
+      toyPlayTimer = TOY_PLAY_INTERVAL_MIN + Math.floor(Math.random() * (TOY_PLAY_INTERVAL_MAX - TOY_PLAY_INTERVAL_MIN));
+      toyX = canvas.width / 2 + 50;
+      toyY = canvas.height / 2 + 35;
+    }
+  }
+}
 
 // --- Day/Night Transition Animation ---
 let isTimeTransitioning = false;
@@ -1123,6 +1424,7 @@ canvas.addEventListener("contextmenu", (e) => {
     petName,
     accessory: currentAccessory,
     colorPalette: currentColorPalette,
+    currentToy,
   });
 });
 
@@ -1149,6 +1451,15 @@ window.tamashii.onToggleNotifications(() => {
   const msg = notificationsEnabled ? "🔔 Notifications on!" : "🔕 Notifications off";
   queueSpeechBubble(msg, 120, true);
   saveGame();
+});
+
+// Listen for set-toy from main process
+window.tamashii.onSetToy((toyId: string) => {
+  const validToys: ToyType[] = ["none", "ball", "yarn", "plush", "bone"];
+  if (validToys.includes(toyId as ToyType)) {
+    setToy(toyId as ToyType);
+    checkAchievements();
+  }
 });
 
 // --- Pet Name ---
@@ -2379,6 +2690,11 @@ const achievements: Achievement[] = [
     icon: "🔔", unlockMessage: "You always come when I call~!",
     condition: () => careAfterNotifCount >= 3, unlocked: false,
   },
+  {
+    id: "playtime", name: "Playtime!", description: "Watch your pet play with a toy 5 times",
+    icon: "🧸", unlockMessage: "I love my toys~!",
+    condition: () => totalToyPlays >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -2872,6 +3188,8 @@ interface SaveData {
   colorPalette: string;
   notificationsEnabled: boolean;
   careAfterNotifCount: number;
+  currentToy: string;
+  totalToyPlays: number;
   version: number;
 }
 
@@ -2905,6 +3223,8 @@ function buildSaveData(): SaveData {
     colorPalette: currentColorPalette,
     notificationsEnabled,
     careAfterNotifCount,
+    currentToy,
+    totalToyPlays,
     version: 1,
   };
 }
@@ -3002,6 +3322,20 @@ function applySaveData(data: SaveData): void {
   // Restore care-after-notification count
   if (typeof data.careAfterNotifCount === "number") {
     careAfterNotifCount = data.careAfterNotifCount;
+  }
+
+  // Restore toy
+  const validToys: ToyType[] = ["none", "ball", "yarn", "plush", "bone"];
+  if (data.currentToy && validToys.includes(data.currentToy as ToyType)) {
+    currentToy = data.currentToy as ToyType;
+    if (currentToy !== "none") {
+      toyX = canvas.width / 2 + 50;
+      toyY = canvas.height / 2 + 35;
+      toyPlayTimer = TOY_PLAY_INTERVAL_MIN + Math.floor(Math.random() * (TOY_PLAY_INTERVAL_MAX - TOY_PLAY_INTERVAL_MIN));
+    }
+  }
+  if (typeof data.totalToyPlays === "number") {
+    totalToyPlays = data.totalToyPlays;
   }
 
   // Restore diary
@@ -5565,6 +5899,9 @@ function update(): void {
 
   // Pet stats decay
   updatePetStats();
+
+  // Toy interactions
+  updateToy();
 }
 
 function drawGrowthMark(cx: number, cy: number, size: number): void {
@@ -6120,6 +6457,9 @@ function draw(): void {
   // Footprints (on the ground, behind everything else)
   drawFootprints();
 
+  // Toy (on the ground, behind the pet body)
+  drawToy(cx, cy);
+
   // Shadow (wider when squished — combine click squish and landing squish)
   const totalSquish = Math.min(squishAmount + landingSquish, 1.2);
   const shadowStretch = 1 + totalSquish * 0.3;
@@ -6604,6 +6944,7 @@ function drawShortcutHelp(): void {
     ["2", "Memory Match"],
     ["P", "Take Photo"],
     ["C", "Cycle Color"],
+    ["T", "Cycle Toy"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -6750,6 +7091,16 @@ window.addEventListener("keydown", (e) => {
       shortcutUsageCount++;
       checkAchievements();
       break;
+    case "t": {
+      // Cycle to next toy
+      const toyIds = TOYS.map(t => t.id);
+      const currentToyIdx = toyIds.indexOf(currentToy);
+      const nextToyIdx = (currentToyIdx + 1) % toyIds.length;
+      setToy(TOYS[nextToyIdx].id);
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    }
     case "c": {
       // Cycle to next color palette
       const paletteIds = COLOR_PALETTES.map(p => p.id);

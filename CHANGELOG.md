@@ -3,6 +3,24 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.46.0] — 2026-04-05 — Pet Toy System
+
+### Added
+- **4 interactive toys** — give your pet a Bouncy Ball (🏐), Yarn Ball (🧶), Plush Bear (🧸), or Squeaky Bone (🦴) to play with
+- **Autonomous toy play** — the pet periodically plays with its toy on its own, with unique animations per toy type: the ball bounces, the yarn rolls, the plush rocks, and the bone wobbles
+- **Personality favorites** — each personality type has a preferred toy (Energetic loves the ball, Curious loves the yarn, Shy/Sleepy love the plush, Gluttonous loves the bone); playing with a favorite grants extra happiness and sparkle effects
+- **Context menu toy picker** — select a toy from the new "🧸 Toys" submenu under the Care right-click menu, with radio buttons showing the current selection
+- **Keyboard shortcut T** — press T to quickly cycle through all available toys
+- **Speech bubble reactions** — the pet reacts with personality when playing: "Bounce bounce!" for ball, "*bat bat bat*" for yarn, "*hugs tight*" for plush, "*chomp chomp*" for bone
+- **Happiness boost** — each play session grants +4 happiness (+8 if it's the pet's favorite toy), with heart particles and sparkles
+- **Squeaky sound effects** — a cute squeaky sound plays when the pet interacts with its toy
+- **Toy persistence** — your chosen toy and play count are saved across sessions
+- **Diary logging** — getting your first toy is recorded in the pet diary
+- **Playtime! achievement** — watch your pet play with a toy 5 times to unlock achievement #23 (🧸)
+- **Shortcut help updated** — T for Cycle Toy now appears in the keyboard shortcuts overlay
+
+**Why this feature:** Tamashii pets already had a rich interaction model — clicking, feeding, napping, mini-games, and photo mode. But between these active interactions, the pet's idle time felt empty. The toy system fills that gap by giving the pet something to do autonomously. Place a toy on the ground and your pet will periodically wander over and play with it — bouncing a ball, batting a yarn ball, hugging a plush bear, or chewing a bone. Each personality type has a favorite toy that grants extra happiness, encouraging you to discover what your specific pet loves most. The toys are purely visual and charming — small, hand-drawn objects that sit on the ground beside your pet, bringing the desktop to life with little moments of autonomous play.
+
 ## [v0.45.0] — 2026-04-05 — Notification Reminders
 
 ### Added

@@ -109,9 +109,9 @@ ipcMain.handle("prompt-pet-name", async (_event, currentName: string) => {
   });
 });
 
-ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string }) => {
+ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wanderingEnabled: boolean; soundEnabled: boolean; notificationsEnabled: boolean; petName: string; accessory: string; colorPalette: string; currentToy: string }) => {
   if (!mainWindow) return;
-  const { timeOfDay, wanderingEnabled, soundEnabled, notificationsEnabled, petName, accessory, colorPalette } = menuData;
+  const { timeOfDay, wanderingEnabled, soundEnabled, notificationsEnabled, petName, accessory, colorPalette, currentToy } = menuData;
 
   const moodLabels: Record<string, string> = {
     morning: "☀️ Energetic (Morning)",
@@ -142,6 +142,18 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
         {
           label: "💤 Power Nap",
           click: () => { mainWindow?.webContents.send("pet-nap"); },
+        },
+        { type: "separator" as const },
+        {
+          label: "🧸 Toys",
+          submenu: [
+            { label: "❌ No Toy", type: "radio" as const, checked: currentToy === "none", click: () => { mainWindow?.webContents.send("set-toy", "none"); } },
+            { type: "separator" as const },
+            { label: "🏐 Bouncy Ball", type: "radio" as const, checked: currentToy === "ball", click: () => { mainWindow?.webContents.send("set-toy", "ball"); } },
+            { label: "🧶 Yarn Ball", type: "radio" as const, checked: currentToy === "yarn", click: () => { mainWindow?.webContents.send("set-toy", "yarn"); } },
+            { label: "🧸 Plush Bear", type: "radio" as const, checked: currentToy === "plush", click: () => { mainWindow?.webContents.send("set-toy", "plush"); } },
+            { label: "🦴 Squeaky Bone", type: "radio" as const, checked: currentToy === "bone", click: () => { mainWindow?.webContents.send("set-toy", "bone"); } },
+          ],
         },
       ],
     },
@@ -238,7 +250,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.45.0\nA cute autonomous desktop companion.\nBuilt with ❤️ by Claude Code & NOTO Ai.",
+          detail: "Version 0.46.0\nA cute autonomous desktop companion.\nBuilt with love by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },
