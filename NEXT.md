@@ -3,30 +3,22 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.49.0 — Settings Panel (2026-04-06)
+## Last completed: v0.50.0 — Pet Emotes (2026-04-06)
 
 ### What was done
-- Added an in-canvas settings panel consolidating all customization options into one polished UI
-- `settingsPanelOpen`, `settingsPanelFade`, `settingsScrollOffset`, `settingsPanelOpenCount` state variables
-- `toggleSettingsPanel()` function with panel mutual exclusion and sound feedback
-- `drawSettingsPanel()` — full-featured overlay with warm purple gradient background
-- Interactive toggle switches for Sound, Notifications, Wandering (green on/gray off)
-- Color palette grid showing 8 color swatches with actual body color preview
-- Accessory picker grid with 9 icon tiles (including None)
-- Toy selector row with 5 clickable tiles
-- Pet name display with tap-to-edit and pencil icon
-- `SettingsClickArea` interface with hit-testing on mousedown
-- Mouse wheel scrolling for settings content
-- Context menu entry "⚙️ Settings Panel" at top of Settings submenu
-- `onViewSettings` IPC channel added to preload bridge and renderer
-- Keyboard shortcut G to toggle settings panel
-- `settingsPanelOpenCount` added to SaveData interface, buildSaveData, applySaveData
-- Achievement #26: "Configurator" (⚙️) — open settings panel 5+ times
-- Panel guards: settings panel blocks toy play, trick start, photo mode while open
-- Mutual exclusion with stats panel, diary panel, mood journal
-- Right-click and Escape close the settings panel
-- Shortcut help overlay updated with G entry
-- Total achievements: 26
+- Added floating emoji emote system — quick animated emoji that pop up from the pet during interactions and autonomously
+- `Emote` interface with position, velocity, life, emoji, size, wobble offset
+- `emotes[]` array, `spawnEmote()`, `spawnEmoteSet()`, `spawnRandomEmote()` functions
+- 10 emote categories: happy, love, food, sleepy, excited, sad, playful, music, curious, proud (5 emoji each)
+- Context-aware triggers: clicks (love, 30% chance), feeding (food x2), napping (sleepy), toy play (playful), tricks (curious/proud)
+- Autonomous emotes every 15-40 seconds based on mood state
+- `drawEmotes()` renders with scale-in, wobble, and fade-out animation
+- `updateEmotes()` physics: float up, gentle sine wobble, slow decel
+- Keyboard shortcut E for manual emote trigger
+- `totalEmotesTriggered` added to SaveData, buildSaveData, applySaveData
+- Achievement #27: "Emotive" (😊) — trigger 20+ emotes
+- Shortcut help updated with E entry
+- Total achievements: 27
 
 ### Thoughts for next cycle
 - **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
@@ -34,20 +26,20 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Trick combos** — perform tricks in specific sequences for bonus effects (wave→dance→twirl = special combo animation)
 - **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet
 - **Custom color mixer** — let users define their own RGB palette instead of presets only
-- **Mood alerts** — use mood journal data to detect patterns and warn when the pet's mood is trending down
 - **Toy collection / unlock system** — unlock new toys by reaching milestones
 - **Mini-game: Trick Performance** — a rhythm game where you time trick performances for high scores
 - **Sleep tracker** — integrate with energy stat to show sleep/wake cycles in the mood journal
-- **Pet emotes** — quick emoji reactions the pet can display (separate from speech bubbles), triggered by specific interactions
+- **Pet friendship meter** — a hidden stat that grows with consistent daily care, unlocking special interactions at milestones
+- **Ambient reactions** — pet reacts to system events like time changes, long idle periods, or returning after being away
 
 ### Current architecture notes
-- Renderer is ~8000+ lines
-- Settings panel system is defined after the Mood Journal section (~line 1276)
-- `drawSettingsPanel()` draws after `drawMoodJournal()` in the draw() function
-- Settings panel uses `SettingsClickArea[]` array rebuilt each draw frame for hit testing
-- Click interception happens at the top of the mousedown handler (before drag logic)
-- Settings panel content uses `settingsScrollOffset` for vertical scrolling via mouse wheel
+- Renderer is ~8300+ lines
+- Emote system is defined early in the file (~line 516) after the Particle interface
+- Emotes are separate from particles — they use emoji text rendering via ctx.fillText, not shape drawing
+- `drawEmotes()` is called in draw() after particles, before sad cloud
+- `updateEmotes()` is called in update() after particle physics
+- Autonomous emote timer runs in the particle update section
 - Context menu data now includes everything from previous cycles
-- Total achievements: 26
+- Total achievements: 27
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

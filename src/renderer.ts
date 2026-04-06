@@ -514,6 +514,120 @@ const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
 let ambientSpawnTimer = 0;
 
+// --- Pet Emotes ---
+interface Emote {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  emoji: string;
+  size: number;
+  wobbleOffset: number; // unique phase for side-to-side wobble
+}
+
+const emotes: Emote[] = [];
+let totalEmotesTriggered = 0;
+let autonomousEmoteTimer = 0;
+const AUTONOMOUS_EMOTE_INTERVAL_MIN = 900; // ~15 seconds
+const AUTONOMOUS_EMOTE_INTERVAL_MAX = 2400; // ~40 seconds
+let nextAutonomousEmoteAt = AUTONOMOUS_EMOTE_INTERVAL_MIN + Math.random() * (AUTONOMOUS_EMOTE_INTERVAL_MAX - AUTONOMOUS_EMOTE_INTERVAL_MIN);
+
+const EMOTE_SETS: Record<string, string[]> = {
+  happy: ["😊", "😄", "🥰", "✨", "💕"],
+  love: ["❤️", "💖", "💗", "😍", "🥰"],
+  food: ["🍎", "🍰", "🍪", "😋", "🤤"],
+  sleepy: ["😴", "💤", "🌙", "😪", "🥱"],
+  excited: ["🎉", "🤩", "⚡", "🔥", "💥"],
+  sad: ["😢", "😿", "💧", "🥺", "😞"],
+  playful: ["🎮", "🎪", "🎈", "🤹", "🎯"],
+  music: ["🎵", "🎶", "♪", "🎤", "💃"],
+  curious: ["🤔", "👀", "❓", "🔍", "🧐"],
+  proud: ["😎", "💪", "🏆", "👑", "⭐"],
+};
+
+function spawnEmote(emoji: string, cx?: number, cy?: number): void {
+  const x = cx ?? canvas.width / 2;
+  const y = cy ?? (canvas.height / 2 - 30);
+  emotes.push({
+    x: x + (Math.random() - 0.5) * 30,
+    y,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: -(1.2 + Math.random() * 0.6),
+    life: 90 + Math.random() * 30,
+    maxLife: 90 + Math.random() * 30,
+    emoji,
+    size: 16 + Math.random() * 6,
+    wobbleOffset: Math.random() * Math.PI * 2,
+  });
+}
+
+function spawnEmoteSet(setName: string, count: number = 1): void {
+  const set = EMOTE_SETS[setName];
+  if (!set) return;
+  for (let i = 0; i < count; i++) {
+    const emoji = set[Math.floor(Math.random() * set.length)];
+    setTimeout(() => spawnEmote(emoji), i * 120); // stagger slightly
+  }
+  totalEmotesTriggered += count;
+}
+
+function spawnRandomEmote(): void {
+  // Choose emote set based on current mood/state
+  let setName: string;
+  if (petHappiness > 80) {
+    setName = Math.random() < 0.5 ? "happy" : "excited";
+  } else if (petHappiness < 30) {
+    setName = "sad";
+  } else if (petEnergy < 25) {
+    setName = "sleepy";
+  } else if (petHunger < 25) {
+    setName = "food";
+  } else {
+    const neutralSets = ["happy", "curious", "playful", "music", "proud"];
+    setName = neutralSets[Math.floor(Math.random() * neutralSets.length)];
+  }
+  spawnEmoteSet(setName, 1);
+}
+
+function drawEmotes(): void {
+  for (const e of emotes) {
+    const alpha = e.life / e.maxLife;
+    // Scale up briefly then shrink at end
+    const lifeRatio = 1 - (e.life / e.maxLife);
+    let scale = 1;
+    if (lifeRatio < 0.1) {
+      scale = lifeRatio / 0.1; // grow in
+    } else if (lifeRatio > 0.7) {
+      scale = (1 - lifeRatio) / 0.3; // shrink out
+    }
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `${Math.round(e.size * scale)}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(e.emoji, e.x, e.y);
+    ctx.restore();
+  }
+}
+
+function updateEmotes(): void {
+  for (let i = emotes.length - 1; i >= 0; i--) {
+    const e = emotes[i];
+    e.x += e.vx;
+    e.y += e.vy;
+    // Gentle wobble
+    e.vx = Math.sin(e.life * 0.06 + e.wobbleOffset) * 0.3;
+    e.vy *= 0.995; // slow deceleration
+    e.life--;
+    if (e.life <= 0) {
+      emotes.splice(i, 1);
+    }
+  }
+}
+
 // --- System Stress ---
 let cpuUsage = 0;
 let memUsage = 0;
@@ -791,6 +905,7 @@ function updateToy(): void {
       toyPlayState = "celebrating";
       toyPlayAnimTimer = 0;
       totalToyPlays++;
+      spawnEmoteSet("playful", 1);
 
       // Happiness boost — more if it's the pet's favorite toy
       const isFavorite = petPersonality && PERSONALITY_TOY_PREF[petPersonality] === currentToy;
@@ -1031,6 +1146,8 @@ function completeTrickAnimation(): void {
   }
 
   squishAmount = Math.max(squishAmount, 0.4);
+  // Emote on trick completion
+  spawnEmoteSet(trickIsPractice ? "curious" : "proud", 1);
   activeTrick = null;
   trickAnimProgress = 0;
   trickAnimFrame = 0;
@@ -2578,6 +2695,7 @@ function feedPet(): void {
   queueSpeechBubble(feedMessages[Math.floor(Math.random() * feedMessages.length)], 150, true);
   // Feeding also gives a small happiness boost
   petHappiness = Math.min(100, petHappiness + 5);
+  spawnEmoteSet("food", 2);
   saveGame();
 }
 
@@ -2590,6 +2708,7 @@ function petNap(): void {
   squishAmount = 0.3;
   const napMessages = ["*zzz*... Refreshed!", "Power nap~!", "That was nice...", "Feel better now!"];
   queueSpeechBubble(napMessages[Math.floor(Math.random() * napMessages.length)], 150, true);
+  spawnEmoteSet("sleepy", 1);
   saveGame();
 }
 
@@ -3452,6 +3571,11 @@ const achievements: Achievement[] = [
     icon: "⚙️", unlockMessage: "I love being customized~!",
     condition: () => settingsPanelOpenCount >= 5, unlocked: false,
   },
+  {
+    id: "emotive", name: "Emotive", description: "Trigger 20 pet emotes",
+    icon: "😊", unlockMessage: "So many feelings~!",
+    condition: () => totalEmotesTriggered >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4159,6 +4283,7 @@ interface SaveData {
   trickProgress: Record<string, number>;
   moodSnapshots: MoodSnapshot[];
   settingsPanelOpenCount: number;
+  totalEmotesTriggered: number;
   version: number;
 }
 
@@ -4197,6 +4322,7 @@ function buildSaveData(): SaveData {
     trickProgress: { ...trickProgress },
     moodSnapshots: moodSnapshots.slice(-MOOD_JOURNAL_MAX_SNAPSHOTS),
     settingsPanelOpenCount,
+    totalEmotesTriggered,
     version: 1,
   };
 }
@@ -4338,6 +4464,11 @@ function applySaveData(data: SaveData): void {
     settingsPanelOpenCount = data.settingsPanelOpenCount;
   }
 
+  // Restore emotes triggered count
+  if (typeof (data as SaveData).totalEmotesTriggered === "number") {
+    totalEmotesTriggered = (data as SaveData).totalEmotesTriggered;
+  }
+
   // Restore diary
   if (Array.isArray(data.diary)) {
     petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
@@ -4437,6 +4568,11 @@ function onPetClicked(): void {
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
   petHappiness = Math.min(100, petHappiness + 3); // petting boosts happiness
+
+  // Emote reaction on clicks (occasional)
+  if (Math.random() < 0.3) {
+    spawnEmoteSet("love", 1);
+  }
 
   // Combo tracking
   comboCount++;
@@ -6517,6 +6653,17 @@ function update(): void {
     }
   }
 
+  // Emote update
+  updateEmotes();
+
+  // Autonomous emotes — pet spontaneously shows emoji reactions
+  autonomousEmoteTimer++;
+  if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging) {
+    spawnRandomEmote();
+    autonomousEmoteTimer = 0;
+    nextAutonomousEmoteAt = AUTONOMOUS_EMOTE_INTERVAL_MIN + Math.random() * (AUTONOMOUS_EMOTE_INTERVAL_MAX - AUTONOMOUS_EMOTE_INTERVAL_MIN);
+  }
+
   // --- Wandering logic ---
   const wanderSpeed = getWanderSpeed();
   if (!isDragging && wanderSpeed > 0 && wanderingEnabled) {
@@ -7636,6 +7783,9 @@ function draw(): void {
     }
   }
 
+  // Pet emotes (floating emoji, above particles)
+  drawEmotes();
+
   // Sad rain cloud (drawn above particles, below speech bubble)
   if (sadCloudActive) {
     drawSadCloud(sadCloudX, sadCloudY);
@@ -7968,6 +8118,7 @@ function drawShortcutHelp(): void {
     ["K", "Practice/Do Trick"],
     ["J", "Mood Journal"],
     ["G", "Settings Panel"],
+    ["E", "Pet Emote"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -8150,6 +8301,12 @@ window.addEventListener("keydown", (e) => {
       break;
     case "g":
       toggleSettingsPanel();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "e":
+      spawnRandomEmote();
+      playClickSound();
       shortcutUsageCount++;
       checkAchievements();
       break;

@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.50.0] — 2026-04-06 — Pet Emotes
+
+### Added
+- **Floating emoji emotes** — the pet now expresses itself with quick, animated emoji that pop up and float away, distinct from speech bubbles
+- **10 emote categories** — happy, love, food, sleepy, excited, sad, playful, music, curious, and proud, each with 5 unique emoji
+- **Context-aware emotes** — emotes are triggered during interactions: hearts when clicked, food emoji when fed, sleepy faces during naps, playful symbols during toy time, and proud faces after tricks
+- **Mood-based autonomous emotes** — the pet spontaneously emotes every 15-40 seconds based on its current emotional state: happy when content, sad when unhappy, sleepy when tired, food cravings when hungry
+- **Keyboard shortcut E** — press E to make the pet show a random mood-appropriate emote on demand
+- **Smooth animation** — emotes scale up on spawn, wobble gently side-to-side as they float upward, then gracefully shrink and fade out
+- **Staggered multi-emotes** — some interactions (like feeding) spawn multiple emotes with slight delays for a natural cascade effect
+- **Emotive achievement** — trigger 20 pet emotes to unlock achievement #27 (😊)
+- **Emote count persistence** — your total emote count is saved across sessions for the achievement
+- **Shortcut help updated** — E for Pet Emote now appears in the keyboard shortcuts overlay
+- **Total achievements: 27**
+
+**Why this feature:** Tamashii's pet already communicated through speech bubbles — short text messages that pop up during interactions. But speech bubbles are wordy and deliberate; they feel like the pet is *saying* something. Emotes fill a different niche: they're the pet's involuntary emotional expressions, like a blush, a tear, or an excited sparkle in its eyes. When you feed your pet and see 🍎😋 float up, or when it autonomously shows 😴💤 because it's tired, those quick visual cues create an immediate emotional connection without requiring you to read text. The floating animation — growing in, wobbling gently, then fading out — gives each emote a lifelike quality, as if the emotion is literally rising from the pet. It's the difference between your pet telling you "I'm happy" and your pet simply *looking* happy.
+
 ## [v0.49.0] — 2026-04-06 — Settings Panel
 
 ### Added
