@@ -82,4 +82,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onPerformTrick: (callback: (trickId: string) => void) => {
     ipcRenderer.on("perform-trick", (_event, trickId) => callback(trickId));
   },
+  onViewMoodJournal: (callback: () => void) => {
+    ipcRenderer.on("view-mood-journal", () => callback());
+  },
 });

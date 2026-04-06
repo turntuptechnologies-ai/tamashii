@@ -28,6 +28,7 @@ declare global {
       savePhoto: (dataUrl: string) => Promise<string | null>;
       onSetToy: (callback: (toyId: string) => void) => void;
       onPerformTrick: (callback: (trickId: string) => void) => void;
+      onViewMoodJournal: (callback: () => void) => void;
     };
   }
 }
@@ -750,7 +751,7 @@ function updateToy(): void {
   toyBouncePhase += 0.03;
 
   // Don't play during mini-games, panels, or when dragging
-  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || shortcutHelpOpen) return;
+  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || moodJournalOpen || shortcutHelpOpen) return;
 
   if (toyPlayState === "idle") {
     toyPlayTimer--;
@@ -1065,7 +1066,7 @@ function updateTricks(): void {
   }
 
   // Don't auto-trigger during other activities
-  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || shortcutHelpOpen || isSpinning || isCharging || toyPlayState !== "idle" || idleAnim !== "none") return;
+  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || moodJournalOpen || shortcutHelpOpen || isSpinning || isCharging || toyPlayState !== "idle" || idleAnim !== "none") return;
 
   // Autonomous trick performance — only mastered tricks
   const mastered = getMasteredTricks();
@@ -1200,8 +1201,9 @@ function formatDiaryDate(timestamp: number): string {
 
 function toggleDiaryPanel(): void {
   if (minigameActive || memoryGameActive) return;
-  // Close stats panel if open
+  // Close other panels if open
   if (statsPanelOpen) statsPanelOpen = false;
+  if (moodJournalOpen) moodJournalOpen = false;
   diaryPanelOpen = !diaryPanelOpen;
   diaryScrollOffset = 0; // reset scroll on toggle
   if (diaryPanelOpen) {
@@ -1210,6 +1212,63 @@ function toggleDiaryPanel(): void {
   } else {
     playTone(700, 0.08, "sine", 0.06);
     setTimeout(() => playTone(500, 0.1, "sine", 0.06), 60);
+  }
+}
+
+// --- Pet Mood Journal ---
+interface MoodSnapshot {
+  timestamp: number;
+  happiness: number;
+  hunger: number;
+  energy: number;
+}
+
+let moodSnapshots: MoodSnapshot[] = [];
+const MOOD_JOURNAL_MAX_SNAPSHOTS = 144; // 24 hours at 10-minute intervals
+const MOOD_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+let lastMoodSnapshotTime = 0;
+let moodJournalOpen = false;
+let moodJournalFade = 0;
+const MOOD_JOURNAL_FADE_SPEED = 0.06;
+let moodJournalScrollOffset = 0; // 0 = most recent, positive = scroll back in time
+
+function takeMoodSnapshot(): void {
+  moodSnapshots.push({
+    timestamp: Date.now(),
+    happiness: Math.round(petHappiness),
+    hunger: Math.round(petHunger),
+    energy: Math.round(petEnergy),
+  });
+  if (moodSnapshots.length > MOOD_JOURNAL_MAX_SNAPSHOTS) {
+    moodSnapshots = moodSnapshots.slice(moodSnapshots.length - MOOD_JOURNAL_MAX_SNAPSHOTS);
+  }
+  if (moodSnapshots.length === 1) {
+    addDiaryEntry("general", "📈", "Started tracking mood in the mood journal!");
+  }
+  saveGame();
+}
+
+function toggleMoodJournal(): void {
+  if (minigameActive || memoryGameActive) return;
+  // Close other panels if open
+  if (statsPanelOpen) statsPanelOpen = false;
+  if (diaryPanelOpen) diaryPanelOpen = false;
+  moodJournalOpen = !moodJournalOpen;
+  moodJournalScrollOffset = 0;
+  if (moodJournalOpen) {
+    playTone(550, 0.1, "sine", 0.08);
+    setTimeout(() => playTone(750, 0.12, "sine", 0.08), 60);
+  } else {
+    playTone(750, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(550, 0.1, "sine", 0.06), 60);
+  }
+}
+
+function updateMoodJournal(): void {
+  const now = Date.now();
+  if (now - lastMoodSnapshotTime >= MOOD_SNAPSHOT_INTERVAL_MS) {
+    lastMoodSnapshotTime = now;
+    takeMoodSnapshot();
   }
 }
 
@@ -1227,7 +1286,7 @@ function playShutterSound(): void {
 
 function takePhoto(): void {
   if (minigameActive || memoryGameActive) return;
-  if (statsPanelOpen || diaryPanelOpen || shortcutHelpOpen) return;
+  if (statsPanelOpen || diaryPanelOpen || moodJournalOpen || shortcutHelpOpen) return;
 
   // Flash effect
   photoFlashAlpha = 1.0;
@@ -1678,9 +1737,13 @@ function startFalling(): void {
 // --- Right-click Context Menu ---
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
-  // Close diary panel on right-click instead of opening context menu
+  // Close open panels on right-click instead of opening context menu
   if (diaryPanelOpen) {
     toggleDiaryPanel();
+    return;
+  }
+  if (moodJournalOpen) {
+    toggleMoodJournal();
     return;
   }
   window.tamashii.showContextMenu({
@@ -2978,6 +3041,11 @@ const achievements: Achievement[] = [
     icon: "🎪", unlockMessage: "I know ALL the tricks~!",
     condition: () => getMasteredTricks().length === TRICKS.length, unlocked: false,
   },
+  {
+    id: "mood_watcher", name: "Mood Watcher", description: "Log 24+ mood snapshots",
+    icon: "📈", unlockMessage: "Tracking my feelings~!",
+    condition: () => moodSnapshots.length >= 24, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -3066,8 +3134,9 @@ const STATS_PANEL_FADE_SPEED = 0.06;
 
 function toggleStatsPanel(): void {
   if (minigameActive || memoryGameActive) return; // don't open during mini-game
-  // Close diary panel if open
+  // Close other panels if open
   if (diaryPanelOpen) diaryPanelOpen = false;
+  if (moodJournalOpen) moodJournalOpen = false;
   statsPanelOpen = !statsPanelOpen;
   if (statsPanelOpen) {
     playTone(600, 0.1, "sine", 0.08);
@@ -3088,6 +3157,10 @@ window.tamashii.onViewDiary(() => {
 
 window.tamashii.onTakePhoto(() => {
   takePhoto();
+});
+
+window.tamashii.onViewMoodJournal(() => {
+  toggleMoodJournal();
 });
 
 function formatTime(ms: number): string {
@@ -3446,6 +3519,205 @@ function drawDiaryPanel(): void {
   ctx.restore();
 }
 
+// --- Mood Journal Panel ---
+function drawMoodJournal(): void {
+  // Animate fade
+  if (moodJournalOpen && moodJournalFade < 1) {
+    moodJournalFade = Math.min(1, moodJournalFade + MOOD_JOURNAL_FADE_SPEED);
+  } else if (!moodJournalOpen && moodJournalFade > 0) {
+    moodJournalFade = Math.max(0, moodJournalFade - MOOD_JOURNAL_FADE_SPEED);
+  }
+  if (moodJournalFade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = moodJournalFade;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const panelX = 8;
+  const panelY = 8;
+  const panelW = w - 16;
+  const panelH = h - 16;
+
+  // Dark glass background with teal/green gradient
+  const bgGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+  bgGrad.addColorStop(0, "rgba(15, 35, 40, 0.94)");
+  bgGrad.addColorStop(1, "rgba(10, 20, 30, 0.96)");
+  ctx.fillStyle = bgGrad;
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = `rgba(100, 220, 180, ${0.5 * moodJournalFade})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Title
+  ctx.fillStyle = "#64DCB4";
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "center";
+  ctx.shadowColor = "rgba(100, 220, 180, 0.4)";
+  ctx.shadowBlur = 6;
+  ctx.fillText("📈 MOOD JOURNAL", w / 2, panelY + 20);
+  ctx.shadowBlur = 0;
+
+  if (moodSnapshots.length < 2) {
+    // Not enough data yet
+    ctx.fillStyle = "rgba(200, 220, 210, 0.7)";
+    ctx.font = "9px monospace";
+    ctx.fillText("Collecting mood data...", w / 2, h / 2 - 10);
+    ctx.font = "8px monospace";
+    ctx.fillStyle = "rgba(160, 180, 170, 0.5)";
+    ctx.fillText("Snapshots every 10 minutes", w / 2, h / 2 + 8);
+    ctx.fillText(`${moodSnapshots.length}/2 needed for graph`, w / 2, h / 2 + 22);
+    ctx.fillStyle = "rgba(160, 180, 170, 0.4)";
+    ctx.font = "7px monospace";
+    ctx.fillText("Press J or right-click to close", w / 2, panelY + panelH - 8);
+    ctx.restore();
+    return;
+  }
+
+  // Graph area
+  const graphX = panelX + 28;
+  const graphY = panelY + 34;
+  const graphW = panelW - 38;
+  const graphH = panelH - 74;
+
+  // Determine visible window: show up to 24 data points (4 hours) at a time
+  const visibleCount = Math.min(24, moodSnapshots.length);
+  const maxScroll = Math.max(0, moodSnapshots.length - visibleCount);
+  moodJournalScrollOffset = Math.max(0, Math.min(maxScroll, moodJournalScrollOffset));
+  const startIdx = moodSnapshots.length - visibleCount - moodJournalScrollOffset;
+  const endIdx = startIdx + visibleCount;
+  const visibleSnapshots = moodSnapshots.slice(startIdx, endIdx);
+
+  // Y-axis labels (0, 50, 100)
+  ctx.fillStyle = "rgba(180, 200, 190, 0.4)";
+  ctx.font = "7px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText("100", graphX - 3, graphY + 4);
+  ctx.fillText("50", graphX - 3, graphY + graphH / 2 + 2);
+  ctx.fillText("0", graphX - 3, graphY + graphH + 4);
+
+  // Grid lines
+  ctx.strokeStyle = "rgba(100, 140, 130, 0.15)";
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const gy = graphY + (graphH * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(graphX, gy);
+    ctx.lineTo(graphX + graphW, gy);
+    ctx.stroke();
+  }
+
+  // Draw lines for each stat
+  const stats: { key: keyof MoodSnapshot; color: string; label: string; icon: string }[] = [
+    { key: "happiness", color: "#FF6B9D", label: "Happy", icon: "💖" },
+    { key: "hunger", color: "#6BDB7B", label: "Hunger", icon: "🍎" },
+    { key: "energy", color: "#FFD93D", label: "Energy", icon: "⚡" },
+  ];
+
+  for (const stat of stats) {
+    ctx.strokeStyle = stat.color;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let i = 0; i < visibleSnapshots.length; i++) {
+      const x = graphX + (i / (visibleSnapshots.length - 1)) * graphW;
+      const val = visibleSnapshots[i][stat.key] as number;
+      const y = graphY + graphH - (val / 100) * graphH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Glow effect
+    ctx.save();
+    ctx.strokeStyle = stat.color;
+    ctx.globalAlpha = 0.2 * moodJournalFade;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = moodJournalFade;
+
+    // Draw dots at data points
+    for (let i = 0; i < visibleSnapshots.length; i++) {
+      const x = graphX + (i / (visibleSnapshots.length - 1)) * graphW;
+      const val = visibleSnapshots[i][stat.key] as number;
+      const y = graphY + graphH - (val / 100) * graphH;
+      ctx.fillStyle = stat.color;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Time labels along bottom
+  ctx.fillStyle = "rgba(180, 200, 190, 0.45)";
+  ctx.font = "6px monospace";
+  ctx.textAlign = "center";
+  const labelCount = Math.min(5, visibleSnapshots.length);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = Math.floor((i / (labelCount - 1)) * (visibleSnapshots.length - 1));
+    const x = graphX + (idx / (visibleSnapshots.length - 1)) * graphW;
+    const d = new Date(visibleSnapshots[idx].timestamp);
+    const hh = d.getHours();
+    const mm = d.getMinutes().toString().padStart(2, "0");
+    const ampm = hh >= 12 ? "p" : "a";
+    const h12 = hh % 12 || 12;
+    ctx.fillText(`${h12}:${mm}${ampm}`, x, graphY + graphH + 11);
+  }
+
+  // Legend
+  const legendY = graphY + graphH + 22;
+  ctx.font = "7px monospace";
+  let legendX = panelX + 18;
+  for (const stat of stats) {
+    ctx.fillStyle = stat.color;
+    ctx.fillRect(legendX, legendY - 4, 8, 3);
+    ctx.fillStyle = "rgba(200, 220, 210, 0.7)";
+    ctx.textAlign = "left";
+    ctx.fillText(`${stat.icon}${stat.label}`, legendX + 11, legendY);
+    legendX += 52;
+  }
+
+  // Current values display
+  const currentY = legendY + 13;
+  ctx.font = "7px monospace";
+  ctx.textAlign = "center";
+  const latestSnap = visibleSnapshots[visibleSnapshots.length - 1];
+  ctx.fillStyle = "#FF6B9D";
+  ctx.fillText(`${latestSnap.happiness}%`, panelX + panelW * 0.2, currentY);
+  ctx.fillStyle = "#6BDB7B";
+  ctx.fillText(`${latestSnap.hunger}%`, panelX + panelW * 0.5, currentY);
+  ctx.fillStyle = "#FFD93D";
+  ctx.fillText(`${latestSnap.energy}%`, panelX + panelW * 0.8, currentY);
+
+  // Scroll indicators
+  if (moodJournalScrollOffset < maxScroll) {
+    ctx.fillStyle = "rgba(100, 220, 180, 0.5)";
+    ctx.font = "8px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("◀ older", panelX + 10, graphY + graphH / 2);
+  }
+  if (moodJournalScrollOffset > 0) {
+    ctx.fillStyle = "rgba(100, 220, 180, 0.5)";
+    ctx.font = "8px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText("newer ▶", panelX + panelW - 10, graphY + graphH / 2);
+  }
+
+  // Footer
+  ctx.fillStyle = "rgba(160, 180, 170, 0.4)";
+  ctx.font = "7px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(`${moodSnapshots.length} snapshots — scroll to browse — J to close`, w / 2, panelY + panelH - 6);
+
+  ctx.restore();
+}
+
 // --- Persistent Save/Load ---
 interface SaveData {
   totalClicks: number;
@@ -3474,6 +3746,7 @@ interface SaveData {
   currentToy: string;
   totalToyPlays: number;
   trickProgress: Record<string, number>;
+  moodSnapshots: MoodSnapshot[];
   version: number;
 }
 
@@ -3510,6 +3783,7 @@ function buildSaveData(): SaveData {
     currentToy,
     totalToyPlays,
     trickProgress: { ...trickProgress },
+    moodSnapshots: moodSnapshots.slice(-MOOD_JOURNAL_MAX_SNAPSHOTS),
     version: 1,
   };
 }
@@ -3635,6 +3909,14 @@ function applySaveData(data: SaveData): void {
     // Initialize auto timer if any tricks are mastered
     if (getMasteredTricks().length > 0) {
       trickAutoTimer = TRICK_AUTO_MIN + Math.floor(Math.random() * (TRICK_AUTO_MAX - TRICK_AUTO_MIN));
+    }
+  }
+
+  // Restore mood snapshots
+  if (Array.isArray(data.moodSnapshots)) {
+    moodSnapshots = data.moodSnapshots.slice(-MOOD_JOURNAL_MAX_SNAPSHOTS);
+    if (moodSnapshots.length > 0) {
+      lastMoodSnapshotTime = moodSnapshots[moodSnapshots.length - 1].timestamp;
     }
   }
 
@@ -6018,6 +6300,9 @@ function update(): void {
     checkAchievements();
   }
 
+  // Mood journal snapshot
+  updateMoodJournal();
+
   // Auto-save periodically
   saveTimer++;
   if (saveTimer >= SAVE_INTERVAL) {
@@ -6980,6 +7265,9 @@ function draw(): void {
   // Diary panel overlay
   drawDiaryPanel();
 
+  // Mood journal overlay
+  drawMoodJournal();
+
   // Photo flash overlay
   if (photoFlashAlpha > 0) {
     ctx.save();
@@ -7257,6 +7545,7 @@ function drawShortcutHelp(): void {
     ["C", "Cycle Color"],
     ["T", "Cycle Toy"],
     ["K", "Practice/Do Trick"],
+    ["J", "Mood Journal"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -7321,6 +7610,10 @@ window.addEventListener("keydown", (e) => {
       toggleStatsPanel();
       return;
     }
+    if (moodJournalOpen) {
+      toggleMoodJournal();
+      return;
+    }
     if (minigameActive || memoryGameActive) {
       // Don't force-close games with Escape — let them finish
       return;
@@ -7345,6 +7638,9 @@ window.addEventListener("keydown", (e) => {
 
   // Don't process shortcuts while stats panel is open (except Esc and S)
   if (statsPanelOpen && key !== "s") return;
+
+  // Don't process shortcuts while mood journal is open (except Esc and J)
+  if (moodJournalOpen && key !== "j") return;
 
   switch (key) {
     case " ":
@@ -7418,6 +7714,11 @@ window.addEventListener("keydown", (e) => {
       shortcutUsageCount++;
       checkAchievements();
       break;
+    case "j":
+      toggleMoodJournal();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
     case "c": {
       // Cycle to next color palette
       const paletteIds = COLOR_PALETTES.map(p => p.id);
@@ -7439,12 +7740,18 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// Scroll diary panel with mouse wheel
+// Scroll diary panel or mood journal with mouse wheel
 canvas.addEventListener("wheel", (e) => {
   if (diaryPanelOpen) {
     e.preventDefault();
     diaryScrollOffset += e.deltaY > 0 ? 1 : -1;
     diaryScrollOffset = Math.max(0, diaryScrollOffset);
+  }
+  if (moodJournalOpen) {
+    e.preventDefault();
+    // Scroll left (older) with scroll down, right (newer) with scroll up
+    moodJournalScrollOffset += e.deltaY > 0 ? 3 : -3;
+    moodJournalScrollOffset = Math.max(0, moodJournalScrollOffset);
   }
 }, { passive: false });
 

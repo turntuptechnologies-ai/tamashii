@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.48.0] — 2026-04-06 — Mood Journal
+
+### Added
+- **Mood journal with visual graph** — your pet's happiness, hunger, and energy are automatically tracked every 10 minutes, building a living record of its emotional life over time
+- **In-canvas line chart** — a beautiful teal-themed overlay displays three color-coded trend lines: pink for happiness (💖), green for hunger (🍎), and yellow for energy (⚡), with glowing effects and data point dots
+- **Scrollable time window** — the graph shows up to 4 hours (24 snapshots) at a time; scroll with the mouse wheel to browse older data, with "◀ older" and "newer ▶" indicators
+- **Keyboard shortcut J** — press J to instantly toggle the mood journal overlay
+- **Context menu entry** — "📈 Mood Journal" appears under the Info submenu for easy access via right-click
+- **Up to 24 hours of history** — stores up to 144 snapshots (24 hours at 10-minute intervals), automatically pruning oldest data
+- **Y-axis labels and grid** — percentage scale (0-100) with subtle grid lines for easy reading
+- **Time labels** — human-readable timestamps along the bottom of the graph (e.g., "2:30p", "6:00a")
+- **Legend and current values** — color-coded legend with stat icons, plus the latest snapshot values displayed as percentages
+- **First snapshot diary entry** — when mood tracking begins, a diary entry is logged: "Started tracking mood in the mood journal!"
+- **Mood journal persistence** — all snapshots are saved across sessions, so your pet's mood history survives app restarts
+- **Mood Watcher achievement** — log 24+ mood snapshots to unlock achievement #25 (📈)
+- **Panel management** — mood journal properly integrates with the panel system: opening it closes stats/diary panels, and vice versa; right-click or Escape closes it
+- **Shortcut help updated** — J for Mood Journal now appears in the keyboard shortcuts overlay
+
+**Why this feature:** Tamashii already showed your pet's current stats as small bars below its body, but those bars only tell you what's happening right now. The mood journal adds a temporal dimension — you can see how your pet's emotional state has evolved over hours. Did happiness spike when you played together at lunch? Did hunger slowly creep down overnight? The visual graph makes these patterns visible, turning abstract stat numbers into a story. It's like reading your pet's emotional diary, giving you a deeper connection to the rhythms of its daily life. The teal-themed panel with glowing line charts feels like a little medical monitor for your companion's wellbeing — charming, informative, and a natural evolution of the existing stats system.
+
 ## [v0.47.0] — 2026-04-05 — Pet Tricks
 
 ### Added
