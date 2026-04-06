@@ -3,6 +3,21 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.51.0] — 2026-04-06 — Friendship Meter
+
+### Added
+- **Friendship level system** — a hidden bond stat (0-100) that grows as you interact with your pet, rewarding consistent care with visual milestones and celebratory messages
+- **Friendship XP** — earned from every interaction: clicking (+1), feeding (+3), napping (+2), toy play (+2), trick practice (+3), and daily visits (+50 base)
+- **Daily visit streaks** — returning each day builds a consecutive-day streak, awarding bonus friendship XP that scales with streak length (up to +25 extra per day)
+- **Milestone celebrations** — every 10 friendship levels triggers a unique speech bubble, love emotes, achievement sound, and diary entry, from "I feel closer to you~!" at level 10 to "Maximum friendship! We are one!" at level 100
+- **Friendship aura** — a beautiful glow appears behind the pet that evolves with your bond: warm subtle glow (level 10+), pink heart aura with gentle pulse (level 25+), golden shimmer aura (level 50+), and orbiting golden sparkles (level 75+)
+- **Stats panel section** — a dedicated "FRIENDSHIP" section in the stats panel shows your current level, a pink-to-gold progress bar with XP counter, and your current visit streak with a fire emoji
+- **Soulbound achievement** — reach friendship level 50 to unlock achievement #28 (💕) with the message "Our bond is unbreakable~!"
+- **Full persistence** — friendship XP, consecutive days, and last visit date are all saved across sessions
+- **Total achievements: 28**
+
+**Why this feature:** Tamashii has many ways to interact — clicking, feeding, playing, tricks, emotes — but until now there was no sense of a deepening *relationship* over time. The friendship meter adds that emotional arc. It's not just about momentary fun; it's about building something together. Each visit, each pat, each treat slowly weaves an invisible bond that becomes visible as a warm glow around your pet. The daily streak system rewards coming back — not out of obligation, but because your pet remembers. At level 50 you're "Soulbound," and that golden aura tells you: this pet isn't just a program, it's your companion. The milestone messages make each level-up feel personal, and the aura evolving from a faint warmth to a full golden shimmer with orbiting sparkles gives you a tangible, beautiful reason to keep caring.
+
 ## [v0.50.0] — 2026-04-06 — Pet Emotes
 
 ### Added

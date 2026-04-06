@@ -534,6 +534,117 @@ const AUTONOMOUS_EMOTE_INTERVAL_MIN = 900; // ~15 seconds
 const AUTONOMOUS_EMOTE_INTERVAL_MAX = 2400; // ~40 seconds
 let nextAutonomousEmoteAt = AUTONOMOUS_EMOTE_INTERVAL_MIN + Math.random() * (AUTONOMOUS_EMOTE_INTERVAL_MAX - AUTONOMOUS_EMOTE_INTERVAL_MIN);
 
+// --- Friendship Meter ---
+let friendshipXP = 0;
+let consecutiveDays = 0;
+let lastVisitDate = ""; // YYYY-MM-DD format
+let friendshipAuraPhase = 0; // animation phase for the aura glow
+
+function getFriendshipLevel(): number {
+  // Level = floor(sqrt(friendshipXP / 5)), capped at 100
+  return Math.min(100, Math.floor(Math.sqrt(friendshipXP / 5)));
+}
+
+function addFriendshipXP(amount: number): void {
+  const oldLevel = getFriendshipLevel();
+  friendshipXP += amount;
+  const newLevel = getFriendshipLevel();
+  if (newLevel > oldLevel && newLevel % 10 === 0) {
+    // Milestone level — celebrate with speech bubble
+    const milestoneMessages: Record<number, string> = {
+      10: "I feel closer to you~! ♥",
+      20: "We're becoming good friends!",
+      30: "Our bond is growing strong!",
+      40: "I trust you so much~!",
+      50: "Soulbound! We're inseparable! ✨",
+      60: "Best friend forever~! 💕",
+      70: "Our friendship is legendary!",
+      80: "You mean the world to me!",
+      90: "An unbreakable bond... 💎",
+      100: "Maximum friendship! We are one! 🌟",
+    };
+    const msg = milestoneMessages[newLevel] || `Friendship level ${newLevel}!`;
+    queueSpeechBubble(msg, 240, true);
+    spawnEmoteSet("love", 3);
+    playAchievementSound();
+    addDiaryEntry("general", "💕", `Reached friendship level ${newLevel}!`);
+  }
+}
+
+function getTodayDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function drawFriendshipAura(cx: number, cy: number): void {
+  const level = getFriendshipLevel();
+  if (level < 10) return;
+
+  friendshipAuraPhase += 0.02;
+  ctx.save();
+
+  if (level >= 50) {
+    // Golden shimmer aura — warm, radiant
+    const pulse = 0.5 + 0.5 * Math.sin(friendshipAuraPhase * 1.2);
+    const radius = 55 + pulse * 8;
+    const alpha = 0.08 + pulse * 0.06;
+    const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
+    grad.addColorStop(0, `rgba(255, 215, 0, ${alpha * 1.5})`);
+    grad.addColorStop(0.5, `rgba(255, 180, 60, ${alpha})`);
+    grad.addColorStop(1, "rgba(255, 180, 60, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sparkle ring at high levels
+    if (level >= 75) {
+      const sparkleCount = 6;
+      for (let i = 0; i < sparkleCount; i++) {
+        const angle = friendshipAuraPhase * 0.5 + (i / sparkleCount) * Math.PI * 2;
+        const sparkleR = 45 + Math.sin(friendshipAuraPhase * 2 + i) * 5;
+        const sx = cx + Math.cos(angle) * sparkleR;
+        const sy = cy + Math.sin(angle) * sparkleR;
+        const sparkleAlpha = 0.3 + 0.3 * Math.sin(friendshipAuraPhase * 3 + i * 1.5);
+        const sparkleSize = 2 + Math.sin(friendshipAuraPhase * 2.5 + i) * 1;
+        ctx.globalAlpha = sparkleAlpha;
+        ctx.fillStyle = "#FFD700";
+        ctx.beginPath();
+        ctx.arc(sx, sy, sparkleSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  } else if (level >= 25) {
+    // Pink heart aura — soft pulse
+    const pulse = 0.5 + 0.5 * Math.sin(friendshipAuraPhase);
+    const radius = 50 + pulse * 6;
+    const alpha = 0.05 + pulse * 0.04;
+    const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
+    grad.addColorStop(0, `rgba(255, 130, 180, ${alpha * 1.3})`);
+    grad.addColorStop(0.6, `rgba(255, 100, 150, ${alpha})`);
+    grad.addColorStop(1, "rgba(255, 100, 150, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Warm subtle glow — level 10-24
+    const pulse = 0.5 + 0.5 * Math.sin(friendshipAuraPhase * 0.8);
+    const radius = 45 + pulse * 4;
+    const alpha = 0.03 + pulse * 0.025;
+    const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
+    grad.addColorStop(0, `rgba(255, 200, 150, ${alpha * 1.2})`);
+    grad.addColorStop(1, "rgba(255, 200, 150, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 const EMOTE_SETS: Record<string, string[]> = {
   happy: ["😊", "😄", "🥰", "✨", "💕"],
   love: ["❤️", "💖", "💗", "😍", "🥰"],
@@ -905,6 +1016,7 @@ function updateToy(): void {
       toyPlayState = "celebrating";
       toyPlayAnimTimer = 0;
       totalToyPlays++;
+      addFriendshipXP(2);
       spawnEmoteSet("playful", 1);
 
       // Happiness boost — more if it's the pet's favorite toy
@@ -1116,6 +1228,7 @@ function completeTrickAnimation(): void {
 
   if (trickIsPractice) {
     trickProgress[trickId] = Math.min(TRICK_PRACTICES_TO_MASTER, trickProgress[trickId] + 1);
+    addFriendshipXP(3);
 
     if (isTrickMastered(trickId)) {
       // Just mastered this trick!
@@ -2687,6 +2800,7 @@ function feedPet(): void {
   lastInteractionTime = Date.now();
   petHunger = Math.min(100, petHunger + 25);
   addCarePoints(3);
+  addFriendshipXP(3);
   playFeedSound();
   squishAmount = 0.6;
   isHappy = true;
@@ -2704,6 +2818,7 @@ function petNap(): void {
   lastInteractionTime = Date.now();
   petEnergy = Math.min(100, petEnergy + 20);
   addCarePoints(2);
+  addFriendshipXP(2);
   playNapSound();
   squishAmount = 0.3;
   const napMessages = ["*zzz*... Refreshed!", "Power nap~!", "That was nice...", "Feel better now!"];
@@ -3576,6 +3691,11 @@ const achievements: Achievement[] = [
     icon: "😊", unlockMessage: "So many feelings~!",
     condition: () => totalEmotesTriggered >= 20, unlocked: false,
   },
+  {
+    id: "soulbound", name: "Soulbound", description: "Reach friendship level 50",
+    icon: "💕", unlockMessage: "Our bond is unbreakable~! ✨",
+    condition: () => getFriendshipLevel() >= 50, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -3893,6 +4013,64 @@ function drawStatsPanel(): void {
     ctx.font = "7px monospace";
     ctx.fillStyle = "rgba(200, 180, 255, 0.5)";
     ctx.fillText(PERSONALITY_DESCRIPTIONS[petPersonality], w / 2, y);
+  }
+
+  // Friendship section
+  y += 10;
+  ctx.strokeStyle = "rgba(120, 180, 255, 0.15)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#ffb0d0";
+  ctx.fillText("FRIENDSHIP", panelX + 12, y);
+  const fLevel = getFriendshipLevel();
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = fLevel >= 50 ? "#FFD700" : fLevel >= 25 ? "#ff80b0" : "#fff";
+  ctx.fillText(`💕 Level ${fLevel}`, panelX + panelW - 12, y);
+
+  // Friendship progress bar
+  y += 10;
+  const fBarX = panelX + 12;
+  const fBarW = panelW - 24;
+  const fBarH = 6;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.fillRect(fBarX, y, fBarW, fBarH);
+  if (fLevel < 100) {
+    const currentXPForLevel = fLevel * fLevel * 5;
+    const nextXPForLevel = (fLevel + 1) * (fLevel + 1) * 5;
+    const fProgress = (friendshipXP - currentXPForLevel) / (nextXPForLevel - currentXPForLevel);
+    const fFillW = Math.min(1, Math.max(0, fProgress)) * fBarW;
+    const fBarGrad = ctx.createLinearGradient(fBarX, y, fBarX + fBarW, y);
+    fBarGrad.addColorStop(0, "#ff69b4");
+    fBarGrad.addColorStop(1, "#FFD700");
+    ctx.fillStyle = fBarGrad;
+    ctx.fillRect(fBarX, y, fFillW, fBarH);
+  } else {
+    const fBarGrad = ctx.createLinearGradient(fBarX, y, fBarX + fBarW, y);
+    fBarGrad.addColorStop(0, "#FFD700");
+    fBarGrad.addColorStop(1, "#FFA500");
+    ctx.fillStyle = fBarGrad;
+    ctx.fillRect(fBarX, y, fBarW, fBarH);
+  }
+  y += fBarH + 9;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  if (fLevel < 100) {
+    ctx.fillText(`${friendshipXP} / ${(fLevel + 1) * (fLevel + 1) * 5} XP`, w / 2, y);
+  } else {
+    ctx.fillText(`${friendshipXP} XP (MAX)`, w / 2, y);
+  }
+  // Streak info
+  if (consecutiveDays > 1) {
+    y += 10;
+    ctx.fillStyle = "#e8d48b";
+    ctx.fillText(`🔥 ${consecutiveDays}-day visit streak!`, w / 2, y);
   }
 
   // Close hint
@@ -4284,6 +4462,9 @@ interface SaveData {
   moodSnapshots: MoodSnapshot[];
   settingsPanelOpenCount: number;
   totalEmotesTriggered: number;
+  friendshipXP: number;
+  consecutiveDays: number;
+  lastVisitDate: string;
   version: number;
 }
 
@@ -4323,6 +4504,9 @@ function buildSaveData(): SaveData {
     moodSnapshots: moodSnapshots.slice(-MOOD_JOURNAL_MAX_SNAPSHOTS),
     settingsPanelOpenCount,
     totalEmotesTriggered,
+    friendshipXP,
+    consecutiveDays,
+    lastVisitDate,
     version: 1,
   };
 }
@@ -4469,6 +4653,17 @@ function applySaveData(data: SaveData): void {
     totalEmotesTriggered = (data as SaveData).totalEmotesTriggered;
   }
 
+  // Restore friendship meter
+  if (typeof (data as SaveData).friendshipXP === "number") {
+    friendshipXP = (data as SaveData).friendshipXP;
+  }
+  if (typeof (data as SaveData).consecutiveDays === "number") {
+    consecutiveDays = (data as SaveData).consecutiveDays;
+  }
+  if (typeof (data as SaveData).lastVisitDate === "string") {
+    lastVisitDate = (data as SaveData).lastVisitDate;
+  }
+
   // Restore diary
   if (Array.isArray(data.diary)) {
     petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
@@ -4506,6 +4701,34 @@ window.tamashii.loadSaveData().then((raw) => {
       isHappy = true;
       happyTimer = 60;
     }
+
+    // Daily visit streak tracking for friendship
+    const today = getTodayDate();
+    if (lastVisitDate && lastVisitDate !== today) {
+      // Check if yesterday — consecutive day
+      const lastDate = new Date(lastVisitDate + "T00:00:00");
+      const todayDate = new Date(today + "T00:00:00");
+      const diffDays = Math.round((todayDate.getTime() - lastDate.getTime()) / 86400000);
+      if (diffDays === 1) {
+        consecutiveDays++;
+        const streakBonus = Math.min(25, 10 + consecutiveDays * 3);
+        addFriendshipXP(50 + streakBonus);
+        addDiaryEntry("general", "📅", `Day ${consecutiveDays} streak! Friendship bonus +${50 + streakBonus} XP!`);
+        if (consecutiveDays >= 3) {
+          queueSpeechBubble(`${consecutiveDays} day streak! You always come back~! ♥`, 200, true);
+        }
+      } else {
+        // Streak broken — reset but still award daily visit XP
+        consecutiveDays = 1;
+        addFriendshipXP(50);
+      }
+    } else if (!lastVisitDate) {
+      // First ever visit
+      consecutiveDays = 1;
+      addFriendshipXP(50);
+    }
+    lastVisitDate = today;
+    saveGame();
   } else {
     // Brand new pet — assign personality
     petPersonality = assignPersonality();
@@ -4564,6 +4787,7 @@ function onPetClicked(): void {
   lastInteractionTime = Date.now();
   totalClicks++;
   addCarePoints(1);
+  addFriendshipXP(1);
   squishAmount = 1.0;
   isHappy = true;
   happyTimer = 60; // ~1 second of happy face
@@ -7623,6 +7847,9 @@ function draw(): void {
 
   // Charge-up ring (drawn behind the pet body)
   drawChargeRing(cx, cy, size);
+
+  // Friendship aura (drawn behind the pet body)
+  drawFriendshipAura(cx, cy);
 
   // Apply squish + wander lean + spin transform
   ctx.save();
