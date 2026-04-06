@@ -85,4 +85,7 @@ contextBridge.exposeInMainWorld("tamashii", {
   onViewMoodJournal: (callback: () => void) => {
     ipcRenderer.on("view-mood-journal", () => callback());
   },
+  onViewSettings: (callback: () => void) => {
+    ipcRenderer.on("view-settings", () => callback());
+  },
 });

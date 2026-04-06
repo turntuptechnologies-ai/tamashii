@@ -29,6 +29,7 @@ declare global {
       onSetToy: (callback: (toyId: string) => void) => void;
       onPerformTrick: (callback: (trickId: string) => void) => void;
       onViewMoodJournal: (callback: () => void) => void;
+      onViewSettings: (callback: () => void) => void;
     };
   }
 }
@@ -751,7 +752,7 @@ function updateToy(): void {
   toyBouncePhase += 0.03;
 
   // Don't play during mini-games, panels, or when dragging
-  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || moodJournalOpen || shortcutHelpOpen) return;
+  if (minigameActive || memoryGameActive || isDragging || statsPanelOpen || diaryPanelOpen || moodJournalOpen || settingsPanelOpen || shortcutHelpOpen) return;
 
   if (toyPlayState === "idle") {
     toyPlayTimer--;
@@ -1204,6 +1205,7 @@ function toggleDiaryPanel(): void {
   // Close other panels if open
   if (statsPanelOpen) statsPanelOpen = false;
   if (moodJournalOpen) moodJournalOpen = false;
+  if (settingsPanelOpen) settingsPanelOpen = false;
   diaryPanelOpen = !diaryPanelOpen;
   diaryScrollOffset = 0; // reset scroll on toggle
   if (diaryPanelOpen) {
@@ -1253,6 +1255,7 @@ function toggleMoodJournal(): void {
   // Close other panels if open
   if (statsPanelOpen) statsPanelOpen = false;
   if (diaryPanelOpen) diaryPanelOpen = false;
+  if (settingsPanelOpen) settingsPanelOpen = false;
   moodJournalOpen = !moodJournalOpen;
   moodJournalScrollOffset = 0;
   if (moodJournalOpen) {
@@ -1272,6 +1275,387 @@ function updateMoodJournal(): void {
   }
 }
 
+// --- Settings Panel ---
+let settingsPanelOpen = false;
+let settingsPanelFade = 0;
+const SETTINGS_PANEL_FADE_SPEED = 0.06;
+let settingsPanelOpenCount = 0; // for achievement tracking
+let settingsScrollOffset = 0; // vertical scroll for settings content
+
+function toggleSettingsPanel(): void {
+  if (minigameActive || memoryGameActive) return;
+  // Close other panels if open
+  if (statsPanelOpen) statsPanelOpen = false;
+  if (diaryPanelOpen) diaryPanelOpen = false;
+  if (moodJournalOpen) moodJournalOpen = false;
+  settingsPanelOpen = !settingsPanelOpen;
+  settingsScrollOffset = 0;
+  if (settingsPanelOpen) {
+    settingsPanelOpenCount++;
+    playTone(520, 0.1, "sine", 0.08);
+    setTimeout(() => playTone(780, 0.12, "sine", 0.08), 60);
+  } else {
+    playTone(780, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(520, 0.1, "sine", 0.06), 60);
+  }
+}
+
+// Settings panel click areas (recalculated each draw)
+interface SettingsClickArea {
+  x: number; y: number; w: number; h: number;
+  action: () => void;
+}
+let settingsClickAreas: SettingsClickArea[] = [];
+
+function drawSettingsPanel(): void {
+  // Animate fade
+  if (settingsPanelOpen && settingsPanelFade < 1) {
+    settingsPanelFade = Math.min(1, settingsPanelFade + SETTINGS_PANEL_FADE_SPEED);
+  } else if (!settingsPanelOpen && settingsPanelFade > 0) {
+    settingsPanelFade = Math.max(0, settingsPanelFade - SETTINGS_PANEL_FADE_SPEED);
+  }
+  if (settingsPanelFade <= 0) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const alpha = settingsPanelFade;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Panel dimensions
+  const panelX = 8;
+  const panelY = 8;
+  const panelW = w - 16;
+  const panelH = h - 16;
+
+  // Background gradient — warm purple-blue
+  const bgGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+  bgGrad.addColorStop(0, "rgba(45, 30, 70, 0.94)");
+  bgGrad.addColorStop(1, "rgba(25, 20, 50, 0.96)");
+  ctx.fillStyle = bgGrad;
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = `rgba(180, 140, 255, ${0.5 * alpha})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Clip to panel for scrolling
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 10);
+  ctx.clip();
+
+  // Reset click areas
+  settingsClickAreas = [];
+
+  // Title
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "bold 11px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("⚙️ Settings", w / 2, panelY + 18);
+
+  let curY = panelY + 32 - settingsScrollOffset;
+
+  // Helper: draw a section header
+  function drawSectionHeader(label: string, y: number): number {
+    ctx.fillStyle = "rgba(180, 140, 255, 0.7)";
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(label, panelX + 10, y);
+    // Underline
+    ctx.strokeStyle = "rgba(180, 140, 255, 0.25)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(panelX + 10, y + 3);
+    ctx.lineTo(panelX + panelW - 10, y + 3);
+    ctx.stroke();
+    return y + 14;
+  }
+
+  // Helper: draw a toggle switch
+  function drawToggle(label: string, value: boolean, x: number, y: number, toggleAction: () => void): number {
+    // Label
+    ctx.fillStyle = "rgba(220, 220, 240, 0.9)";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(label, x, y);
+
+    // Toggle track
+    const trackX = panelX + panelW - 42;
+    const trackY = y - 7;
+    const trackW = 28;
+    const trackH = 12;
+    const knobR = 5;
+
+    ctx.fillStyle = value ? "rgba(100, 220, 120, 0.7)" : "rgba(100, 100, 120, 0.5)";
+    ctx.beginPath();
+    ctx.roundRect(trackX, trackY, trackW, trackH, 6);
+    ctx.fill();
+
+    // Knob
+    const knobX = value ? trackX + trackW - knobR - 2 : trackX + knobR + 2;
+    ctx.fillStyle = value ? "#FFFFFF" : "rgba(200, 200, 210, 0.8)";
+    ctx.beginPath();
+    ctx.arc(knobX, trackY + trackH / 2, knobR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Register click area
+    settingsClickAreas.push({
+      x: trackX - 4, y: trackY - 2, w: trackW + 8, h: trackH + 4,
+      action: toggleAction,
+    });
+
+    return y + 18;
+  }
+
+  // --- Pet Name ---
+  curY = drawSectionHeader("🏷️ PET NAME", curY);
+  const nameDisplay = petName || "(tap to name)";
+  ctx.fillStyle = petName ? "rgba(255, 240, 200, 0.9)" : "rgba(160, 160, 180, 0.6)";
+  ctx.font = petName ? "bold 10px monospace" : "italic 9px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(nameDisplay, panelX + 14, curY);
+  // Edit icon
+  ctx.fillStyle = "rgba(180, 140, 255, 0.6)";
+  ctx.font = "9px monospace";
+  const nameTextW = ctx.measureText(nameDisplay).width;
+  ctx.fillText(" ✏️", panelX + 14 + nameTextW, curY);
+  settingsClickAreas.push({
+    x: panelX + 10, y: curY - 10, w: panelW - 20, h: 14,
+    action: async () => {
+      const newName = await window.tamashii.promptPetName(petName);
+      if (newName !== null) {
+        const oldName = petName;
+        petName = newName;
+        saveGame();
+        if (newName && newName !== oldName) {
+          queueSpeechBubble(`Call me ${newName}! ♥`, 180, true);
+          addDiaryEntry("general", "🏷️", `Got a new name: ${newName}!`);
+          squishAmount = 0.4;
+          isHappy = true;
+          happyTimer = 45;
+        }
+      }
+    },
+  });
+  curY += 16;
+
+  // --- Toggles ---
+  curY = drawSectionHeader("🔧 TOGGLES", curY);
+  curY = drawToggle("🔊 Sound Effects", soundEnabled, panelX + 14, curY, () => {
+    soundEnabled = !soundEnabled;
+    if (soundEnabled) playClickSound();
+    saveGame();
+  });
+  curY = drawToggle("🔔 Notifications", notificationsEnabled, panelX + 14, curY, () => {
+    notificationsEnabled = !notificationsEnabled;
+    const msg = notificationsEnabled ? "🔔 Notifications on!" : "🔕 Notifications off";
+    queueSpeechBubble(msg, 120, true);
+    saveGame();
+  });
+  curY = drawToggle("🚶 Wandering", wanderingEnabled, panelX + 14, curY, () => {
+    wanderingEnabled = !wanderingEnabled;
+    if (!wanderingEnabled) {
+      wanderState = "pausing";
+      wanderTimer = 60;
+    }
+  });
+  curY += 4;
+
+  // --- Color Palette ---
+  curY = drawSectionHeader("🎨 COLOR", curY);
+  const colorGridX = panelX + 12;
+  const colorCellSize = 18;
+  const colorCellGap = 4;
+  const colorsPerRow = Math.floor((panelW - 24) / (colorCellSize + colorCellGap));
+
+  for (let i = 0; i < COLOR_PALETTES.length; i++) {
+    const palette = COLOR_PALETTES[i];
+    const col = i % colorsPerRow;
+    const row = Math.floor(i / colorsPerRow);
+    const cellX = colorGridX + col * (colorCellSize + colorCellGap);
+    const cellY = curY + row * (colorCellSize + colorCellGap);
+
+    // Cell background — use the palette's afternoon body color as preview
+    const previewColor = palette.colors["afternoon"]?.body || "#888";
+    const isSelected = currentColorPalette === palette.id;
+
+    // Selected highlight
+    if (isSelected) {
+      ctx.fillStyle = "rgba(255, 215, 0, 0.4)";
+      ctx.beginPath();
+      ctx.roundRect(cellX - 2, cellY - 2, colorCellSize + 4, colorCellSize + 4, 5);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = previewColor;
+    ctx.beginPath();
+    ctx.roundRect(cellX, cellY, colorCellSize, colorCellSize, 4);
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = isSelected ? "rgba(255, 215, 0, 0.8)" : "rgba(255, 255, 255, 0.2)";
+    ctx.lineWidth = isSelected ? 1.5 : 0.5;
+    ctx.stroke();
+
+    // Icon inside
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "8px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(palette.icon, cellX + colorCellSize / 2, cellY + colorCellSize / 2 + 3);
+
+    settingsClickAreas.push({
+      x: cellX, y: cellY, w: colorCellSize, h: colorCellSize,
+      action: () => {
+        if (currentColorPalette === palette.id) return;
+        const oldPalette = currentColorPalette;
+        currentColorPalette = palette.id;
+        saveGame();
+        queueSpeechBubble(`${palette.icon} ${palette.name}!`, 120, true);
+        playClickSound();
+        squishAmount = 0.3;
+        if (palette.id !== "default" && oldPalette !== palette.id) {
+          addDiaryEntry("accessory", "🎨", `Changed color to ${palette.name}!`);
+        }
+        checkAchievements();
+      },
+    });
+  }
+  const colorRows = Math.ceil(COLOR_PALETTES.length / colorsPerRow);
+  curY += colorRows * (colorCellSize + colorCellGap) + 8;
+
+  // --- Accessories ---
+  curY = drawSectionHeader("👒 ACCESSORY", curY);
+  const accessoryList: { id: AccessoryType; icon: string; name: string }[] = [
+    { id: "none", icon: "❌", name: "None" },
+    { id: "crown", icon: "👑", name: "Crown" },
+    { id: "bow", icon: "🎀", name: "Bow" },
+    { id: "glasses", icon: "👓", name: "Glasses" },
+    { id: "flower", icon: "🌸", name: "Flower" },
+    { id: "party_hat", icon: "🎉", name: "Party Hat" },
+    { id: "cat_ears", icon: "😺", name: "Cat Ears" },
+    { id: "top_hat", icon: "🎩", name: "Top Hat" },
+    { id: "headband_star", icon: "⭐", name: "Star" },
+  ];
+  const accGridX = panelX + 12;
+  const accCellSize = 18;
+  const accCellGap = 4;
+  const accPerRow = Math.floor((panelW - 24) / (accCellSize + accCellGap));
+
+  for (let i = 0; i < accessoryList.length; i++) {
+    const acc = accessoryList[i];
+    const col = i % accPerRow;
+    const row = Math.floor(i / accPerRow);
+    const cellX = accGridX + col * (accCellSize + accCellGap);
+    const cellY = curY + row * (accCellSize + accCellGap);
+
+    const isSelected = currentAccessory === acc.id;
+
+    if (isSelected) {
+      ctx.fillStyle = "rgba(255, 215, 0, 0.4)";
+      ctx.beginPath();
+      ctx.roundRect(cellX - 2, cellY - 2, accCellSize + 4, accCellSize + 4, 5);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = isSelected ? "rgba(80, 60, 120, 0.8)" : "rgba(60, 50, 90, 0.6)";
+    ctx.beginPath();
+    ctx.roundRect(cellX, cellY, accCellSize, accCellSize, 4);
+    ctx.fill();
+
+    ctx.strokeStyle = isSelected ? "rgba(255, 215, 0, 0.8)" : "rgba(255, 255, 255, 0.15)";
+    ctx.lineWidth = isSelected ? 1.5 : 0.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(acc.icon, cellX + accCellSize / 2, cellY + accCellSize / 2 + 3);
+
+    settingsClickAreas.push({
+      x: cellX, y: cellY, w: accCellSize, h: accCellSize,
+      action: () => {
+        const oldAccessory = currentAccessory;
+        currentAccessory = acc.id;
+        saveGame();
+        if (acc.id !== "none") {
+          const msgs = ["How do I look?", "So stylish~!", "I love it! ♥", "Fashion icon!", "Looking good!"];
+          queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 180);
+          playGreetingSound();
+          squishAmount = 0.5;
+          isHappy = true;
+          happyTimer = 45;
+          addDiaryEntry("accessory", "👒", `Put on the ${acc.name}!`);
+        } else if (oldAccessory !== "none") {
+          addDiaryEntry("accessory", "👒", "Took off accessory — going natural!");
+        }
+      },
+    });
+  }
+  const accRows = Math.ceil(accessoryList.length / accPerRow);
+  curY += accRows * (accCellSize + accCellGap) + 8;
+
+  // --- Toys ---
+  curY = drawSectionHeader("🧸 TOY", curY);
+  const toyGridX = panelX + 12;
+  const toyCellW = 30;
+  const toyCellH = 18;
+  const toyCellGap = 4;
+
+  for (let i = 0; i < TOYS.length; i++) {
+    const toy = TOYS[i];
+    const cellX = toyGridX + i * (toyCellW + toyCellGap);
+    const cellY = curY;
+
+    const isSelected = currentToy === toy.id;
+
+    if (isSelected) {
+      ctx.fillStyle = "rgba(255, 215, 0, 0.35)";
+      ctx.beginPath();
+      ctx.roundRect(cellX - 2, cellY - 2, toyCellW + 4, toyCellH + 4, 5);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = isSelected ? "rgba(80, 60, 120, 0.8)" : "rgba(60, 50, 90, 0.6)";
+    ctx.beginPath();
+    ctx.roundRect(cellX, cellY, toyCellW, toyCellH, 4);
+    ctx.fill();
+
+    ctx.strokeStyle = isSelected ? "rgba(255, 215, 0, 0.8)" : "rgba(255, 255, 255, 0.15)";
+    ctx.lineWidth = isSelected ? 1.5 : 0.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(toy.icon, cellX + toyCellW / 2, cellY + toyCellH / 2 + 3);
+
+    settingsClickAreas.push({
+      x: cellX, y: cellY, w: toyCellW, h: toyCellH,
+      action: () => {
+        setToy(toy.id);
+        checkAchievements();
+      },
+    });
+  }
+  curY += toyCellH + 14;
+
+  // Restore clip
+  ctx.restore();
+
+  // Footer
+  ctx.fillStyle = "rgba(160, 150, 200, 0.4)";
+  ctx.font = "7px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("G to close — right-click to close", w / 2, panelY + panelH - 6);
+
+  ctx.restore();
+}
+
 // --- Pet Photo Mode ---
 let totalPhotos = 0;
 let photoFlashAlpha = 0; // 0-1 white flash overlay when taking a photo
@@ -1286,7 +1670,7 @@ function playShutterSound(): void {
 
 function takePhoto(): void {
   if (minigameActive || memoryGameActive) return;
-  if (statsPanelOpen || diaryPanelOpen || moodJournalOpen || shortcutHelpOpen) return;
+  if (statsPanelOpen || diaryPanelOpen || moodJournalOpen || settingsPanelOpen || shortcutHelpOpen) return;
 
   // Flash effect
   photoFlashAlpha = 1.0;
@@ -1549,6 +1933,19 @@ let lastX = 0;
 let lastY = 0;
 
 canvas.addEventListener("mousedown", (e) => {
+  // Settings panel click handling — intercept clicks on interactive elements
+  if (settingsPanelOpen && settingsPanelFade > 0.5) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    for (const area of settingsClickAreas) {
+      if (clickX >= area.x && clickX <= area.x + area.w && clickY >= area.y && clickY <= area.y + area.h) {
+        area.action();
+        return; // consumed by settings panel
+      }
+    }
+    return; // block dragging while settings is open
+  }
   // During mini-game, check for star clicks before drag
   if (minigameActive) {
     const rect = canvas.getBoundingClientRect();
@@ -1744,6 +2141,10 @@ canvas.addEventListener("contextmenu", (e) => {
   }
   if (moodJournalOpen) {
     toggleMoodJournal();
+    return;
+  }
+  if (settingsPanelOpen) {
+    toggleSettingsPanel();
     return;
   }
   window.tamashii.showContextMenu({
@@ -3046,6 +3447,11 @@ const achievements: Achievement[] = [
     icon: "📈", unlockMessage: "Tracking my feelings~!",
     condition: () => moodSnapshots.length >= 24, unlocked: false,
   },
+  {
+    id: "configurator", name: "Configurator", description: "Open the settings panel 5 times",
+    icon: "⚙️", unlockMessage: "I love being customized~!",
+    condition: () => settingsPanelOpenCount >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -3137,6 +3543,7 @@ function toggleStatsPanel(): void {
   // Close other panels if open
   if (diaryPanelOpen) diaryPanelOpen = false;
   if (moodJournalOpen) moodJournalOpen = false;
+  if (settingsPanelOpen) settingsPanelOpen = false;
   statsPanelOpen = !statsPanelOpen;
   if (statsPanelOpen) {
     playTone(600, 0.1, "sine", 0.08);
@@ -3161,6 +3568,10 @@ window.tamashii.onTakePhoto(() => {
 
 window.tamashii.onViewMoodJournal(() => {
   toggleMoodJournal();
+});
+
+window.tamashii.onViewSettings(() => {
+  toggleSettingsPanel();
 });
 
 function formatTime(ms: number): string {
@@ -3747,6 +4158,7 @@ interface SaveData {
   totalToyPlays: number;
   trickProgress: Record<string, number>;
   moodSnapshots: MoodSnapshot[];
+  settingsPanelOpenCount: number;
   version: number;
 }
 
@@ -3784,6 +4196,7 @@ function buildSaveData(): SaveData {
     totalToyPlays,
     trickProgress: { ...trickProgress },
     moodSnapshots: moodSnapshots.slice(-MOOD_JOURNAL_MAX_SNAPSHOTS),
+    settingsPanelOpenCount,
     version: 1,
   };
 }
@@ -3918,6 +4331,11 @@ function applySaveData(data: SaveData): void {
     if (moodSnapshots.length > 0) {
       lastMoodSnapshotTime = moodSnapshots[moodSnapshots.length - 1].timestamp;
     }
+  }
+
+  // Restore settings panel open count
+  if (typeof data.settingsPanelOpenCount === "number") {
+    settingsPanelOpenCount = data.settingsPanelOpenCount;
   }
 
   // Restore diary
@@ -7268,6 +7686,9 @@ function draw(): void {
   // Mood journal overlay
   drawMoodJournal();
 
+  // Settings panel overlay
+  drawSettingsPanel();
+
   // Photo flash overlay
   if (photoFlashAlpha > 0) {
     ctx.save();
@@ -7546,6 +7967,7 @@ function drawShortcutHelp(): void {
     ["T", "Cycle Toy"],
     ["K", "Practice/Do Trick"],
     ["J", "Mood Journal"],
+    ["G", "Settings Panel"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -7614,6 +8036,10 @@ window.addEventListener("keydown", (e) => {
       toggleMoodJournal();
       return;
     }
+    if (settingsPanelOpen) {
+      toggleSettingsPanel();
+      return;
+    }
     if (minigameActive || memoryGameActive) {
       // Don't force-close games with Escape — let them finish
       return;
@@ -7641,6 +8067,9 @@ window.addEventListener("keydown", (e) => {
 
   // Don't process shortcuts while mood journal is open (except Esc and J)
   if (moodJournalOpen && key !== "j") return;
+
+  // Don't process shortcuts while settings panel is open (except Esc and G)
+  if (settingsPanelOpen && key !== "g") return;
 
   switch (key) {
     case " ":
@@ -7719,6 +8148,11 @@ window.addEventListener("keydown", (e) => {
       shortcutUsageCount++;
       checkAchievements();
       break;
+    case "g":
+      toggleSettingsPanel();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
     case "c": {
       // Cycle to next color palette
       const paletteIds = COLOR_PALETTES.map(p => p.id);
@@ -7752,6 +8186,11 @@ canvas.addEventListener("wheel", (e) => {
     // Scroll left (older) with scroll down, right (newer) with scroll up
     moodJournalScrollOffset += e.deltaY > 0 ? 3 : -3;
     moodJournalScrollOffset = Math.max(0, moodJournalScrollOffset);
+  }
+  if (settingsPanelOpen) {
+    e.preventDefault();
+    settingsScrollOffset += e.deltaY > 0 ? 12 : -12;
+    settingsScrollOffset = Math.max(0, settingsScrollOffset);
   }
 }, { passive: false });
 

@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.49.0] — 2026-04-06 — Settings Panel
+
+### Added
+- **In-canvas settings panel** — a beautiful purple-themed overlay that consolidates all pet customization options into one unified interface, accessible with a single keypress or right-click
+- **Toggle switches** — interactive on/off toggles for Sound Effects, Notifications, and Wandering, with satisfying green/gray visual state and click-to-toggle interaction
+- **Color palette grid** — all 8 color palettes displayed as clickable swatches showing each palette's body color preview, with gold highlight on the active selection
+- **Accessory picker grid** — all 9 accessories (including None) shown as icon tiles, tap to instantly equip with the same speech bubble and diary reactions as the context menu
+- **Toy selector row** — all 5 toy options displayed as clickable tiles with gold selection indicator
+- **Pet name editor** — tap the name area to rename your pet, with placeholder text "(tap to name)" for unnamed pets, and an edit pencil icon
+- **Keyboard shortcut G** — press G to instantly toggle the settings panel
+- **Context menu entry** — "⚙️ Settings Panel" appears at the top of the Settings submenu for right-click access
+- **Scrollable content** — mouse wheel scrolls the settings panel content when it exceeds the visible area
+- **Panel mutual exclusion** — settings panel properly integrates with the panel system: opening it closes stats/diary/mood journal panels, and vice versa; right-click or Escape closes it
+- **Configurator achievement** — open the settings panel 5 times to unlock achievement #26 (⚙️)
+- **Settings panel open count persistence** — your settings panel usage count is saved across sessions for the achievement
+- **Shortcut help updated** — G for Settings Panel now appears in the keyboard shortcuts overlay
+- **Total achievements: 26**
+
+**Why this feature:** Over the past 48 versions, Tamashii accumulated a rich set of customization options — color palettes, accessories, toys, sound toggles, notifications, wandering, and pet naming. But they were all scattered across nested context menu submenus. Finding a specific setting meant right-clicking, navigating to Settings, then diving into Accessories or Colors submenus. The settings panel brings everything together in one gorgeous overlay. Tap G, and you see your entire pet configuration at a glance: toggle switches with satisfying on/off animations, color swatches showing actual palette colors, accessory icons you can tap to instantly try on, and your pet's name with a quick-edit pencil. It transforms the scattered context menu experience into a cohesive, visual dashboard — like a character customization screen in your favorite game. The warm purple gradient and gold accents make it feel premium and intentional, not just functional.
+
 ## [v0.48.0] — 2026-04-06 — Mood Journal
 
 ### Added

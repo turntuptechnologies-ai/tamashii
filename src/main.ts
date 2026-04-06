@@ -221,6 +221,11 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
       label: "⚙️ Settings",
       submenu: [
         {
+          label: "⚙️ Settings Panel",
+          click: () => { mainWindow?.webContents.send("view-settings"); },
+        },
+        { type: "separator" as const },
+        {
           label: wanderingEnabled ? "🚶 Disable Wandering" : "🧍 Enable Wandering",
           click: () => { mainWindow?.webContents.send("toggle-wandering"); },
         },
@@ -276,7 +281,7 @@ ipcMain.handle("show-context-menu", (_event, menuData: { timeOfDay: string; wand
           type: "info",
           title: "About Tamashii",
           message: "Tamashii — Desktop Pet",
-          detail: "Version 0.48.0\nA cute autonomous desktop companion.\nBuilt with love by Claude Code & NOTO Ai.",
+          detail: "Version 0.49.0\nA cute autonomous desktop companion.\nBuilt with love by Claude Code & NOTO Ai.",
           buttons: ["OK"],
         });
       },

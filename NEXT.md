@@ -3,34 +3,32 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.48.0 — Mood Journal (2026-04-06)
+## Last completed: v0.49.0 — Settings Panel (2026-04-06)
 
 ### What was done
-- Added automatic mood snapshot system: logs happiness, hunger, energy every 10 minutes
-- `MoodSnapshot` interface with timestamp, happiness, hunger, energy fields
-- `moodSnapshots` array (max 144 entries = 24 hours of data)
-- `takeMoodSnapshot()`, `updateMoodJournal()`, `toggleMoodJournal()` functions
-- `drawMoodJournal()` — in-canvas overlay with teal gradient background
-- Line chart with 3 color-coded trend lines (pink=happiness, green=hunger, yellow=energy)
-- Glowing line effects, data point dots, grid lines, Y-axis labels (0-100), time labels
-- Scrollable time window: shows 24 data points at a time, mouse wheel scrolls through history
-- Current values display showing latest snapshot percentages
-- Legend with stat icons and color-coded labels
-- Context menu entry "📈 Mood Journal" under Info submenu
-- `onViewMoodJournal` IPC channel added to preload bridge and renderer
-- Keyboard shortcut J to toggle mood journal
-- `moodSnapshots` added to SaveData interface, buildSaveData, applySaveData
-- `lastMoodSnapshotTime` restored from last snapshot's timestamp on load
-- Achievement #25: "Mood Watcher" (📈) — log 24+ mood snapshots
-- Diary entry logged when first mood snapshot is taken
-- Panel guards: mood journal blocks toy play, trick start, photo mode while open
-- Mutual exclusion with stats panel and diary panel
-- Right-click and Escape close the mood journal
-- Shortcut help overlay updated with J entry
-- Total achievements: 25
+- Added an in-canvas settings panel consolidating all customization options into one polished UI
+- `settingsPanelOpen`, `settingsPanelFade`, `settingsScrollOffset`, `settingsPanelOpenCount` state variables
+- `toggleSettingsPanel()` function with panel mutual exclusion and sound feedback
+- `drawSettingsPanel()` — full-featured overlay with warm purple gradient background
+- Interactive toggle switches for Sound, Notifications, Wandering (green on/gray off)
+- Color palette grid showing 8 color swatches with actual body color preview
+- Accessory picker grid with 9 icon tiles (including None)
+- Toy selector row with 5 clickable tiles
+- Pet name display with tap-to-edit and pencil icon
+- `SettingsClickArea` interface with hit-testing on mousedown
+- Mouse wheel scrolling for settings content
+- Context menu entry "⚙️ Settings Panel" at top of Settings submenu
+- `onViewSettings` IPC channel added to preload bridge and renderer
+- Keyboard shortcut G to toggle settings panel
+- `settingsPanelOpenCount` added to SaveData interface, buildSaveData, applySaveData
+- Achievement #26: "Configurator" (⚙️) — open settings panel 5+ times
+- Panel guards: settings panel blocks toy play, trick start, photo mode while open
+- Mutual exclusion with stats panel, diary panel, mood journal
+- Right-click and Escape close the settings panel
+- Shortcut help overlay updated with G entry
+- Total achievements: 26
 
 ### Thoughts for next cycle
-- **Settings window** — a dedicated in-canvas settings panel to consolidate name, accessory, color, toy, volume, notifications, wandering into one polished UI
 - **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
 - **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos, track photo paths in save data
 - **Trick combos** — perform tricks in specific sequences for bonus effects (wave→dance→twirl = special combo animation)
@@ -40,15 +38,16 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Toy collection / unlock system** — unlock new toys by reaching milestones
 - **Mini-game: Trick Performance** — a rhythm game where you time trick performances for high scores
 - **Sleep tracker** — integrate with energy stat to show sleep/wake cycles in the mood journal
+- **Pet emotes** — quick emoji reactions the pet can display (separate from speech bubbles), triggered by specific interactions
 
 ### Current architecture notes
-- Renderer is ~7600+ lines
-- Mood journal system is defined after the Diary section (~line 1216)
-- `drawMoodJournal()` is defined after `drawDiaryPanel()` (~line 3506)
-- Mood snapshot uses Date.now()-based timing (not frame-based) via `MOOD_SNAPSHOT_INTERVAL_MS`
-- `updateMoodJournal()` is called in `update()` before auto-save
-- Mood journal panel draws after diary panel in `draw()` (line ~7040)
+- Renderer is ~8000+ lines
+- Settings panel system is defined after the Mood Journal section (~line 1276)
+- `drawSettingsPanel()` draws after `drawMoodJournal()` in the draw() function
+- Settings panel uses `SettingsClickArea[]` array rebuilt each draw frame for hit testing
+- Click interception happens at the top of the mousedown handler (before drag logic)
+- Settings panel content uses `settingsScrollOffset` for vertical scrolling via mouse wheel
 - Context menu data now includes everything from previous cycles
-- Total achievements: 25
+- Total achievements: 26
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
