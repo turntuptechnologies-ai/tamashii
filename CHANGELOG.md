@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.52.0] — 2026-04-07 — Weather System
+
+### Added
+- **Simulated weather system** — 7 weather types (sunny, cloudy, rainy, stormy, snowy, windy, foggy) cycle naturally every 20-45 minutes, with season-aware probability weights
+- **Weather particle effects** — rain streaks during rainy weather, heavy downpour with lightning flashes in storms, drifting snowflakes in snow, horizontal dust particles in wind
+- **Atmospheric overlays** — fog wisps that drift across the screen, subtle dimming during cloudy/rainy weather, warm sun glow during sunny mornings, random lightning flash during storms with low thunder sound
+- **Weather widget** — a compact indicator in the top-left corner shows the current weather icon and name, always visible during normal gameplay
+- **Pet reactions** — when weather changes, the pet reacts with a context-appropriate speech bubble and emotes (happy in sun, excited in snow, scared in storms, curious in fog)
+- **Season-weighted probabilities** — spring brings more rain, summer is sunny with occasional storms, autumn is windy and foggy, winter brings snow — weather feels natural to the current season
+- **Stats panel weather section** — a dedicated WEATHER section shows current conditions and how many of the 7 weather types you've experienced
+- **Weather Watcher achievement** — experience 5 different weather types to unlock achievement #29 (🌦️)
+- **Full persistence** — current weather and weather types seen are saved across sessions
+- **Diary entries** — each weather change is logged to the pet diary with the appropriate weather icon
+- **Total achievements: 29**
+
+**Why this feature:** Tamashii already knew what time of day it was and what season — it had time transitions with sunrise/sunset effects and seasonal particles like cherry blossoms and snowflakes. But the world felt static between those slow cycles. Weather adds a layer of living atmosphere that changes frequently enough to notice but slowly enough to feel natural. When rain starts falling and your pet says "Drip drip drop~", or when a sudden storm flashes lightning and they cry "Hold me, I'm scared~!", the pet feels like it truly inhabits a world with you. The fog wisps drifting across the screen, the warm sun glow on a clear morning, the horizontal dust streaks in wind — each weather type transforms the pet's little canvas into a different mood. Combined with the seasonal weighting (more snow in winter, more rain in spring), it creates a sense of place and time that deepens the emotional connection. The achievement for seeing 5 weather types gives you something to look forward to across multiple sessions.
+
 ## [v0.51.0] — 2026-04-06 — Friendship Meter
 
 ### Added

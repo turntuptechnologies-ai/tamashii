@@ -3,23 +3,19 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.51.0 — Friendship Meter (2026-04-06)
+## Last completed: v0.52.0 — Weather System (2026-04-07)
 
 ### What was done
-- Added friendship meter — a hidden bond stat (level 0-100) that grows with interactions
-- `friendshipXP` raw XP counter, `getFriendshipLevel()` derives level via sqrt(XP/5) capped at 100
-- `addFriendshipXP()` awards XP and celebrates milestone levels (every 10 levels)
-- XP gains: click +1, feed +3, nap +2, toy play +2, trick practice +3, daily visit +50 base
-- Daily visit streak: `consecutiveDays`, `lastVisitDate` track streak, bonus XP scales with streak
-- `drawFriendshipAura()` renders evolving glow behind pet:
-  - Level 10+: warm subtle radial glow
-  - Level 25+: pink heart aura with sine pulse
-  - Level 50+: golden shimmer aura
-  - Level 75+: golden aura + 6 orbiting sparkle dots
-- Stats panel shows FRIENDSHIP section: level, pink-to-gold progress bar, XP counter, streak info
-- Achievement #28: "Soulbound" (💕) — reach friendship level 50
-- Added to SaveData: `friendshipXP`, `consecutiveDays`, `lastVisitDate`
-- Total achievements: 28
+- Added simulated weather system with 7 weather types: sunny, cloudy, rainy, stormy, snowy, windy, foggy
+- Season-weighted probability system: spring = more rain, summer = sunny + storms, autumn = windy + foggy, winter = snowy
+- Weather changes every 20-45 minutes with smooth transitions
+- Visual effects: rain/storm particles, snowflakes, wind dust, fog wisps, sun glow, lightning flashes
+- Weather widget in top-left corner shows current conditions
+- Pet reacts to weather changes with speech bubbles and emotes
+- Stats panel shows WEATHER section with current conditions and types-seen counter
+- Achievement #29: "Weather Watcher" (🌦️) — experience 5 different weather types
+- Added to SaveData: `weatherTypesSeen`, `currentWeather`
+- Total achievements: 29
 
 ### Thoughts for next cycle
 - **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
@@ -28,18 +24,22 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet
 - **Custom color mixer** — let users define their own RGB palette instead of presets only
 - **Mini-game: Trick Performance** — a rhythm game where you time trick performances for high scores
-- **Ambient reactions** — pet reacts to system events like time changes, long idle periods, or returning after being away
-- **Pet outfits** — full body cosmetic sets that change the pet's appearance (beyond single accessories)
 - **Friendship milestones unlock** — friendship levels unlock exclusive cosmetics, toys, or abilities
-- **Weather widget** — show a tiny weather indicator based on system time/season, pet reacts to it
+- **Pet outfits** — full body cosmetic sets that change the pet's appearance (beyond single accessories)
+- **Weather-specific activities** — pet plays in rain puddles, builds snowmen in snow, chases leaves in wind
+- **Notification sounds** — different notification chimes for different events (weather changes, stat warnings, achievements)
+- **Pet sleep schedule** — pet actually falls asleep at night with dream animations, wakes up in morning
 
 ### Current architecture notes
-- Renderer is ~8500+ lines
-- Friendship system is defined early in the file (~line 537) after the Emote interface/array
-- `drawFriendshipAura()` is called in draw() between charge ring and squish transform
-- Friendship aura uses `friendshipAuraPhase` for smooth animation
-- Daily visit streak is checked once during loadSaveData callback
-- Context menu data now includes everything from previous cycles
-- Total achievements: 28
+- Renderer is ~8800+ lines
+- Weather system defined early (~line 537) after the Emote interface/array, before Friendship Meter
+- `updateWeather()` called in update() before mood journal snapshot
+- `drawWeatherOverlay()` called in draw() after ambient glow, before footprints
+- `drawWeatherWidget()` called in draw() after stat bars, before mini-game HUD
+- Weather widget hidden when panels are open
+- Storm lightning uses random flash with sawtooth oscillator for thunder sound
+- Weather timer uses frame-based countdown (WEATHER_CHANGE_MIN/MAX)
+- Context menu data unchanged this cycle
+- Total achievements: 29
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

@@ -534,6 +534,267 @@ const AUTONOMOUS_EMOTE_INTERVAL_MIN = 900; // ~15 seconds
 const AUTONOMOUS_EMOTE_INTERVAL_MAX = 2400; // ~40 seconds
 let nextAutonomousEmoteAt = AUTONOMOUS_EMOTE_INTERVAL_MIN + Math.random() * (AUTONOMOUS_EMOTE_INTERVAL_MAX - AUTONOMOUS_EMOTE_INTERVAL_MIN);
 
+// --- Weather System ---
+type WeatherType = "sunny" | "cloudy" | "rainy" | "stormy" | "snowy" | "windy" | "foggy";
+
+const WEATHER_ICONS: Record<WeatherType, string> = {
+  sunny: "☀️", cloudy: "☁️", rainy: "🌧️", stormy: "⛈️", snowy: "❄️", windy: "💨", foggy: "🌫️",
+};
+
+const WEATHER_NAMES: Record<WeatherType, string> = {
+  sunny: "Sunny", cloudy: "Cloudy", rainy: "Rainy", stormy: "Stormy", snowy: "Snowy", windy: "Windy", foggy: "Foggy",
+};
+
+// Season-weighted weather probabilities
+const SEASON_WEATHER_WEIGHTS: Record<Season, Record<WeatherType, number>> = {
+  spring: { sunny: 3, cloudy: 3, rainy: 4, stormy: 1, snowy: 0, windy: 2, foggy: 1 },
+  summer: { sunny: 5, cloudy: 2, rainy: 1, stormy: 2, snowy: 0, windy: 1, foggy: 0 },
+  autumn: { sunny: 2, cloudy: 3, rainy: 3, stormy: 1, snowy: 0, windy: 3, foggy: 2 },
+  winter: { sunny: 2, cloudy: 3, rainy: 1, stormy: 0, snowy: 4, windy: 2, foggy: 1 },
+};
+
+let currentWeather: WeatherType = "sunny";
+let weatherTimer = 0;             // frames until next weather change
+let weatherTransitionAlpha = 0;   // 0-1 fade for weather transition
+let weatherTransitioning = false;
+let weatherNextType: WeatherType = "sunny";
+let weatherParticleTimer = 0;     // spawn timer for weather-specific particles
+let weatherWidgetPulse = 0;       // animation phase for widget
+let weatherTypesSeen: Set<string> = new Set();
+let weatherReactionCooldown = 0;  // prevent spam reactions
+
+const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
+const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
+
+function pickWeather(): WeatherType {
+  const weights = SEASON_WEATHER_WEIGHTS[currentSeason];
+  const types = Object.keys(weights) as WeatherType[];
+  const totalWeight = types.reduce((sum, t) => sum + weights[t], 0);
+  let roll = Math.random() * totalWeight;
+  for (const t of types) {
+    roll -= weights[t];
+    if (roll <= 0) return t;
+  }
+  return "sunny";
+}
+
+function startWeatherChange(): void {
+  const next = pickWeather();
+  // Avoid same weather twice in a row (re-roll once)
+  if (next === currentWeather) {
+    weatherNextType = pickWeather();
+    if (weatherNextType === currentWeather) weatherNextType = "cloudy"; // fallback
+  } else {
+    weatherNextType = next;
+  }
+  weatherTransitioning = true;
+  weatherTransitionAlpha = 0;
+}
+
+function getWeatherPetReaction(weather: WeatherType): string {
+  const reactions: Record<WeatherType, string[]> = {
+    sunny: ["What a beautiful day! ☀️", "Warm and cozy~!", "Sunshine makes me happy!"],
+    cloudy: ["The clouds look so fluffy~", "A grey kind of day...", "Hmm, overcast today."],
+    rainy: ["Rain, rain~ 🌧️", "I love the sound of rain!", "Drip drip drop~"],
+    stormy: ["Eek! Thunder! ⚡", "It's stormy outside..!", "Hold me, I'm scared~!"],
+    snowy: ["Snow! So pretty~ ❄️", "Everything is white!", "Brr, it's cold!"],
+    windy: ["Whooo~ the wind! 💨", "My fur is blowing!", "Hold on tight~!"],
+    foggy: ["So mysterious~ 🌫️", "I can barely see...", "Spooky fog..."],
+  };
+  const msgs = reactions[weather];
+  return msgs[Math.floor(Math.random() * msgs.length)];
+}
+
+function getWeatherEmoteSet(weather: WeatherType): string {
+  switch (weather) {
+    case "sunny": return "happy";
+    case "rainy": return "sad";
+    case "stormy": return "sad";
+    case "snowy": return "excited";
+    case "windy": return "curious";
+    case "foggy": return "curious";
+    default: return "happy";
+  }
+}
+
+function updateWeather(): void {
+  weatherWidgetPulse += 0.03;
+
+  // Weather transition fade
+  if (weatherTransitioning) {
+    weatherTransitionAlpha += 0.008; // ~2 seconds to fully transition
+    if (weatherTransitionAlpha >= 1) {
+      weatherTransitioning = false;
+      weatherTransitionAlpha = 0;
+      currentWeather = weatherNextType;
+      weatherTypesSeen.add(currentWeather);
+
+      // Pet reacts to new weather
+      if (weatherReactionCooldown <= 0) {
+        queueSpeechBubble(getWeatherPetReaction(currentWeather), 180);
+        spawnEmoteSet(getWeatherEmoteSet(currentWeather), 2);
+        addDiaryEntry("general", WEATHER_ICONS[currentWeather], `Weather changed to ${WEATHER_NAMES[currentWeather]}!`);
+        weatherReactionCooldown = 600; // 10 second cooldown
+      }
+    }
+  }
+
+  if (weatherReactionCooldown > 0) weatherReactionCooldown--;
+
+  // Weather change timer
+  weatherTimer--;
+  if (weatherTimer <= 0) {
+    weatherTimer = WEATHER_CHANGE_MIN + Math.floor(Math.random() * (WEATHER_CHANGE_MAX - WEATHER_CHANGE_MIN));
+    startWeatherChange();
+  }
+
+  // Weather-specific particle spawning
+  const cx2 = canvas.width / 2;
+  const w = canvas.width;
+  weatherParticleTimer++;
+
+  if (currentWeather === "rainy" || currentWeather === "stormy") {
+    const rate = currentWeather === "stormy" ? 3 : 6;
+    if (weatherParticleTimer % rate === 0) {
+      particles.push({
+        x: Math.random() * (w + 40) - 20,
+        y: -5,
+        vx: currentWeather === "stormy" ? -1.5 + Math.random() * -1 : -0.3,
+        vy: 4 + Math.random() * 2 + (currentWeather === "stormy" ? 3 : 0),
+        life: 40 + Math.random() * 20,
+        maxLife: 40 + Math.random() * 20,
+        size: currentWeather === "stormy" ? 3 + Math.random() * 2 : 2 + Math.random() * 1.5,
+        type: "raindrop",
+      });
+    }
+  }
+
+  if (currentWeather === "snowy") {
+    if (weatherParticleTimer % 8 === 0) {
+      particles.push({
+        x: Math.random() * (w + 20) - 10,
+        y: -5,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: 0.4 + Math.random() * 0.4,
+        life: 200 + Math.random() * 100,
+        maxLife: 200 + Math.random() * 100,
+        size: 3 + Math.random() * 3,
+        type: "snowflake",
+      });
+    }
+  }
+
+  if (currentWeather === "windy") {
+    if (weatherParticleTimer % 12 === 0) {
+      particles.push({
+        x: -10,
+        y: 20 + Math.random() * (canvas.height - 40),
+        vx: 3 + Math.random() * 2,
+        vy: (Math.random() - 0.5) * 0.8,
+        life: 60 + Math.random() * 30,
+        maxLife: 60 + Math.random() * 30,
+        size: 2 + Math.random() * 2,
+        type: "dust",
+      });
+    }
+  }
+}
+
+function drawWeatherOverlay(): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.save();
+
+  // Fog overlay
+  if (currentWeather === "foggy") {
+    const fogAlpha = 0.12 + 0.03 * Math.sin(weatherWidgetPulse * 0.7);
+    ctx.fillStyle = `rgba(200, 210, 220, ${fogAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+    // Soft fog wisps
+    for (let i = 0; i < 3; i++) {
+      const wy = h * 0.3 + i * h * 0.2 + Math.sin(weatherWidgetPulse * 0.5 + i * 2) * 10;
+      const wx = w * 0.5 + Math.sin(weatherWidgetPulse * 0.3 + i) * w * 0.3;
+      const grad = ctx.createRadialGradient(wx, wy, 0, wx, wy, 60);
+      grad.addColorStop(0, `rgba(220, 225, 235, ${0.08 + 0.02 * Math.sin(weatherWidgetPulse + i)})`);
+      grad.addColorStop(1, "rgba(220, 225, 235, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(wx, wy, 60, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Storm flash
+  if (currentWeather === "stormy" && Math.random() < 0.003) {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.fillRect(0, 0, w, h);
+    // Thunder sound
+    playTone(60, 0.3, "sawtooth", 0.06);
+    setTimeout(() => playTone(40, 0.4, "sawtooth", 0.04), 150);
+  }
+
+  // Cloudy/rainy/stormy dim overlay
+  if (currentWeather === "cloudy" || currentWeather === "rainy" || currentWeather === "stormy") {
+    const dimAlpha = currentWeather === "stormy" ? 0.08 : currentWeather === "rainy" ? 0.05 : 0.03;
+    ctx.fillStyle = `rgba(80, 90, 110, ${dimAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // Sunny glow (subtle warm overlay)
+  if (currentWeather === "sunny" && (currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon")) {
+    const sunX = w * 0.85;
+    const sunY = 15;
+    const sunPulse = 0.5 + 0.5 * Math.sin(weatherWidgetPulse);
+    const grad = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, 35 + sunPulse * 5);
+    grad.addColorStop(0, "rgba(255, 220, 100, 0.12)");
+    grad.addColorStop(0.5, "rgba(255, 200, 80, 0.05)");
+    grad.addColorStop(1, "rgba(255, 200, 80, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 35 + sunPulse * 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawWeatherWidget(): void {
+  // Skip if any panel is open
+  if (statsPanelOpen || diaryPanelOpen || moodJournalOpen || settingsPanelOpen || shortcutHelpOpen || minigameActive || memoryGameActive) return;
+
+  const x = 6;
+  const y = 6;
+  const w = 52;
+  const h = 20;
+
+  ctx.save();
+
+  // Widget background
+  const bgAlpha = 0.55 + 0.05 * Math.sin(weatherWidgetPulse);
+  ctx.fillStyle = `rgba(15, 15, 30, ${bgAlpha})`;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+
+  // Subtle border
+  ctx.strokeStyle = "rgba(120, 160, 200, 0.25)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Weather icon
+  ctx.font = "10px serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(WEATHER_ICONS[currentWeather], x + 4, y + h / 2 + 1);
+
+  // Weather name
+  ctx.font = "bold 7px monospace";
+  ctx.fillStyle = "rgba(220, 230, 245, 0.85)";
+  ctx.fillText(WEATHER_NAMES[currentWeather], x + 18, y + h / 2);
+
+  ctx.restore();
+}
+
 // --- Friendship Meter ---
 let friendshipXP = 0;
 let consecutiveDays = 0;
@@ -3696,6 +3957,11 @@ const achievements: Achievement[] = [
     icon: "💕", unlockMessage: "Our bond is unbreakable~! ✨",
     condition: () => getFriendshipLevel() >= 50, unlocked: false,
   },
+  {
+    id: "weather_watcher", name: "Weather Watcher", description: "Experience 5 different weather types",
+    icon: "🌦️", unlockMessage: "I've seen all kinds of weather~!",
+    condition: () => weatherTypesSeen.size >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4072,6 +4338,28 @@ function drawStatsPanel(): void {
     ctx.fillStyle = "#e8d48b";
     ctx.fillText(`🔥 ${consecutiveDays}-day visit streak!`, w / 2, y);
   }
+
+  // Weather section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#90c8ff";
+  ctx.fillText("WEATHER", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`${WEATHER_ICONS[currentWeather]} ${WEATHER_NAMES[currentWeather]}`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${weatherTypesSeen.size}/7 weather types seen`, w / 2, y);
 
   // Close hint
   ctx.textAlign = "center";
@@ -4465,6 +4753,8 @@ interface SaveData {
   friendshipXP: number;
   consecutiveDays: number;
   lastVisitDate: string;
+  weatherTypesSeen: string[];
+  currentWeather: string;
   version: number;
 }
 
@@ -4507,6 +4797,8 @@ function buildSaveData(): SaveData {
     friendshipXP,
     consecutiveDays,
     lastVisitDate,
+    weatherTypesSeen: Array.from(weatherTypesSeen),
+    currentWeather,
     version: 1,
   };
 }
@@ -4664,6 +4956,15 @@ function applySaveData(data: SaveData): void {
     lastVisitDate = (data as SaveData).lastVisitDate;
   }
 
+  // Restore weather
+  if (Array.isArray((data as SaveData).weatherTypesSeen)) {
+    weatherTypesSeen = new Set((data as SaveData).weatherTypesSeen);
+  }
+  const validWeathers: WeatherType[] = ["sunny", "cloudy", "rainy", "stormy", "snowy", "windy", "foggy"];
+  if ((data as SaveData).currentWeather && validWeathers.includes((data as SaveData).currentWeather as WeatherType)) {
+    currentWeather = (data as SaveData).currentWeather as WeatherType;
+  }
+
   // Restore diary
   if (Array.isArray(data.diary)) {
     petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
@@ -4735,6 +5036,9 @@ window.tamashii.loadSaveData().then((raw) => {
     addDiaryEntry("personality", PERSONALITY_ICONS[petPersonality], `Born with a ${PERSONALITY_NAMES[petPersonality]} personality!`);
     addDiaryEntry("general", "🐣", "A new Tamashii was born! The adventure begins~");
   }
+  // Initialize weather system
+  weatherTypesSeen.add(currentWeather);
+  weatherTimer = WEATHER_CHANGE_MIN + Math.floor(Math.random() * (WEATHER_CHANGE_MAX - WEATHER_CHANGE_MIN));
 });
 
 function startSpin(): void {
@@ -7089,6 +7393,9 @@ function update(): void {
     checkAchievements();
   }
 
+  // Weather system
+  updateWeather();
+
   // Mood journal snapshot
   updateMoodJournal();
 
@@ -7831,6 +8138,9 @@ function draw(): void {
     drawTimeTransition(cx, cy);
   }
 
+  // Weather overlay (atmosphere effects — behind pet)
+  drawWeatherOverlay();
+
   // Footprints (on the ground, behind everything else)
   drawFootprints();
 
@@ -8043,6 +8353,9 @@ function draw(): void {
   if (!minigameActive && !memoryGameActive) {
     drawStatBars();
   }
+
+  // Weather widget (top-left corner)
+  drawWeatherWidget();
 
   // Mini-game stars and HUD (above pet, below speech bubble)
   drawMinigame();
