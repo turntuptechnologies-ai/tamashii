@@ -96,6 +96,19 @@ function playAchievementSound(): void {
   setTimeout(() => playTone(1047, 0.3, "sine", 0.12), 300); // C6
 }
 
+function playBubbleBlowSound(): void {
+  // Soft airy puff — breathy ascending tone
+  playTone(400, 0.2, "sine", 0.06);
+  playTone(600, 0.15, "sine", 0.04, 10);
+  setTimeout(() => playTone(800, 0.12, "sine", 0.03), 80);
+}
+
+function playBubblePopSound(pitch = 1): void {
+  // Satisfying pop — short bright burst
+  playTone(1200 * pitch, 0.06, "sine", 0.1);
+  playTone(800 * pitch, 0.04, "triangle", 0.06);
+}
+
 function playButterflyLandSound(): void {
   // Gentle flutter — very soft high tinkle
   playTone(1800, 0.06, "sine", 0.04);
@@ -629,6 +642,28 @@ const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
 let ambientSpawnTimer = 0;
 
+// --- Bubble Blowing ---
+interface Bubble {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  life: number;
+  maxLife: number;
+  wobblePhase: number;
+  hue: number; // color hue 0-360
+  shimmerPhase: number;
+}
+
+const bubbles: Bubble[] = [];
+let totalBubblesPopped = 0;
+let bubbleBlowCooldown = 0;
+const BUBBLE_BLOW_COOLDOWN = 90; // ~1.5 seconds between blows
+let isBubbleBlowing = false;
+let bubbleBlowTimer = 0;
+const BUBBLE_BLOW_DURATION = 40;
+
 // --- Pet Emotes ---
 interface Emote {
   x: number;
@@ -1113,6 +1148,169 @@ function updateEmotes(): void {
       emotes.splice(i, 1);
     }
   }
+}
+
+// --- Bubble Blowing Functions ---
+function blowBubbles(): void {
+  if (isSleeping || minigameActive || memoryGameActive || isBubbleBlowing || bubbleBlowCooldown > 0) return;
+
+  isBubbleBlowing = true;
+  bubbleBlowTimer = BUBBLE_BLOW_DURATION;
+  bubbleBlowCooldown = BUBBLE_BLOW_COOLDOWN;
+  playBubbleBlowSound();
+
+  // Pet puffs up cheeks (squish effect)
+  squishAmount = 0.25;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // Spawn 3-6 bubbles from pet's mouth area
+  const count = 3 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2; // mostly upward
+    const speed = 0.5 + Math.random() * 0.8;
+    const delay = i * 4;
+    setTimeout(() => {
+      bubbles.push({
+        x: cx + (Math.random() - 0.5) * 20,
+        y: cy - 30 + (Math.random() - 0.5) * 10,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 5 + Math.random() * 8,
+        life: 300 + Math.random() * 300,
+        maxLife: 300 + Math.random() * 300,
+        wobblePhase: Math.random() * Math.PI * 2,
+        hue: Math.random() * 360,
+        shimmerPhase: Math.random() * Math.PI * 2,
+      });
+    }, delay * 16);
+  }
+
+  queueSpeechBubble(BUBBLE_BLOW_MESSAGES[Math.floor(Math.random() * BUBBLE_BLOW_MESSAGES.length)], 100);
+  logDailyActivity("bubbles");
+  addFriendshipXP(1);
+}
+
+const BUBBLE_BLOW_MESSAGES = [
+  "Bubble bubble~ 🫧",
+  "Pop pop pop~! ✨",
+  "Look at them float~!",
+  "So round and shiny~",
+  "Pfffft~ 🫧🫧",
+  "Catch them if you can~!",
+  "Wheeee~ Bubbles!",
+];
+
+function tryPopBubble(clickX: number, clickY: number): boolean {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    const dx = clickX - b.x;
+    const dy = clickY - b.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= b.radius + 5) {
+      // Pop this bubble!
+      const pitch = 0.8 + (b.radius / 13) * 0.4; // bigger bubbles = lower pop
+      playBubblePopSound(pitch);
+      totalBubblesPopped++;
+
+      // Sparkle burst at pop location
+      for (let j = 0; j < 4; j++) {
+        const angle = (j / 4) * Math.PI * 2 + Math.random() * 0.5;
+        particles.push({
+          x: b.x,
+          y: b.y,
+          vx: Math.cos(angle) * 1.5,
+          vy: Math.sin(angle) * 1.5,
+          life: 25 + Math.random() * 15,
+          maxLife: 25 + Math.random() * 15,
+          size: 3 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+
+      bubbles.splice(i, 1);
+      checkAchievements();
+      saveGame();
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateBubbles(): void {
+  if (bubbleBlowCooldown > 0) bubbleBlowCooldown--;
+  if (bubbleBlowTimer > 0) {
+    bubbleBlowTimer--;
+    if (bubbleBlowTimer <= 0) isBubbleBlowing = false;
+  }
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    // Gentle floating upward with drift
+    b.vy -= 0.003; // slight upward acceleration
+    b.vy = Math.max(-0.8, b.vy); // terminal rise speed
+    b.x += b.vx + Math.sin(b.wobblePhase) * 0.3;
+    b.y += b.vy;
+    b.wobblePhase += 0.03;
+    b.shimmerPhase += 0.05;
+
+    // Gentle horizontal drift dampening
+    b.vx *= 0.998;
+
+    // Bounce off canvas edges
+    if (b.x - b.radius < 0) { b.x = b.radius; b.vx = Math.abs(b.vx) * 0.5; }
+    if (b.x + b.radius > canvas.width) { b.x = canvas.width - b.radius; b.vx = -Math.abs(b.vx) * 0.5; }
+
+    b.life--;
+    // Bubbles that float off the top or expire get removed
+    if (b.life <= 0 || b.y + b.radius < -10) {
+      bubbles.splice(i, 1);
+    }
+  }
+}
+
+function drawBubble(b: Bubble): void {
+  const alpha = Math.min(1, b.life / 30); // fade out in last 30 frames
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Outer iridescent ring
+  const gradient = ctx.createRadialGradient(
+    b.x - b.radius * 0.3, b.y - b.radius * 0.3, b.radius * 0.1,
+    b.x, b.y, b.radius
+  );
+  const hue1 = (b.hue + Math.sin(b.shimmerPhase) * 30) % 360;
+  const hue2 = (b.hue + 120 + Math.cos(b.shimmerPhase * 0.7) * 20) % 360;
+  gradient.addColorStop(0, `hsla(${hue1}, 80%, 90%, 0.15)`);
+  gradient.addColorStop(0.5, `hsla(${hue2}, 70%, 80%, 0.1)`);
+  gradient.addColorStop(0.8, `hsla(${hue1}, 60%, 70%, 0.2)`);
+  gradient.addColorStop(1, `hsla(${hue2}, 50%, 60%, 0.3)`);
+
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Thin outline
+  ctx.strokeStyle = `hsla(${hue1}, 60%, 80%, ${0.35 * alpha})`;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Highlight shine (small bright spot top-left)
+  ctx.beginPath();
+  ctx.arc(b.x - b.radius * 0.3, b.y - b.radius * 0.3, b.radius * 0.25, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * alpha})`;
+  ctx.fill();
+
+  // Secondary smaller highlight
+  ctx.beginPath();
+  ctx.arc(b.x + b.radius * 0.15, b.y - b.radius * 0.15, b.radius * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.25 * alpha})`;
+  ctx.fill();
+
+  ctx.restore();
 }
 
 // --- System Stress ---
@@ -2722,6 +2920,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for bubble pops before anything else
+  if (bubbles.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryPopBubble(clickX, clickY)) {
+      return; // Popped a bubble, don't start drag
+    }
+  }
   // During mini-game, check for star clicks before drag
   if (minigameActive) {
     const rect = canvas.getBoundingClientRect();
@@ -4266,6 +4473,11 @@ const achievements: Achievement[] = [
     icon: "🌙", unlockMessage: "Sweet dreams are made of this~ 💤✨",
     condition: () => totalNightsSlept >= 3, unlocked: false,
   },
+  {
+    id: "bubble_popper", name: "Bubble Popper", description: "Pop 50 bubbles",
+    icon: "🫧", unlockMessage: "Pop pop pop~! I love bubbles! 🫧✨",
+    condition: () => totalBubblesPopped >= 50, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4703,6 +4915,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${totalNightsSlept} nights slept`, w / 2, y);
 
+  // Bubbles section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#80d0f0";
+  ctx.fillText("BUBBLES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🫧 ${totalBubblesPopped} popped`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -5101,6 +5330,7 @@ interface SaveData {
   combosDiscovered: string[];
   totalNightsSlept: number;
   lastSleepDate: string;
+  totalBubblesPopped: number;
   version: number;
 }
 
@@ -5149,6 +5379,7 @@ function buildSaveData(): SaveData {
     combosDiscovered: Array.from(combosDiscovered),
     totalNightsSlept,
     lastSleepDate,
+    totalBubblesPopped,
     version: 1,
   };
 }
@@ -5329,6 +5560,11 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).lastSleepDate === "string") {
     lastSleepDate = (data as SaveData).lastSleepDate;
+  }
+
+  // Restore bubbles popped
+  if (typeof (data as SaveData).totalBubblesPopped === "number") {
+    totalBubblesPopped = (data as SaveData).totalBubblesPopped;
   }
 
   // Restore diary
@@ -7663,6 +7899,9 @@ function update(): void {
   // Emote update
   updateEmotes();
 
+  // Bubble update
+  updateBubbles();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -8919,6 +9158,11 @@ function draw(): void {
   // Pet emotes (floating emoji, above particles)
   drawEmotes();
 
+  // Floating bubbles (above emotes, below speech bubble)
+  for (const b of bubbles) {
+    drawBubble(b);
+  }
+
   // Sad rain cloud (drawn above particles, below speech bubble)
   if (sadCloudActive) {
     drawSadCloud(sadCloudX, sadCloudY);
@@ -9255,6 +9499,7 @@ function drawShortcutHelp(): void {
     ["J", "Mood Journal"],
     ["G", "Settings Panel"],
     ["E", "Pet Emote"],
+    ["B", "Blow Bubbles"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -9437,6 +9682,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "g":
       toggleSettingsPanel();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "b":
+      blowBubbles();
       shortcutUsageCount++;
       checkAchievements();
       break;

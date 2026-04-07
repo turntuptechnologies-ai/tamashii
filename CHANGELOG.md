@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.55.0] — 2026-04-07 — Bubble Blowing
+
+### Added
+- **Bubble blowing** — press B or use the keyboard shortcut to make your pet blow beautiful iridescent soap bubbles that float gently upward across the canvas
+- **Click to pop** — click any floating bubble to pop it with a satisfying pop sound and a burst of sparkles at the pop location
+- **Iridescent bubble rendering** — each bubble has a unique color hue with shimmering rainbow gradients, highlight reflections, and thin glassy outlines that shift as they float
+- **Bubble physics** — bubbles float upward with gentle acceleration, wobble side-to-side on a sine wave, drift with subtle horizontal momentum, and bounce softly off canvas edges
+- **Bubble blow animation** — the pet puffs up its cheeks (squish effect) and spawns 3-6 bubbles from its mouth area with staggered timing for a natural blowing feel
+- **Bubble blow sound** — a soft airy puff sound plays when bubbles are blown; each pop has a pitch that varies with bubble size (bigger = deeper pop)
+- **Speech reactions** — the pet says cute things when blowing bubbles: "Bubble bubble~ 🫧", "Pop pop pop~!", "So round and shiny~", and more
+- **Stats tracking** — total bubbles popped is tracked and displayed in a dedicated BUBBLES section of the stats panel
+- **Bubble Popper achievement** — pop 50 bubbles to unlock achievement #32 (🫧) with the message "Pop pop pop~! I love bubbles! 🫧✨"
+- **Keyboard shortcut B** — added to the shortcut help overlay for quick bubble blowing
+- **Cooldown system** — ~1.5 second cooldown between bubble blows to prevent spam while keeping it responsive
+- **Full persistence** — total bubbles popped is saved across sessions
+- **Daily activity logging** — bubble blowing is tracked for contextual dream content
+- **Total achievements: 32**
+
+**Why this feature:** Tamashii has evolved into a richly interactive pet with tricks, toys, games, and emotional systems — but sometimes the simplest interactions are the most delightful. Bubble blowing adds a moment of pure, gentle joy. Press B and watch your pet puff its cheeks and release a cluster of shimmering, rainbow-tinged soap bubbles that drift lazily upward, wobbling and catching the light. Then comes the irresistible urge to pop them — each click produces a satisfying *pop* and a tiny sparkle burst. It's meditative, it's tactile, it's the kind of small pleasure that makes you smile every time. The iridescent rendering gives each bubble a real soap-film quality with shifting hues and highlight spots, and the staggered spawn timing makes each blow feel organic. With 50 pops to chase for the achievement, it gives bubble-lovers a gentle goal without pressure. It's not a game, not a system — just bubbles. And that's enough.
+
 ## [v0.54.0] — 2026-04-07 — Sleep Schedule
 
 ### Added
