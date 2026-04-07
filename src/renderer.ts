@@ -1481,6 +1481,156 @@ function performTrick(trickId: TrickId, practice: boolean): void {
   }
 }
 
+// --- Trick Combos System ---
+interface TrickCombo {
+  id: string;
+  name: string;
+  icon: string;
+  sequence: TrickId[];
+  messages: string[];
+  bonusHappiness: number;
+  bonusFriendshipXP: number;
+}
+
+const TRICK_COMBOS: TrickCombo[] = [
+  {
+    id: "showtime", name: "Showtime", icon: "🎭",
+    sequence: ["wave", "dance"],
+    messages: ["Ta-da! Show's over~!", "What a performance!", "Encore, encore~!"],
+    bonusHappiness: 8, bonusFriendshipXP: 5,
+  },
+  {
+    id: "acrobat", name: "Acrobat", icon: "🤹",
+    sequence: ["backflip", "twirl"],
+    messages: ["I'm an acrobat~!", "So athletic!", "Catch me if you can~!"],
+    bonusHappiness: 8, bonusFriendshipXP: 5,
+  },
+  {
+    id: "greeting_dance", name: "Greeting Dance", icon: "💫",
+    sequence: ["wave", "twirl"],
+    messages: ["Hello and a twirl~!", "Fancy greeting!", "Spin-hello~!"],
+    bonusHappiness: 6, bonusFriendshipXP: 4,
+  },
+  {
+    id: "grand_finale", name: "Grand Finale", icon: "🎆",
+    sequence: ["wave", "dance", "backflip", "twirl"],
+    messages: ["THE GRAND FINALE~!!!", "My greatest show ever!", "Standing ovation~!!!"],
+    bonusHappiness: 20, bonusFriendshipXP: 15,
+  },
+];
+
+// Track recent trick history for combo detection
+interface TrickHistoryEntry {
+  trickId: TrickId;
+  timestamp: number; // frame number
+}
+
+const trickHistory: TrickHistoryEntry[] = [];
+const TRICK_COMBO_WINDOW = 600; // ~10 seconds at 60fps to chain tricks
+let totalTrickCombos = 0;
+let combosDiscovered: Set<string> = new Set();
+
+function checkTrickCombo(currentFrame: number): TrickCombo | null {
+  // Check combos longest-first so Grand Finale takes priority
+  const sortedCombos = [...TRICK_COMBOS].sort((a, b) => b.sequence.length - a.sequence.length);
+
+  for (const combo of sortedCombos) {
+    const seqLen = combo.sequence.length;
+    if (trickHistory.length < seqLen) continue;
+
+    // Get the last N entries
+    const recent = trickHistory.slice(-seqLen);
+
+    // Check time window: first entry must be within window of now
+    if (currentFrame - recent[0].timestamp > TRICK_COMBO_WINDOW) continue;
+
+    // Check sequence match
+    let match = true;
+    for (let i = 0; i < seqLen; i++) {
+      if (recent[i].trickId !== combo.sequence[i]) {
+        match = false;
+        break;
+      }
+    }
+
+    if (match) return combo;
+  }
+
+  return null;
+}
+
+function playTrickComboJingle(isGrandFinale: boolean): void {
+  if (isGrandFinale) {
+    // Epic fanfare
+    playTone(523, 0.1, "sine", 0.1);
+    setTimeout(() => playTone(659, 0.1, "sine", 0.1), 80);
+    setTimeout(() => playTone(784, 0.1, "sine", 0.1), 160);
+    setTimeout(() => playTone(1047, 0.15, "sine", 0.12), 240);
+    setTimeout(() => playTone(1175, 0.15, "sine", 0.12), 320);
+    setTimeout(() => playTone(1319, 0.2, "sine", 0.14), 400);
+    setTimeout(() => playTone(1568, 0.4, "sine", 0.15), 500);
+  } else {
+    // Quick celebratory jingle
+    playTone(660, 0.08, "sine", 0.1);
+    setTimeout(() => playTone(880, 0.08, "sine", 0.1), 70);
+    setTimeout(() => playTone(1100, 0.1, "sine", 0.12), 140);
+    setTimeout(() => playTone(1320, 0.2, "sine", 0.1), 210);
+  }
+}
+
+function celebrateTrickCombo(combo: TrickCombo): void {
+  const msg = combo.messages[Math.floor(Math.random() * combo.messages.length)];
+  queueSpeechBubble(`${combo.icon} ${msg}`, 200, true);
+
+  playTrickComboJingle(combo.id === "grand_finale");
+
+  petHappiness = Math.min(100, petHappiness + combo.bonusHappiness);
+  addFriendshipXP(combo.bonusFriendshipXP);
+  addCarePoints(combo.id === "grand_finale" ? 5 : 3);
+
+  totalTrickCombos++;
+  const isNew = !combosDiscovered.has(combo.id);
+  combosDiscovered.add(combo.id);
+
+  if (isNew) {
+    addDiaryEntry("milestone", combo.icon, `Discovered the "${combo.name}" trick combo!`);
+  }
+
+  // Massive particle burst
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const isGrand = combo.id === "grand_finale";
+  const burstCount = isGrand ? 20 : 10;
+  const particleTypes: Array<"sparkle" | "heart" | "star"> = ["sparkle", "heart", "star"];
+
+  for (let i = 0; i < burstCount; i++) {
+    const angle = (i / burstCount) * Math.PI * 2;
+    const speed = isGrand ? 2.5 + Math.random() * 1.5 : 1.5 + Math.random() * 1;
+    particles.push({
+      x: cx + Math.cos(angle) * 10,
+      y: cy + Math.sin(angle) * 8,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 80 + Math.random() * 40,
+      maxLife: 80 + Math.random() * 40,
+      size: isGrand ? 5 + Math.random() * 4 : 3.5 + Math.random() * 3,
+      type: particleTypes[Math.floor(Math.random() * particleTypes.length)],
+    });
+  }
+
+  // Big squish celebration
+  squishAmount = isGrand ? 0.6 : 0.7;
+  isHappy = true;
+  happyTimer = isGrand ? 120 : 80;
+
+  // Emotes burst
+  spawnEmoteSet("excited", isGrand ? 3 : 2);
+  spawnEmoteSet("proud", 1);
+
+  // Clear history to prevent re-triggering
+  trickHistory.length = 0;
+}
+
 function completeTrickAnimation(): void {
   if (activeTrick === null) return;
 
@@ -1525,6 +1675,23 @@ function completeTrickAnimation(): void {
   activeTrick = null;
   trickAnimProgress = 0;
   trickAnimFrame = 0;
+
+  // Track trick for combo detection (only mastered performances count)
+  if (!trickIsPractice) {
+    trickHistory.push({ trickId, timestamp: frame });
+    // Keep history trimmed
+    while (trickHistory.length > 4) trickHistory.shift();
+    // Prune old entries outside combo window
+    while (trickHistory.length > 0 && frame - trickHistory[0].timestamp > TRICK_COMBO_WINDOW) {
+      trickHistory.shift();
+    }
+    // Check for combo
+    const combo = checkTrickCombo(frame);
+    if (combo) {
+      celebrateTrickCombo(combo);
+    }
+  }
+
   checkAchievements();
   saveGame();
 }
@@ -3962,6 +4129,11 @@ const achievements: Achievement[] = [
     icon: "🌦️", unlockMessage: "I've seen all kinds of weather~!",
     condition: () => weatherTypesSeen.size >= 5, unlocked: false,
   },
+  {
+    id: "combo_artist", name: "Combo Artist", description: "Perform 5 trick combos",
+    icon: "🎭", unlockMessage: "I'm a combo master~!",
+    condition: () => totalTrickCombos >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4361,6 +4533,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${weatherTypesSeen.size}/7 weather types seen`, w / 2, y);
 
+  // Trick Combos section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#ffcc70";
+  ctx.fillText("TRICK COMBOS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`${combosDiscovered.size}/${TRICK_COMBOS.length} found`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${totalTrickCombos} total combos performed`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -4755,6 +4949,8 @@ interface SaveData {
   lastVisitDate: string;
   weatherTypesSeen: string[];
   currentWeather: string;
+  totalTrickCombos: number;
+  combosDiscovered: string[];
   version: number;
 }
 
@@ -4799,6 +4995,8 @@ function buildSaveData(): SaveData {
     lastVisitDate,
     weatherTypesSeen: Array.from(weatherTypesSeen),
     currentWeather,
+    totalTrickCombos,
+    combosDiscovered: Array.from(combosDiscovered),
     version: 1,
   };
 }
@@ -4963,6 +5161,14 @@ function applySaveData(data: SaveData): void {
   const validWeathers: WeatherType[] = ["sunny", "cloudy", "rainy", "stormy", "snowy", "windy", "foggy"];
   if ((data as SaveData).currentWeather && validWeathers.includes((data as SaveData).currentWeather as WeatherType)) {
     currentWeather = (data as SaveData).currentWeather as WeatherType;
+  }
+
+  // Restore trick combos
+  if (typeof (data as SaveData).totalTrickCombos === "number") {
+    totalTrickCombos = (data as SaveData).totalTrickCombos;
+  }
+  if (Array.isArray((data as SaveData).combosDiscovered)) {
+    combosDiscovered = new Set((data as SaveData).combosDiscovered);
   }
 
   // Restore diary

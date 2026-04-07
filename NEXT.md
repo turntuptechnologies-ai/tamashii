@@ -3,43 +3,40 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.52.0 — Weather System (2026-04-07)
+## Last completed: v0.53.0 — Trick Combos (2026-04-07)
 
 ### What was done
-- Added simulated weather system with 7 weather types: sunny, cloudy, rainy, stormy, snowy, windy, foggy
-- Season-weighted probability system: spring = more rain, summer = sunny + storms, autumn = windy + foggy, winter = snowy
-- Weather changes every 20-45 minutes with smooth transitions
-- Visual effects: rain/storm particles, snowflakes, wind dust, fog wisps, sun glow, lightning flashes
-- Weather widget in top-left corner shows current conditions
-- Pet reacts to weather changes with speech bubbles and emotes
-- Stats panel shows WEATHER section with current conditions and types-seen counter
-- Achievement #29: "Weather Watcher" (🌦️) — experience 5 different weather types
-- Added to SaveData: `weatherTypesSeen`, `currentWeather`
-- Total achievements: 29
+- Added trick combo system: perform mastered tricks in specific sequences to trigger special celebrations
+- 4 combos: Showtime (wave+dance), Acrobat (backflip+twirl), Greeting Dance (wave+twirl), Grand Finale (wave+dance+backflip+twirl)
+- Combo detection uses a 10-second sliding window tracking recent trick performances
+- Each combo has unique speech bubbles, particle bursts, celebratory sounds, and bonus rewards
+- Grand Finale gives the biggest celebration with epic fanfare and 20 particle explosion
+- Stats panel shows TRICK COMBOS section with discovery progress and total combos
+- Achievement #30: "Combo Artist" (🎭) — perform 5 trick combos
+- Added to SaveData: `totalTrickCombos`, `combosDiscovered`
+- Total achievements: 30
 
 ### Thoughts for next cycle
 - **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
-- **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos, track photo paths in save data
-- **Trick combos** — perform tricks in specific sequences for bonus effects (wave+dance+twirl = special combo animation)
+- **Photo gallery** — an in-canvas gallery showing thumbnails of saved photos
 - **Multiple pet companions** — seasonal visitors or permanent friends that interact with the main pet
 - **Custom color mixer** — let users define their own RGB palette instead of presets only
 - **Mini-game: Trick Performance** — a rhythm game where you time trick performances for high scores
 - **Friendship milestones unlock** — friendship levels unlock exclusive cosmetics, toys, or abilities
 - **Pet outfits** — full body cosmetic sets that change the pet's appearance (beyond single accessories)
 - **Weather-specific activities** — pet plays in rain puddles, builds snowmen in snow, chases leaves in wind
-- **Notification sounds** — different notification chimes for different events (weather changes, stat warnings, achievements)
+- **Notification sounds** — different notification chimes for different events
 - **Pet sleep schedule** — pet actually falls asleep at night with dream animations, wakes up in morning
+- **Combo hint system** — subtle visual hints when you're partway through a combo sequence
 
 ### Current architecture notes
-- Renderer is ~8800+ lines
-- Weather system defined early (~line 537) after the Emote interface/array, before Friendship Meter
-- `updateWeather()` called in update() before mood journal snapshot
-- `drawWeatherOverlay()` called in draw() after ambient glow, before footprints
-- `drawWeatherWidget()` called in draw() after stat bars, before mini-game HUD
-- Weather widget hidden when panels are open
-- Storm lightning uses random flash with sawtooth oscillator for thunder sound
-- Weather timer uses frame-based countdown (WEATHER_CHANGE_MIN/MAX)
+- Renderer is ~9050+ lines
+- Trick combo system defined after trick system (~line 1484) before `completeTrickAnimation`
+- `checkTrickCombo()` called at end of `completeTrickAnimation()` after resetting trick state
+- Combos checked longest-first so Grand Finale takes priority over shorter combos
+- `trickHistory` array stores recent trick IDs with frame timestamps, pruned to max 4 entries
+- `playTrickComboJingle()` named to avoid collision with existing `playComboSound()` (click combos)
 - Context menu data unchanged this cycle
-- Total achievements: 29
+- Total achievements: 30
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

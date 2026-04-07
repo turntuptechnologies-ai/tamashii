@@ -3,6 +3,21 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.53.0] — 2026-04-07 — Trick Combos
+
+### Added
+- **Trick combo system** — perform mastered tricks in specific sequences within 10 seconds to trigger special combo celebrations with bonus rewards
+- **4 discoverable combos** — Showtime (wave + dance), Acrobat (backflip + twirl), Greeting Dance (wave + twirl), and Grand Finale (wave + dance + backflip + twirl)
+- **Combo celebrations** — each combo triggers a unique speech bubble, particle burst, emote cascade, and celebratory jingle; the Grand Finale gets an epic fanfare with massive particle explosions
+- **Bonus rewards** — combos grant extra happiness (6-20), friendship XP (4-15), and care points (3-5) beyond what individual tricks give
+- **Combo discovery diary entries** — the first time you perform each combo, it's logged to your pet's diary as a milestone
+- **Stats panel section** — a dedicated "TRICK COMBOS" section shows how many of the 4 combos you've discovered and your total combos performed
+- **Combo Artist achievement** — perform 5 trick combos to unlock achievement #30 (🎭)
+- **Full persistence** — total trick combos and discovered combo IDs are saved across sessions
+- **Total achievements: 30**
+
+**Why this feature:** Tamashii already had a satisfying trick system — you could teach your pet to wave, dance, backflip, and twirl, each with learning animations that evolved into confident performances. But once all four tricks were mastered, they became isolated actions. Trick combos add a meta-layer: now there's a reason to chain tricks together deliberately. Wave then dance becomes "Showtime" with a theatrical flourish. Backflip into twirl becomes "Acrobat" with a star burst. And if you perform all four in sequence within 10 seconds? The Grand Finale — an explosive celebration with cascading particles, emotes, and an epic fanfare that makes you feel like you just directed a circus act. The discovery element (4 combos to find) adds a puzzle dimension, and the combo tracker in the stats panel gives completionists something to chase. It transforms tricks from a feature you've "finished" into an ongoing performance art.
+
 ## [v0.52.0] — 2026-04-07 — Weather System
 
 ### Added
