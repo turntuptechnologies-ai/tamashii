@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.54.0] — 2026-04-07 — Sleep Schedule
+
+### Added
+- **Automatic sleep state** — the pet naturally falls asleep at night (10pm-6am) with a bedtime transition: yawning, saying goodnight, and gently drifting off to sleep
+- **Sleeping visuals** — peaceful closed eyes with rosy blush marks, a gentle breathing animation (rhythmic body scale), and minimal bounce — the pet truly looks like it's resting
+- **Nightcap** — a cute purple nightcap with golden stars and a white pompom appears on the pet's head during sleep, gently bobbing with each breath
+- **Contextual dreams** — dream bubbles during sleep are now biased toward the pet's daily activities: if you fed it, it dreams of food; if you played, it dreams of toys and butterflies; if you practiced tricks, it dreams of stars and music
+- **Morning wake-up celebration** — when morning arrives, the pet stretches awake with a cheerful greeting, happy emotes, and a full energy boost from a good night's rest
+- **Groggy interactions** — clicking the pet while it's sleeping triggers adorable groggy responses ("Mmm... 5 more minutes... 💤", "*mumble*... not yet...") with a soft grumble sound, without fully waking it
+- **Sleep-aware actions** — feeding and napping are gently refused during sleep with appropriate messages ("*mumble*... food later... zzz..." and "Already sleeping~ 💤")
+- **Sleep suppresses activity** — idle animations, autonomous emotes, and wandering are all disabled during sleep, creating a peaceful stillness
+- **Lullaby and wake-up sounds** — a gentle descending three-note lullaby plays at bedtime; a bright ascending four-note melody plays on wake-up
+- **Daily activity tracking** — the game now logs what you did each day (feeding, playing, petting, tricks, photos) to power contextual dreams
+- **Stats panel section** — a dedicated "SLEEP" section shows current sleep/awake status and total nights slept
+- **Sweet Dreams achievement** — fall asleep 3 nights to unlock achievement #31 (🌙) with the message "Sweet dreams are made of this~ 💤✨"
+- **Session persistence** — total nights slept and last sleep date are saved across sessions; sleep state resumes automatically if the app is opened at night
+- **Total achievements: 31**
+
+**Why this feature:** Tamashii already knew the time of day — it had sleepy eyes at night, dream bubbles, and energy that recharged in the dark. But the pet never actually *slept*. It just looked drowsy. The sleep schedule transforms nighttime from a visual mood shift into a real behavioral state. Now, when night falls, your pet yawns, whispers "good night~", dons a tiny purple nightcap, and drifts into peaceful sleep with slow, rhythmic breathing. Its dreams are personal — colored by the day you spent together. If you fed it treats, it dreams of apples. If you taught it tricks, it dreams of stars and music. And when morning arrives, the little stretch and cheerful "Rise and shine~!" feels earned — your pet genuinely rested. The groggy interactions when you disturb its sleep ("5 more minutes...") add a layer of personality that makes the pet feel more alive than ever. It's the difference between a pet that pretends to sleep and one that actually does.
+
 ## [v0.53.0] — 2026-04-07 — Trick Combos
 
 ### Added

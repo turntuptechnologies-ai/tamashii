@@ -334,6 +334,121 @@ let comboDisplayValue = 0;    // the combo value to display while fading
 let comboShakeAmount = 0;     // screen shake intensity for big combos
 let comboScale = 1;           // scale pulse for combo counter
 
+// --- Sleep Schedule ---
+let isSleeping = false;
+let sleepBreathProgress = 0;       // 0 to 2π, oscillates for breathing animation
+let sleepTransitionProgress = 0;   // 0 to 1, for falling asleep / waking up
+let sleepTransitionType: "falling_asleep" | "waking_up" | null = null;
+let totalNightsSlept = 0;          // for achievement tracking
+let lastSleepDate = "";            // ISO date string to track unique nights
+let sleepStartFrame = 0;           // frame when sleep began
+let sleepNightcapBob = 0;          // wobble for nightcap
+let dailyActivityLog: string[] = []; // tracks activities for contextual dreams
+
+function playLullabySound(): void {
+  // Gentle descending lullaby — soft, dreamy three-note melody
+  playTone(659, 0.2, "sine", 0.06);  // E5
+  setTimeout(() => playTone(523, 0.25, "sine", 0.05), 200);  // C5
+  setTimeout(() => playTone(392, 0.35, "sine", 0.04), 450);  // G4
+}
+
+function playWakeUpSound(): void {
+  // Bright ascending chirp — cheerful morning melody
+  playTone(392, 0.1, "sine", 0.06);   // G4
+  setTimeout(() => playTone(523, 0.1, "sine", 0.07), 100);   // C5
+  setTimeout(() => playTone(659, 0.12, "sine", 0.08), 200);  // E5
+  setTimeout(() => playTone(784, 0.2, "sine", 0.09), 300);   // G5
+}
+
+function logDailyActivity(activity: string): void {
+  if (!dailyActivityLog.includes(activity)) {
+    dailyActivityLog.push(activity);
+  }
+}
+
+function getContextualDreamIcons(): string[] {
+  // Return dream icons biased toward what the pet did today
+  const contextIcons: string[] = [];
+  if (dailyActivityLog.includes("fed")) contextIcons.push("food", "food");
+  if (dailyActivityLog.includes("played")) contextIcons.push("star", "butterfly");
+  if (dailyActivityLog.includes("trick")) contextIcons.push("star", "music");
+  if (dailyActivityLog.includes("petted")) contextIcons.push("heart", "heart");
+  if (dailyActivityLog.includes("music")) contextIcons.push("music", "music");
+  if (dailyActivityLog.includes("photo")) contextIcons.push("flower", "butterfly");
+  // Always include some baseline dream icons
+  const baseline = ["star", "heart", "moon", "butterfly", "flower"];
+  const allIcons = [...contextIcons, ...baseline];
+  return allIcons;
+}
+
+function startFallingAsleep(): void {
+  if (isSleeping || sleepTransitionType) return;
+  sleepTransitionType = "falling_asleep";
+  sleepTransitionProgress = 0;
+
+  const bedtimeMessages = [
+    "*yaaaawn*... Good night~",
+    "So sleepy... night night~ 🌙",
+    "Time for bed... *yawn*",
+    "Sweet dreams await~ 💤",
+    "Sleepy time... zzz...",
+  ];
+  queueSpeechBubble(bedtimeMessages[Math.floor(Math.random() * bedtimeMessages.length)], 180, true);
+  playLullabySound();
+  spawnEmoteSet("sleepy", 2);
+}
+
+function startWakingUp(): void {
+  if (!isSleeping || sleepTransitionType === "waking_up") return;
+  sleepTransitionType = "waking_up";
+  sleepTransitionProgress = 0;
+}
+
+function completeFallingAsleep(): void {
+  isSleeping = true;
+  sleepTransitionType = null;
+  sleepStartFrame = frame;
+  sleepBreathProgress = 0;
+
+  // Track unique nights slept
+  const today = new Date().toISOString().slice(0, 10);
+  if (lastSleepDate !== today) {
+    lastSleepDate = today;
+    totalNightsSlept++;
+    addDiaryEntry("milestone", "🌙", "Fell asleep for the night~ Sweet dreams!");
+  }
+  saveGame();
+}
+
+function completeWakingUp(): void {
+  isSleeping = false;
+  sleepTransitionType = null;
+  sleepBreathProgress = 0;
+  dailyActivityLog = []; // reset daily activities for new day
+
+  // Wake up celebration
+  const wakeMessages = [
+    "Good morning~! ☀️ *stretch*",
+    "Rise and shine~! I slept so well!",
+    "What a great sleep! Ready for today!",
+    "*yawn* ...Morning! I feel refreshed~!",
+    "New day, new adventures~! ☀️",
+  ];
+  queueSpeechBubble(wakeMessages[Math.floor(Math.random() * wakeMessages.length)], 200, true);
+  playWakeUpSound();
+  spawnEmoteSet("happy", 2);
+
+  // Full energy restore from a good night's sleep
+  petEnergy = Math.min(100, petEnergy + 30);
+
+  // Squish animation for the stretch
+  squishAmount = 0.5;
+  isHappy = true;
+  happyTimer = 90;
+
+  saveGame();
+}
+
 // --- Idle Animations ---
 type IdleAnimation = "none" | "stretch" | "look_around" | "wiggle" | "curious_peek" | "hop";
 let idleAnim: IdleAnimation = "none";
@@ -354,7 +469,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping) return;
   // Pick animation weighted by personality
   idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
@@ -1277,6 +1392,7 @@ function updateToy(): void {
       toyPlayState = "celebrating";
       toyPlayAnimTimer = 0;
       totalToyPlays++;
+      logDailyActivity("played");
       addFriendshipXP(2);
       spawnEmoteSet("playful", 1);
 
@@ -1636,6 +1752,7 @@ function completeTrickAnimation(): void {
 
   const trickId = activeTrick;
   const trick = TRICKS.find(t => t.id === trickId)!;
+  logDailyActivity("trick");
 
   if (trickIsPractice) {
     trickProgress[trickId] = Math.min(TRICK_PRACTICES_TO_MASTER, trickProgress[trickId] + 1);
@@ -2329,6 +2446,7 @@ function playShutterSound(): void {
 function takePhoto(): void {
   if (minigameActive || memoryGameActive) return;
   if (statsPanelOpen || diaryPanelOpen || moodJournalOpen || settingsPanelOpen || shortcutHelpOpen) return;
+  logDailyActivity("photo");
 
   // Flash effect
   photoFlashAlpha = 1.0;
@@ -3224,8 +3342,13 @@ function trackCareAfterNotification(): void {
 }
 
 function feedPet(): void {
+  if (isSleeping || sleepTransitionType) {
+    queueSpeechBubble("*mumble*... food later... zzz...", 120, true);
+    return;
+  }
   trackCareAfterNotification();
   lastInteractionTime = Date.now();
+  logDailyActivity("fed");
   petHunger = Math.min(100, petHunger + 25);
   addCarePoints(3);
   addFriendshipXP(3);
@@ -3242,6 +3365,10 @@ function feedPet(): void {
 }
 
 function petNap(): void {
+  if (isSleeping || sleepTransitionType) {
+    queueSpeechBubble("Already sleeping~ 💤", 120, true);
+    return;
+  }
   trackCareAfterNotification();
   lastInteractionTime = Date.now();
   petEnergy = Math.min(100, petEnergy + 20);
@@ -4134,6 +4261,11 @@ const achievements: Achievement[] = [
     icon: "🎭", unlockMessage: "I'm a combo master~!",
     condition: () => totalTrickCombos >= 5, unlocked: false,
   },
+  {
+    id: "sweet_dreams", name: "Sweet Dreams", description: "Fall asleep 3 nights",
+    icon: "🌙", unlockMessage: "Sweet dreams are made of this~ 💤✨",
+    condition: () => totalNightsSlept >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4555,6 +4687,22 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${totalTrickCombos} total combos performed`, w / 2, y);
 
+  // Sleep schedule section
+  y += 16;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#b0a0e0";
+  ctx.fillText("SLEEP", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(isSleeping ? "💤 Sleeping" : "☀️ Awake", panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${totalNightsSlept} nights slept`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -4951,6 +5099,8 @@ interface SaveData {
   currentWeather: string;
   totalTrickCombos: number;
   combosDiscovered: string[];
+  totalNightsSlept: number;
+  lastSleepDate: string;
   version: number;
 }
 
@@ -4997,6 +5147,8 @@ function buildSaveData(): SaveData {
     currentWeather,
     totalTrickCombos,
     combosDiscovered: Array.from(combosDiscovered),
+    totalNightsSlept,
+    lastSleepDate,
     version: 1,
   };
 }
@@ -5171,6 +5323,14 @@ function applySaveData(data: SaveData): void {
     combosDiscovered = new Set((data as SaveData).combosDiscovered);
   }
 
+  // Restore sleep schedule data
+  if (typeof (data as SaveData).totalNightsSlept === "number") {
+    totalNightsSlept = (data as SaveData).totalNightsSlept;
+  }
+  if (typeof (data as SaveData).lastSleepDate === "string") {
+    lastSleepDate = (data as SaveData).lastSleepDate;
+  }
+
   // Restore diary
   if (Array.isArray(data.diary)) {
     petDiary = data.diary.slice(-DIARY_MAX_ENTRIES);
@@ -5245,6 +5405,12 @@ window.tamashii.loadSaveData().then((raw) => {
   // Initialize weather system
   weatherTypesSeen.add(currentWeather);
   weatherTimer = WEATHER_CHANGE_MIN + Math.floor(Math.random() * (WEATHER_CHANGE_MAX - WEATHER_CHANGE_MIN));
+
+  // Resume sleeping state if it's nighttime and pet was sleeping
+  if (currentTimeOfDay === "night") {
+    isSleeping = true;
+    sleepBreathProgress = 0;
+  }
 });
 
 function startSpin(): void {
@@ -5287,6 +5453,28 @@ function onPetClicked(): void {
   const timeSinceLastClick = now - lastClickTime;
   lastClickTime = now;
 
+  // Gently wake the pet if sleeping
+  if (isSleeping) {
+    const groggyMessages = [
+      "Mmm... 5 more minutes... 💤",
+      "*mumble*... not yet...",
+      "Zzz... huh? ...zzz...",
+      "Still... sleepy...",
+      "*yawn*... leave me be~",
+      "Mmnh... dreaming...",
+    ];
+    queueSpeechBubble(groggyMessages[Math.floor(Math.random() * groggyMessages.length)], 150, true);
+    playTone(300, 0.1, "sine", 0.04); // soft grumble
+    squishAmount = 0.2; // gentle squish
+    spawnEmoteSet("sleepy", 1);
+    lastInteractionTime = Date.now();
+    addFriendshipXP(1);
+    return;
+  }
+
+  // Don't allow normal interactions during sleep transitions
+  if (sleepTransitionType) return;
+
   // Double-click detection — trigger spin trick
   if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && !isSpinning) {
     startSpin();
@@ -5295,6 +5483,7 @@ function onPetClicked(): void {
 
   // Regular single click — squish + hearts + combo
   lastInteractionTime = Date.now();
+  logDailyActivity("petted");
   totalClicks++;
   addCarePoints(1);
   addFriendshipXP(1);
@@ -5612,7 +5801,88 @@ function drawFace(cx: number, cy: number, size: number): void {
   const isSadFromStats = !isHappy && petHappiness < 25;
   const isDrainedFromStats = !isHappy && !isYawning && petEnergy < 20;
 
-  if (isStressed && !isHappy && !isYawning) {
+  // Sleeping face — fully closed eyes with peaceful expression
+  if (isSleeping || sleepTransitionType === "falling_asleep") {
+    const sleepLevel = isSleeping ? 1 : sleepTransitionProgress;
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      // Partially open during transition
+      const openness = 1 - sleepLevel;
+      if (openness > 0.1) {
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY + 2, 8 * es, 9 * es * openness * 0.3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY + 2, 4 * es, 5 * es * openness * 0.3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fill();
+      }
+      // Peaceful closed-eye curve
+      ctx.beginPath();
+      const curve = 0.15 + sleepLevel * 0.15;
+      ctx.arc(ex, eyeY + 1, 7 * es, Math.PI * (1 + curve), Math.PI * (2 - curve));
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    // Peaceful blush marks when fully asleep
+    if (sleepLevel > 0.5) {
+      const blushAlpha = (sleepLevel - 0.5) * 2 * 0.3;
+      ctx.save();
+      ctx.globalAlpha = blushAlpha;
+      ctx.fillStyle = "#FF9999";
+      ctx.beginPath();
+      ctx.ellipse(cx - eyeSpacing - 6, eyeY + 10, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + eyeSpacing + 6, eyeY + 10, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    // Peaceful sleeping mouth — tiny content smile
+    const mouthY = cy + size * 0.08;
+    ctx.beginPath();
+    ctx.arc(cx, mouthY - 2, 4, 0.1, Math.PI - 0.1);
+    ctx.strokeStyle = "#1a1a2e";
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    return; // skip the rest of face drawing
+  } else if (sleepTransitionType === "waking_up") {
+    // Waking up — eyes gradually opening with groggy look
+    const wakeLevel = sleepTransitionProgress;
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      if (wakeLevel > 0.3) {
+        const openness = (wakeLevel - 0.3) / 0.7;
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY + 1, 8 * es, 9 * es * openness * 0.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(ex + 1, eyeY + 2, 4 * es, 5 * es * openness * 0.4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fill();
+      }
+      const lidDroop = 1 - wakeLevel;
+      ctx.beginPath();
+      ctx.moveTo(ex - 9, eyeY - 2 + lidDroop * 6);
+      ctx.quadraticCurveTo(ex, eyeY - 6 + lidDroop * 10, ex + 9, eyeY - 2 + lidDroop * 6);
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    // Groggy little mouth
+    const mouthY = cy + size * 0.08;
+    ctx.beginPath();
+    ctx.ellipse(cx, mouthY, 3 + wakeLevel * 2, 2 + wakeLevel, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fill();
+    return;
+  } else if (isStressed && !isHappy && !isYawning) {
     // Stressed eyes — small, worried, with raised inner brows
     for (const side of [-1, 1]) {
       const ex = cx + side * eyeSpacing;
@@ -6899,6 +7169,8 @@ function drawSpeechBubble(cx: number, petTopY: number): void {
 
 // --- Animation Loop ---
 function getBounceSpeed(): number {
+  // Almost no bounce when sleeping
+  if (isSleeping) return 0.008;
   let speed: number;
   switch (currentTimeOfDay) {
     case "morning": speed = 0.12; break;
@@ -6918,6 +7190,7 @@ function getBounceSpeed(): number {
 }
 
 function getBounceAmplitude(): number {
+  if (isSleeping) return 0.5; // barely perceptible when sleeping
   let amp: number;
   switch (currentTimeOfDay) {
     case "morning": amp = 4; break;
@@ -7392,7 +7665,7 @@ function update(): void {
 
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
-  if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging) {
+  if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
     spawnRandomEmote();
     autonomousEmoteTimer = 0;
     nextAutonomousEmoteAt = AUTONOMOUS_EMOTE_INTERVAL_MIN + Math.random() * (AUTONOMOUS_EMOTE_INTERVAL_MAX - AUTONOMOUS_EMOTE_INTERVAL_MIN);
@@ -7400,7 +7673,7 @@ function update(): void {
 
   // --- Wandering logic ---
   const wanderSpeed = getWanderSpeed();
-  if (!isDragging && wanderSpeed > 0 && wanderingEnabled) {
+  if (!isDragging && wanderSpeed > 0 && wanderingEnabled && !isSleeping) {
     // Fetch screen bounds periodically (every ~2 seconds)
     boundsFetchTimer++;
     if (boundsFetchTimer > 120) {
@@ -7723,16 +7996,52 @@ function update(): void {
     sadRainTimer = 0;
   }
 
-  // --- Pet Dreams (night only, when idle) ---
+  // --- Sleep Schedule ---
+  // Auto-sleep when night arrives after a delay
+  if (currentTimeOfDay === "night" && !isSleeping && !sleepTransitionType && !minigameActive && !memoryGameActive && !isDragging && !isSpinning && !isCharging && activeTrick === null) {
+    // Start falling asleep 5 seconds after night begins (or immediately if already night on load)
+    if (frame > 300) { // give a small delay before auto-sleep kicks in
+      startFallingAsleep();
+    }
+  }
+
+  // Wake up when morning arrives
+  if (currentTimeOfDay === "morning" && isSleeping && !sleepTransitionType) {
+    startWakingUp();
+  }
+
+  // Sleep transition animations
+  if (sleepTransitionType === "falling_asleep") {
+    sleepTransitionProgress = Math.min(1, sleepTransitionProgress + 0.008); // ~2 seconds
+    if (sleepTransitionProgress >= 1) {
+      completeFallingAsleep();
+    }
+  } else if (sleepTransitionType === "waking_up") {
+    sleepTransitionProgress = Math.min(1, sleepTransitionProgress + 0.012); // ~1.4 seconds
+    if (sleepTransitionProgress >= 1) {
+      completeWakingUp();
+    }
+  }
+
+  // Breathing animation while sleeping
+  if (isSleeping) {
+    sleepBreathProgress += 0.025; // slow, gentle breathing cycle
+    if (sleepBreathProgress > Math.PI * 2) sleepBreathProgress -= Math.PI * 2;
+    sleepNightcapBob += 0.015;
+  }
+
+  // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;
   const dreamCy = canvas.height / 2 + bounceOffset;
   if (currentTimeOfDay === "night" && !isDragging && !isSpinning && !minigameActive && !isCharging) {
     dreamSpawnTimer++;
-    // Spawn a dream bubble every ~3-5 seconds
-    const dreamInterval = 180 + Math.floor(Math.random() * 120);
+    // Spawn dream bubbles more frequently when sleeping, contextual icons
+    const dreamInterval = isSleeping ? (120 + Math.floor(Math.random() * 80)) : (180 + Math.floor(Math.random() * 120));
     if (dreamSpawnTimer >= dreamInterval) {
       dreamSpawnTimer = 0;
-      const icon = DREAM_ICONS[Math.floor(Math.random() * DREAM_ICONS.length)];
+      // Use contextual dream icons when sleeping
+      const iconPool = isSleeping ? getContextualDreamIcons() : DREAM_ICONS;
+      const icon = iconPool[Math.floor(Math.random() * iconPool.length)];
       dreamBubbles.push({
         x: dreamCx + (Math.random() - 0.5) * 20,
         y: dreamCy - 45,
@@ -7940,7 +8249,79 @@ function drawEvolutionGlow(cx: number, cy: number): void {
   ctx.restore();
 }
 
+function drawNightcap(cx: number, cy: number, size: number): void {
+  if (!isSleeping && sleepTransitionType !== "falling_asleep") return;
+  const alpha = isSleeping ? 1 : sleepTransitionProgress;
+  if (alpha < 0.05) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  const headY = cy - size * 0.2;
+  const capTilt = Math.sin(sleepNightcapBob) * 0.08;
+  ctx.translate(cx, headY - 20);
+  ctx.rotate(capTilt);
+
+  // Nightcap body — soft purple cone shape drooping to the right
+  ctx.beginPath();
+  ctx.moveTo(-12, 2);     // left base
+  ctx.quadraticCurveTo(-8, -12, 0, -14); // curve up
+  ctx.quadraticCurveTo(10, -16, 22, 5);  // droop to right
+  ctx.quadraticCurveTo(18, 12, 8, 8);    // curve down
+  ctx.quadraticCurveTo(0, 6, -12, 2);    // back to base
+  ctx.closePath();
+
+  // Fill with gradient
+  const capGrad = ctx.createLinearGradient(-12, -14, 22, 8);
+  capGrad.addColorStop(0, "#8866CC");
+  capGrad.addColorStop(1, "#6644AA");
+  ctx.fillStyle = capGrad;
+  ctx.fill();
+  ctx.strokeStyle = "#554488";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // White rim at base
+  ctx.beginPath();
+  ctx.moveTo(-14, 2);
+  ctx.quadraticCurveTo(0, 6, 8, 5);
+  ctx.quadraticCurveTo(2, 8, -14, 4);
+  ctx.closePath();
+  ctx.fillStyle = "#EEDDFF";
+  ctx.fill();
+
+  // Pompom at the tip
+  const pompX = 22;
+  const pompY = 5;
+  ctx.beginPath();
+  ctx.arc(pompX, pompY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.strokeStyle = "#DDCCEE";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Small stars on the cap
+  ctx.fillStyle = "#FFD700";
+  ctx.globalAlpha = alpha * 0.7;
+  for (const star of [{x: 2, y: -8, s: 2}, {x: 12, y: -4, s: 1.5}, {x: 8, y: -10, s: 1.8}]) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? star.s : star.s * 0.4;
+      const angle = (i * Math.PI) / 5 - Math.PI / 2;
+      if (i === 0) ctx.moveTo(star.x + Math.cos(angle) * r, star.y + Math.sin(angle) * r);
+      else ctx.lineTo(star.x + Math.cos(angle) * r, star.y + Math.sin(angle) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawAccessory(cx: number, cy: number, size: number): void {
+  // Draw nightcap over any accessory when sleeping
+  drawNightcap(cx, cy, size);
   if (currentAccessory === "none") return;
 
   const headY = cy - size * 0.2; // top of head area
@@ -8403,8 +8784,17 @@ function draw(): void {
     ctx.rotate(wanderLean * 0.06); // subtle tilt, ~3.4 degrees max
     ctx.translate(-cx, -feetY);
   }
+  // Sleeping breathing animation — gentle rhythmic scale
+  if ((isSleeping || sleepTransitionType === "falling_asleep") && !isSpinning) {
+    const breathAmount = isSleeping ? 1 : sleepTransitionProgress;
+    const breathScale = Math.sin(sleepBreathProgress) * 0.02 * breathAmount;
+    ctx.translate(cx, feetY);
+    ctx.scale(1 + breathScale, 1 - breathScale * 0.5);
+    ctx.translate(-cx, -feetY);
+  }
+
   // Droopy posture when happiness or energy is critically low
-  if (!isSpinning && !isHappy) {
+  if (!isSpinning && !isHappy && !isSleeping) {
     const droopFactor = Math.max(
       petHappiness < 25 ? (25 - petHappiness) / 25 * 0.04 : 0,
       petEnergy < 20 ? (20 - petEnergy) / 20 * 0.05 : 0,
