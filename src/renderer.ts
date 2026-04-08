@@ -1543,6 +1543,383 @@ function drawConstellations(): void {
   ctx.restore();
 }
 
+// --- Shooting Stars (Night-only rare event, click to make a wish) ---
+
+interface ShootingStar {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  length: number;
+  life: number;
+  maxLife: number;
+  brightness: number;
+  clicked: boolean;
+  trail: { x: number; y: number; alpha: number }[];
+}
+
+interface ActiveWish {
+  text: string;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  sparkles: { x: number; y: number; vx: number; vy: number; life: number }[];
+}
+
+const WISH_MESSAGES: string[] = [
+  "I wish for endless happiness~! ✨",
+  "I wish for sweet dreams tonight~! 🌙",
+  "I wish my friend smiles today~! 💕",
+  "I wish for a sky full of stars~! ⭐",
+  "I wish for warm sunny mornings~! ☀️",
+  "I wish to see a rainbow~! 🌈",
+  "I wish for cozy rainy days~! 🌧️",
+  "I wish for a magical adventure~! 🗺️",
+  "I wish for a field of flowers~! 🌸",
+  "I wish for gentle breezes~! 🍃",
+  "I wish to dance with fireflies~! ✨",
+  "I wish for a thousand hugs~! 🤗",
+  "I wish for butterflies everywhere~! 🦋",
+  "I wish the moon would wave back~! 🌝",
+  "I wish for starlight lullabies~! 🎵",
+  "I wish for pockets full of joy~! 💫",
+  "I wish to paint the sunset~! 🎨",
+  "I wish for a blanket of clouds~! ☁️",
+  "I wish for friendship forever~! 💗",
+  "I wish for the courage to dream big~! 🌟",
+];
+
+const SHOOTING_STAR_SPEECH = [
+  "A shooting star~!! ✨",
+  "Quick, make a wish~! 🌠",
+  "*gasp* Did you see that~?!",
+  "So beautiful~!! 💫",
+  "The sky is winking at me~! ⭐",
+  "Catch that star~!! 🌟",
+  "Woooah~!! A meteor~! ✨",
+  "The stars are falling for me~! 💕",
+];
+
+let shootingStars: ShootingStar[] = [];
+let activeWish: ActiveWish | null = null;
+let totalWishesMade = 0;
+let sessionShootingStarsSeen = 0;
+let shootingStarSpawnTimer = 0;
+let nextShootingStarAt = 300 + Math.random() * 600; // ~5-15 seconds at 60fps
+const SHOOTING_STAR_MIN_INTERVAL = 300; // ~5 seconds minimum
+const SHOOTING_STAR_MAX_INTERVAL = 1200; // ~20 seconds maximum
+
+function playShootingStarSound(): void {
+  // Ethereal descending shimmer
+  playTone(1800, 0.3, "sine", 0.06);
+  playTone(1400, 0.35, "sine", 0.05, 5);
+  setTimeout(() => {
+    playTone(1100, 0.25, "sine", 0.04);
+    playTone(800, 0.3, "sine", 0.03, -5);
+  }, 120);
+  setTimeout(() => {
+    playTone(600, 0.2, "sine", 0.02);
+  }, 250);
+}
+
+function playWishSound(): void {
+  // Magical ascending chime with sparkle
+  playTone(523, 0.2, "sine", 0.08);  // C5
+  setTimeout(() => playTone(659, 0.2, "sine", 0.08), 80);  // E5
+  setTimeout(() => playTone(784, 0.2, "sine", 0.08), 160); // G5
+  setTimeout(() => playTone(1047, 0.25, "sine", 0.1), 240); // C6
+  setTimeout(() => {
+    playTone(1319, 0.4, "sine", 0.07); // E6 — lingering sparkle
+    playTone(1568, 0.5, "sine", 0.04, 7); // G6 — gentle shimmer
+  }, 340);
+}
+
+function spawnShootingStar(): void {
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+  if (isSleeping) return;
+  if (shootingStars.length >= 2) return; // max 2 at once
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Start from a random edge (top or sides, upper portion)
+  const side = Math.random();
+  let sx: number, sy: number, angle: number;
+  if (side < 0.5) {
+    // From top
+    sx = 20 + Math.random() * (w - 40);
+    sy = -5;
+    angle = Math.PI * 0.3 + Math.random() * Math.PI * 0.4; // 54-126 degrees (downward)
+  } else if (side < 0.75) {
+    // From left
+    sx = -5;
+    sy = 5 + Math.random() * (h * 0.3);
+    angle = -Math.PI * 0.1 + Math.random() * Math.PI * 0.3; // slight downward-right
+  } else {
+    // From right
+    sx = w + 5;
+    sy = 5 + Math.random() * (h * 0.3);
+    angle = Math.PI * 0.8 + Math.random() * Math.PI * 0.3; // slight downward-left
+  }
+
+  const speed = 3 + Math.random() * 3;
+  const maxLife = 60 + Math.floor(Math.random() * 60); // 1-2 seconds
+
+  shootingStars.push({
+    x: sx,
+    y: sy,
+    vx: Math.cos(angle) * speed,
+    vy: Math.abs(Math.sin(angle)) * speed, // always move downward
+    length: 20 + Math.random() * 25,
+    life: maxLife,
+    maxLife,
+    brightness: 0.7 + Math.random() * 0.3,
+    clicked: false,
+    trail: [],
+  });
+
+  sessionShootingStarsSeen++;
+  playShootingStarSound();
+
+  // Speech reaction (~40% chance)
+  if (Math.random() < 0.4 && !isSleeping) {
+    const msg = SHOOTING_STAR_SPEECH[Math.floor(Math.random() * SHOOTING_STAR_SPEECH.length)];
+    queueSpeechBubble(msg, 100, false);
+  }
+}
+
+function tryClickShootingStar(clickX: number, clickY: number): boolean {
+  for (let i = shootingStars.length - 1; i >= 0; i--) {
+    const star = shootingStars[i];
+    if (star.clicked) continue;
+
+    // Hit test — generous radius around the star head
+    const dx = clickX - star.x;
+    const dy = clickY - star.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 20) {
+      star.clicked = true;
+      makeWish(star.x, star.y);
+      return true;
+    }
+
+    // Also check along the trail for easier clicking
+    for (const t of star.trail) {
+      const tdx = clickX - t.x;
+      const tdy = clickY - t.y;
+      if (Math.sqrt(tdx * tdx + tdy * tdy) < 12) {
+        star.clicked = true;
+        makeWish(star.x, star.y);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function makeWish(x: number, y: number): void {
+  const wish = WISH_MESSAGES[Math.floor(Math.random() * WISH_MESSAGES.length)];
+
+  // Create sparkle burst
+  const sparkles: ActiveWish["sparkles"] = [];
+  for (let i = 0; i < 15; i++) {
+    const angle = (Math.PI * 2 * i) / 15 + Math.random() * 0.3;
+    const speed = 0.5 + Math.random() * 1.5;
+    sparkles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 60 + Math.floor(Math.random() * 40),
+    });
+  }
+
+  activeWish = {
+    text: wish,
+    x: Math.max(50, Math.min(canvas.width - 50, x)),
+    y: Math.max(30, Math.min(canvas.height * 0.6, y)),
+    life: 180, // 3 seconds
+    maxLife: 180,
+    sparkles,
+  };
+
+  totalWishesMade++;
+  petHappiness = Math.min(100, petHappiness + 8);
+  totalCarePoints += 3;
+  friendshipXP += 5;
+
+  playWishSound();
+
+  // Diary entry for first wish and every 10th wish
+  if (totalWishesMade === 1) {
+    addDiaryEntry("milestone", "🌠", `Made my very first wish on a shooting star: "${wish.replace(/~!.*$/, "...")}"`);
+  } else if (totalWishesMade % 10 === 0) {
+    addDiaryEntry("general", "🌠", `Made wish #${totalWishesMade} on a shooting star!`);
+  }
+
+  saveGame();
+  checkAchievements();
+}
+
+function updateShootingStars(): void {
+  // Only spawn at night/evening
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") {
+    shootingStars = [];
+    activeWish = null;
+    return;
+  }
+
+  // Spawn timer
+  if (!isSleeping) {
+    shootingStarSpawnTimer++;
+    if (shootingStarSpawnTimer >= nextShootingStarAt) {
+      spawnShootingStar();
+      shootingStarSpawnTimer = 0;
+      // More frequent at night than evening
+      const multiplier = currentTimeOfDay === "night" ? 0.7 : 1.0;
+      nextShootingStarAt = (SHOOTING_STAR_MIN_INTERVAL + Math.random() * (SHOOTING_STAR_MAX_INTERVAL - SHOOTING_STAR_MIN_INTERVAL)) * multiplier;
+    }
+  }
+
+  // Update stars
+  for (let i = shootingStars.length - 1; i >= 0; i--) {
+    const star = shootingStars[i];
+    star.life--;
+
+    // Add to trail
+    star.trail.push({ x: star.x, y: star.y, alpha: star.life / star.maxLife });
+    if (star.trail.length > 12) star.trail.shift();
+
+    // Move
+    star.x += star.vx;
+    star.y += star.vy;
+
+    // Slight gravity
+    star.vy += 0.02;
+
+    // Remove if dead or off-screen
+    if (star.life <= 0 || star.x < -30 || star.x > canvas.width + 30 || star.y > canvas.height + 30) {
+      shootingStars.splice(i, 1);
+    }
+  }
+
+  // Update active wish
+  if (activeWish) {
+    activeWish.life--;
+    for (const s of activeWish.sparkles) {
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.01; // slight gravity on sparkles
+      s.life--;
+    }
+    activeWish.sparkles = activeWish.sparkles.filter(s => s.life > 0);
+    if (activeWish.life <= 0) {
+      activeWish = null;
+    }
+  }
+}
+
+function drawShootingStars(): void {
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+
+  ctx.save();
+
+  // Draw each shooting star
+  for (const star of shootingStars) {
+    const lifeRatio = star.life / star.maxLife;
+    const alpha = lifeRatio * star.brightness;
+    if (alpha <= 0) continue;
+
+    // Draw trail
+    for (let t = 0; t < star.trail.length; t++) {
+      const point = star.trail[t];
+      const trailAlpha = (t / star.trail.length) * alpha * 0.5;
+      const trailSize = (t / star.trail.length) * 2;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, trailSize, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 240, ${trailAlpha})`;
+      ctx.fill();
+    }
+
+    // Draw glowing head
+    const headGlow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, 8);
+    headGlow.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+    headGlow.addColorStop(0.3, `rgba(200, 220, 255, ${alpha * 0.6})`);
+    headGlow.addColorStop(1, `rgba(150, 180, 255, 0)`);
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = headGlow;
+    ctx.fill();
+
+    // Draw bright core
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.fill();
+
+    // Draw streak line behind the star
+    const speed = Math.sqrt(star.vx * star.vx + star.vy * star.vy);
+    const nx = -star.vx / speed;
+    const ny = -star.vy / speed;
+    const streakGrad = ctx.createLinearGradient(
+      star.x, star.y,
+      star.x + nx * star.length, star.y + ny * star.length
+    );
+    streakGrad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.8})`);
+    streakGrad.addColorStop(0.3, `rgba(200, 220, 255, ${alpha * 0.4})`);
+    streakGrad.addColorStop(1, `rgba(150, 180, 255, 0)`);
+
+    ctx.beginPath();
+    ctx.moveTo(star.x, star.y);
+    ctx.lineTo(star.x + nx * star.length, star.y + ny * star.length);
+    ctx.strokeStyle = streakGrad;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Thinner bright core streak
+    ctx.beginPath();
+    ctx.moveTo(star.x, star.y);
+    ctx.lineTo(star.x + nx * star.length * 0.5, star.y + ny * star.length * 0.5);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.6})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // Draw active wish
+  if (activeWish) {
+    const wishAlpha = Math.min(1, activeWish.life / 40) * Math.min(1, (activeWish.maxLife - activeWish.life + 30) / 30);
+
+    // Draw sparkles
+    for (const s of activeWish.sparkles) {
+      const sAlpha = (s.life / 100) * wishAlpha;
+      const sSize = 1 + (s.life / 100) * 2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, sSize, 0, Math.PI * 2);
+      const hue = 40 + Math.random() * 20; // warm gold
+      ctx.fillStyle = `hsla(${hue}, 100%, 80%, ${sAlpha})`;
+      ctx.fill();
+    }
+
+    // Draw wish text with glow
+    ctx.textAlign = "center";
+    ctx.font = "bold 9px monospace";
+    ctx.shadowColor = `rgba(255, 220, 100, ${wishAlpha * 0.7})`;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = `rgba(255, 245, 200, ${wishAlpha})`;
+    ctx.fillText(activeWish.text, activeWish.x, activeWish.y);
+    ctx.shadowBlur = 0;
+
+    // Subtle rising star icon
+    const riseOffset = (activeWish.maxLife - activeWish.life) * 0.1;
+    ctx.font = "12px monospace";
+    ctx.globalAlpha = wishAlpha * 0.6;
+    ctx.fillText("🌠", activeWish.x, activeWish.y - 14 - riseOffset);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
   playTone(200, 0.08, "square", 0.08);
@@ -4015,6 +4392,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for shooting star clicks
+  if (shootingStars.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickShootingStar(clickX, clickY)) {
+      return; // Clicked a shooting star, don't start drag
+    }
+  }
   // Check for constellation star clicks first
   if (constellationModeActive) {
     const rect = canvas.getBoundingClientRect();
@@ -5606,6 +5992,11 @@ const achievements: Achievement[] = [
     icon: "🌌", unlockMessage: "The stars tell my story~! 🌌✨",
     condition: () => totalConstellationsCompleted >= 5, unlocked: false,
   },
+  {
+    id: "wish_maker", name: "Wish Maker", description: "Make 10 wishes on shooting stars",
+    icon: "🌠", unlockMessage: "Every wish lights up the sky~! 🌠✨",
+    condition: () => totalWishesMade >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -6121,6 +6512,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🌌 ${completedConstellations.size}/${CONSTELLATION_PATTERNS.length} discovered`, panelX + panelW - 12, y);
 
+  // Shooting Stars / Wishes section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#f0d060";
+  ctx.fillText("SHOOTING STARS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌠 ${totalWishesMade} wishes made`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${sessionShootingStarsSeen} seen this session`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -6525,6 +6938,7 @@ interface SaveData {
   totalFirefliesCaught: number;
   completedConstellations: number[];
   totalConstellationsCompleted: number;
+  totalWishesMade: number;
   version: number;
 }
 
@@ -6579,6 +6993,7 @@ function buildSaveData(): SaveData {
     totalFirefliesCaught,
     completedConstellations: Array.from(completedConstellations),
     totalConstellationsCompleted,
+    totalWishesMade,
     version: 1,
   };
 }
@@ -6785,6 +7200,11 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).totalConstellationsCompleted === "number") {
     totalConstellationsCompleted = (data as SaveData).totalConstellationsCompleted;
+  }
+
+  // Restore wishes made
+  if (typeof (data as SaveData).totalWishesMade === "number") {
+    totalWishesMade = (data as SaveData).totalWishesMade;
   }
 
   // Restore diary
@@ -9131,6 +9551,9 @@ function update(): void {
   // Constellation update
   updateConstellations();
 
+  // Shooting star update
+  updateShootingStars();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -10391,6 +10814,9 @@ function draw(): void {
   for (const b of bubbles) {
     drawBubble(b);
   }
+
+  // Shooting stars (sky background layer)
+  drawShootingStars();
 
   // Constellations (sky layer, behind fireflies)
   drawConstellations();

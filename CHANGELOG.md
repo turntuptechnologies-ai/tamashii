@@ -3,6 +3,31 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.59.0] — 2026-04-08 — Shooting Stars
+
+### Added
+- **Shooting stars** — rare shooting stars streak across the night sky during evening and nighttime, appearing as bright glowing meteors with luminous trails
+- **Click to make a wish** — click a shooting star before it fades to make a wish; a golden wish text appears with sparkle particles
+- **20 unique wishes** — a heartwarming collection of wishes from "I wish for endless happiness~!" to "I wish for the courage to dream big~!"
+- **Glowing meteor rendering** — each shooting star has a bright white core, radial glow head, luminous streak tail, and fading trail particles
+- **Natural trajectories** — stars spawn from top and sides of the screen with varied angles, speeds, and slight gravity for realistic arcs
+- **Shooting star sound** — an ethereal descending shimmer plays when a star appears
+- **Wish sound** — a magical ascending five-note chime with lingering sparkle plays when you make a wish
+- **Speech reactions** — ~40% chance the pet reacts with delight: "A shooting star~!! ✨", "Quick, make a wish~!", and more
+- **Generous click hitbox** — both the star head (20px radius) and trail points (12px radius) are clickable for forgiving interaction
+- **Wish sparkle burst** — 15 golden sparkle particles burst outward from the clicked star, drifting with gentle gravity
+- **Stats panel section** — a dedicated SHOOTING STARS section shows total wishes made and session sightings
+- **Wish Maker achievement** — make 10 wishes on shooting stars to unlock achievement #36 (🌠) with the message "Every wish lights up the sky~! 🌠✨"
+- **Diary entries** — first wish and every 10th wish are logged to the pet diary
+- **Happiness and care boost** — each wish gives +8 happiness, +3 care points, +5 friendship XP
+- **Night frequency boost** — shooting stars appear more frequently at night than during evening
+- **Sleep-aware** — shooting stars stop spawning when the pet is sleeping
+- **Auto-cleanup** — stars and wishes clear when time transitions to daytime
+- **Full persistence** — total wishes made is saved across sessions
+- **Total achievements: 36**
+
+**Why this feature:** Tamashii's night sky has become a rich interactive canvas — fireflies drift, constellations await tracing, dream bubbles float by. But the sky has always been predictable. Shooting stars add an element of surprise and magic. You never know when one will appear — a bright streak cutting across the darkness with an ethereal shimmer. The impulse to click it is immediate and urgent: you have just a second or two before it fades. And the reward is pure delight: a golden wish text blooms amid sparkling particles while a magical chime rings out. Each of the 20 wishes is a tiny moment of hope — some playful, some tender, all heartwarming. The rarity makes each sighting special, and the 10-wish achievement gives stargazers a gentle long-term goal. It's the kind of feature that makes you glance at the night sky a little more carefully, just in case the stars are about to fall.
+
 ## [v0.58.0] — 2026-04-08 — Constellation Drawing
 
 ### Added
