@@ -1121,6 +1121,428 @@ function releaseFireflies(): void {
   fireflyCatchJarGlow = 0;
 }
 
+// --- Constellation Drawing (Night-only interactive feature) ---
+
+interface ConstellationStar {
+  x: number; // relative position 0-1 within constellation area
+  y: number;
+}
+
+interface ConstellationEdge {
+  from: number; // index into stars array
+  to: number;
+}
+
+interface ConstellationPattern {
+  name: string;
+  icon: string;
+  stars: ConstellationStar[];
+  edges: ConstellationEdge[];
+}
+
+const CONSTELLATION_PATTERNS: ConstellationPattern[] = [
+  {
+    name: "The Crown",
+    icon: "👑",
+    stars: [
+      { x: 0.2, y: 0.6 }, { x: 0.35, y: 0.25 }, { x: 0.5, y: 0.5 },
+      { x: 0.65, y: 0.25 }, { x: 0.8, y: 0.6 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }],
+  },
+  {
+    name: "The Heart",
+    icon: "💖",
+    stars: [
+      { x: 0.5, y: 0.8 }, { x: 0.25, y: 0.45 }, { x: 0.35, y: 0.2 },
+      { x: 0.5, y: 0.35 }, { x: 0.65, y: 0.2 }, { x: 0.75, y: 0.45 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }, { from: 4, to: 5 }, { from: 5, to: 0 }],
+  },
+  {
+    name: "The Arrow",
+    icon: "🏹",
+    stars: [
+      { x: 0.15, y: 0.5 }, { x: 0.45, y: 0.5 }, { x: 0.85, y: 0.5 },
+      { x: 0.6, y: 0.25 }, { x: 0.6, y: 0.75 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 1, to: 3 }, { from: 1, to: 4 }],
+  },
+  {
+    name: "The Dipper",
+    icon: "🫗",
+    stars: [
+      { x: 0.2, y: 0.3 }, { x: 0.35, y: 0.25 }, { x: 0.5, y: 0.3 },
+      { x: 0.5, y: 0.5 }, { x: 0.65, y: 0.65 }, { x: 0.8, y: 0.55 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }, { from: 4, to: 5 }],
+  },
+  {
+    name: "The Diamond",
+    icon: "💎",
+    stars: [
+      { x: 0.5, y: 0.15 }, { x: 0.75, y: 0.45 }, { x: 0.5, y: 0.75 }, { x: 0.25, y: 0.45 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 0 }],
+  },
+  {
+    name: "The Wing",
+    icon: "🪽",
+    stars: [
+      { x: 0.15, y: 0.7 }, { x: 0.3, y: 0.45 }, { x: 0.5, y: 0.25 },
+      { x: 0.7, y: 0.2 }, { x: 0.85, y: 0.35 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }],
+  },
+  {
+    name: "The Spiral",
+    icon: "🌀",
+    stars: [
+      { x: 0.5, y: 0.45 }, { x: 0.65, y: 0.3 }, { x: 0.8, y: 0.5 },
+      { x: 0.6, y: 0.7 }, { x: 0.3, y: 0.6 }, { x: 0.25, y: 0.3 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 }, { from: 4, to: 5 }],
+  },
+  {
+    name: "The Bow",
+    icon: "🎀",
+    stars: [
+      { x: 0.2, y: 0.25 }, { x: 0.5, y: 0.5 }, { x: 0.8, y: 0.25 },
+      { x: 0.8, y: 0.75 }, { x: 0.2, y: 0.75 },
+    ],
+    edges: [{ from: 0, to: 1 }, { from: 1, to: 2 }, { from: 1, to: 3 }, { from: 1, to: 4 }],
+  },
+];
+
+let constellationModeActive = false;
+let constellationCurrentIndex = 0; // which constellation is currently being traced
+let constellationClickedStars: Set<number> = new Set(); // indices of clicked stars in current constellation
+let constellationCompletedEdges: Set<number> = new Set(); // indices of completed edges
+let completedConstellations: Set<number> = new Set(); // indices of completed constellation patterns (persisted)
+let constellationCompletionTimer = 0; // celebration timer
+let constellationCompletionName = ""; // name of just-completed constellation
+let constellationFade = 0; // 0-1 fade for mode toggle
+let totalConstellationsCompleted = 0;
+
+const CONSTELLATION_COMPLETE_SPEECHES = [
+  "I drew the stars~! ✨",
+  "A constellation! So beautiful~ 🌟",
+  "The sky is my canvas~! 🎨",
+  "Look, the stars connect~! ⭐",
+  "Starlight masterpiece~! 💫",
+  "I traced the cosmos~! 🌌",
+  "The night sky tells a story~! 🌙",
+  "My own star map~! ✨",
+];
+
+function playConstellationConnectSound(): void {
+  // Soft celestial chime — ethereal connection tone
+  playTone(1000, 0.15, "sine", 0.06);
+  setTimeout(() => playTone(1400, 0.12, "sine", 0.05), 70);
+}
+
+function playConstellationCompleteSound(): void {
+  // Magical ascending fanfare — stars aligned
+  playTone(600, 0.15, "sine", 0.08);
+  setTimeout(() => playTone(800, 0.15, "sine", 0.08), 100);
+  setTimeout(() => playTone(1000, 0.15, "sine", 0.08), 200);
+  setTimeout(() => playTone(1200, 0.2, "sine", 0.1), 300);
+  setTimeout(() => playTone(1600, 0.3, "sine", 0.08), 400);
+}
+
+function toggleConstellationMode(): void {
+  if (isSleeping || minigameActive || memoryGameActive) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") {
+    queueSpeechBubble("Stars only come out at night~ 🌙", 120, true);
+    return;
+  }
+
+  constellationModeActive = !constellationModeActive;
+
+  if (constellationModeActive) {
+    // Find the next uncompleted constellation
+    selectNextConstellation();
+    playTone(800, 0.1, "sine", 0.06);
+    setTimeout(() => playTone(1100, 0.12, "sine", 0.06), 60);
+    queueSpeechBubble("Let's trace the stars~! ⭐", 120, true);
+  } else {
+    playTone(1100, 0.08, "sine", 0.04);
+    setTimeout(() => playTone(800, 0.1, "sine", 0.04), 60);
+    constellationClickedStars.clear();
+    constellationCompletedEdges.clear();
+  }
+}
+
+function selectNextConstellation(): void {
+  // Prefer uncompleted constellations
+  const uncompleted = CONSTELLATION_PATTERNS.map((_, i) => i).filter(i => !completedConstellations.has(i));
+  if (uncompleted.length > 0) {
+    constellationCurrentIndex = uncompleted[Math.floor(Math.random() * uncompleted.length)];
+  } else {
+    // All completed — let them re-trace any
+    constellationCurrentIndex = Math.floor(Math.random() * CONSTELLATION_PATTERNS.length);
+  }
+  constellationClickedStars.clear();
+  constellationCompletedEdges.clear();
+}
+
+function getConstellationStarPositions(): { x: number; y: number }[] {
+  const pattern = CONSTELLATION_PATTERNS[constellationCurrentIndex];
+  const w = canvas.width;
+  const h = canvas.height;
+  // Constellation area: upper portion of canvas with some padding
+  const areaX = 15;
+  const areaY = 10;
+  const areaW = w - 30;
+  const areaH = h * 0.55;
+
+  return pattern.stars.map(s => ({
+    x: areaX + s.x * areaW,
+    y: areaY + s.y * areaH,
+  }));
+}
+
+function tryClickConstellationStar(clickX: number, clickY: number): boolean {
+  if (!constellationModeActive) return false;
+
+  const positions = getConstellationStarPositions();
+  const pattern = CONSTELLATION_PATTERNS[constellationCurrentIndex];
+  const hitRadius = 14;
+
+  for (let i = 0; i < positions.length; i++) {
+    const dx = clickX - positions[i].x;
+    const dy = clickY - positions[i].y;
+    if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+      constellationClickedStars.add(i);
+
+      // Check which edges are now completed (both endpoints clicked)
+      for (let e = 0; e < pattern.edges.length; e++) {
+        const edge = pattern.edges[e];
+        if (!constellationCompletedEdges.has(e) &&
+            constellationClickedStars.has(edge.from) &&
+            constellationClickedStars.has(edge.to)) {
+          constellationCompletedEdges.add(e);
+          playConstellationConnectSound();
+
+          // Spawn sparkle at midpoint
+          const midX = (positions[edge.from].x + positions[edge.to].x) / 2;
+          const midY = (positions[edge.from].y + positions[edge.to].y) / 2;
+          for (let p = 0; p < 3; p++) {
+            particles.push({
+              x: midX + (Math.random() - 0.5) * 10,
+              y: midY + (Math.random() - 0.5) * 10,
+              vx: (Math.random() - 0.5) * 1.5,
+              vy: (Math.random() - 0.5) * 1.5,
+              life: 40 + Math.random() * 20,
+              maxLife: 60,
+              size: 1.5 + Math.random() * 1.5,
+              type: "sparkle",
+            });
+          }
+        }
+      }
+
+      // Check if all edges are completed
+      if (constellationCompletedEdges.size === pattern.edges.length) {
+        completeConstellation();
+      }
+
+      return true;
+    }
+  }
+  return false;
+}
+
+function completeConstellation(): void {
+  const pattern = CONSTELLATION_PATTERNS[constellationCurrentIndex];
+  const isFirstTime = !completedConstellations.has(constellationCurrentIndex);
+
+  completedConstellations.add(constellationCurrentIndex);
+  if (isFirstTime) {
+    totalConstellationsCompleted++;
+  }
+
+  constellationCompletionTimer = 180; // 3 seconds of celebration
+  constellationCompletionName = pattern.name;
+
+  playConstellationCompleteSound();
+
+  const speech = CONSTELLATION_COMPLETE_SPEECHES[Math.floor(Math.random() * CONSTELLATION_COMPLETE_SPEECHES.length)];
+  queueSpeechBubble(speech, 150, true);
+
+  // Spawn celebration sparkles
+  const positions = getConstellationStarPositions();
+  for (const pos of positions) {
+    for (let p = 0; p < 4; p++) {
+      particles.push({
+        x: pos.x,
+        y: pos.y,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -Math.random() * 2 - 0.5,
+        life: 60 + Math.random() * 30,
+        maxLife: 90,
+        size: 2 + Math.random() * 2,
+        type: "star",
+      });
+    }
+  }
+
+  // Stat boosts
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 2;
+  friendshipXP += 3;
+
+  // Diary entry for first completion
+  if (isFirstTime) {
+    addDiaryEntry("general", pattern.icon, `Traced the constellation "${pattern.name}" in the night sky~`);
+    logDailyActivity("constellations");
+  }
+
+  checkAchievements();
+  saveGame();
+
+  // After celebration, move to next constellation
+  setTimeout(() => {
+    if (constellationModeActive) {
+      selectNextConstellation();
+    }
+  }, 3500);
+}
+
+function updateConstellations(): void {
+  // Fade in/out
+  if (constellationModeActive && constellationFade < 1) {
+    constellationFade = Math.min(1, constellationFade + 0.04);
+  } else if (!constellationModeActive && constellationFade > 0) {
+    constellationFade = Math.max(0, constellationFade - 0.04);
+  }
+
+  // Celebration timer
+  if (constellationCompletionTimer > 0) {
+    constellationCompletionTimer--;
+  }
+
+  // Auto-disable if time changes to daytime
+  if (constellationModeActive && currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") {
+    constellationModeActive = false;
+    constellationClickedStars.clear();
+    constellationCompletedEdges.clear();
+  }
+}
+
+function drawConstellations(): void {
+  if (constellationFade <= 0) return;
+
+  const pattern = CONSTELLATION_PATTERNS[constellationCurrentIndex];
+  const positions = getConstellationStarPositions();
+  const alpha = constellationFade;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Draw dim guide lines (unconnected edges)
+  for (let e = 0; e < pattern.edges.length; e++) {
+    const edge = pattern.edges[e];
+    const from = positions[edge.from];
+    const to = positions[edge.to];
+
+    if (constellationCompletedEdges.has(e)) {
+      // Completed edge — bright glowing line
+      ctx.strokeStyle = `rgba(180, 220, 255, ${0.8 * alpha})`;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "rgba(150, 200, 255, 0.6)";
+      ctx.shadowBlur = 8;
+    } else {
+      // Guide line — very faint dashed
+      ctx.strokeStyle = `rgba(150, 180, 220, ${0.15 * alpha})`;
+      ctx.lineWidth = 0.5;
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([3, 4]);
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+  }
+
+  // Draw constellation stars
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[i];
+    const isClicked = constellationClickedStars.has(i);
+    const twinkle = Math.sin(frame * 0.05 + i * 1.7) * 0.3 + 0.7;
+
+    if (isClicked) {
+      // Bright clicked star with glow
+      const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 10);
+      glow.addColorStop(0, `rgba(220, 240, 255, ${0.9 * alpha * twinkle})`);
+      glow.addColorStop(0.4, `rgba(150, 200, 255, ${0.4 * alpha * twinkle})`);
+      glow.addColorStop(1, `rgba(100, 150, 255, 0)`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bright core
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.95 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Unclicked guide star — pulsing softly
+      const guideGlow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 7);
+      guideGlow.addColorStop(0, `rgba(200, 220, 255, ${0.5 * alpha * twinkle})`);
+      guideGlow.addColorStop(0.5, `rgba(150, 180, 255, ${0.2 * alpha * twinkle})`);
+      guideGlow.addColorStop(1, `rgba(100, 140, 255, 0)`);
+      ctx.fillStyle = guideGlow;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dimmer core
+      ctx.fillStyle = `rgba(200, 220, 255, ${0.6 * alpha * twinkle})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Constellation name label at top
+  ctx.font = "bold 9px monospace";
+  ctx.textAlign = "center";
+  ctx.fillStyle = `rgba(180, 210, 255, ${0.7 * alpha})`;
+  ctx.fillText(`${pattern.icon} ${pattern.name}`, canvas.width / 2, 12);
+
+  // Progress indicator
+  const progress = constellationCompletedEdges.size;
+  const total = pattern.edges.length;
+  ctx.font = "7px monospace";
+  ctx.fillStyle = `rgba(160, 190, 230, ${0.5 * alpha})`;
+  ctx.fillText(`${progress}/${total} connected`, canvas.width / 2, 22);
+
+  // Overall completion count
+  ctx.font = "7px monospace";
+  ctx.fillStyle = `rgba(140, 170, 210, ${0.4 * alpha})`;
+  ctx.textAlign = "right";
+  ctx.fillText(`${completedConstellations.size}/${CONSTELLATION_PATTERNS.length} discovered`, canvas.width - 8, 12);
+
+  // Completion celebration overlay
+  if (constellationCompletionTimer > 0) {
+    const celebAlpha = Math.min(1, constellationCompletionTimer / 60) * alpha;
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = `rgba(255, 230, 150, ${celebAlpha})`;
+    ctx.shadowColor = `rgba(255, 200, 100, ${celebAlpha * 0.5})`;
+    ctx.shadowBlur = 10;
+    ctx.fillText(`✨ ${constellationCompletionName} Complete! ✨`, canvas.width / 2, canvas.height * 0.7);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
   playTone(200, 0.08, "square", 0.08);
@@ -3593,6 +4015,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for constellation star clicks first
+  if (constellationModeActive) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickConstellationStar(clickX, clickY)) {
+      return; // Clicked a constellation star, don't start drag
+    }
+  }
   // Check for firefly catches before bubbles
   if (fireflies.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -5170,6 +5601,11 @@ const achievements: Achievement[] = [
     icon: "🪲", unlockMessage: "The night glows just for me~! 🪲✨",
     condition: () => totalFirefliesCaught >= 25, unlocked: false,
   },
+  {
+    id: "stargazer", name: "Stargazer", description: "Complete 5 constellations",
+    icon: "🌌", unlockMessage: "The stars tell my story~! 🌌✨",
+    condition: () => totalConstellationsCompleted >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -5668,6 +6104,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${sessionFirefliesCaught} this session`, w / 2, y);
 
+  // Constellations section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#a0c0ff";
+  ctx.fillText("CONSTELLATIONS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌌 ${completedConstellations.size}/${CONSTELLATION_PATTERNS.length} discovered`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -6070,6 +6523,8 @@ interface SaveData {
   totalFortuneCookies: number;
   uniqueFortunesCollected: number[];
   totalFirefliesCaught: number;
+  completedConstellations: number[];
+  totalConstellationsCompleted: number;
   version: number;
 }
 
@@ -6122,6 +6577,8 @@ function buildSaveData(): SaveData {
     totalFortuneCookies,
     uniqueFortunesCollected: Array.from(uniqueFortunesCollected),
     totalFirefliesCaught,
+    completedConstellations: Array.from(completedConstellations),
+    totalConstellationsCompleted,
     version: 1,
   };
 }
@@ -6320,6 +6777,14 @@ function applySaveData(data: SaveData): void {
   // Restore fireflies caught
   if (typeof (data as SaveData).totalFirefliesCaught === "number") {
     totalFirefliesCaught = (data as SaveData).totalFirefliesCaught;
+  }
+
+  // Restore constellations
+  if (Array.isArray((data as SaveData).completedConstellations)) {
+    completedConstellations = new Set((data as SaveData).completedConstellations);
+  }
+  if (typeof (data as SaveData).totalConstellationsCompleted === "number") {
+    totalConstellationsCompleted = (data as SaveData).totalConstellationsCompleted;
   }
 
   // Restore diary
@@ -8663,6 +9128,9 @@ function update(): void {
   // Firefly update
   updateFireflies();
 
+  // Constellation update
+  updateConstellations();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -9924,6 +10392,9 @@ function draw(): void {
     drawBubble(b);
   }
 
+  // Constellations (sky layer, behind fireflies)
+  drawConstellations();
+
   // Fireflies (above bubbles, atmospheric layer)
   drawFireflies();
   drawFireflyJar();
@@ -10270,6 +10741,7 @@ function drawShortcutHelp(): void {
     ["B", "Blow Bubbles"],
     ["O", "Fortune Cookie"],
     ["R", "Release Fireflies"],
+    ["L", "Constellations"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -10340,6 +10812,12 @@ window.addEventListener("keydown", (e) => {
     }
     if (settingsPanelOpen) {
       toggleSettingsPanel();
+      return;
+    }
+    if (constellationModeActive) {
+      constellationModeActive = false;
+      constellationClickedStars.clear();
+      constellationCompletedEdges.clear();
       return;
     }
     if (minigameActive || memoryGameActive) {
@@ -10473,6 +10951,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "r":
       releaseFireflies();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "l":
+      toggleConstellationMode();
       shortcutUsageCount++;
       checkAchievements();
       break;

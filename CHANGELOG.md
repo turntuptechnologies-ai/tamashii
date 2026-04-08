@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.58.0] — 2026-04-08 — Constellation Drawing
+
+### Added
+- **Constellation drawing** — press L at night or evening to enter constellation mode, where glowing guide stars appear in the sky above your pet
+- **8 unique constellations** — The Crown, The Heart, The Arrow, The Dipper, The Diamond, The Wing, The Spiral, and The Bow — each with a distinctive star pattern and icon
+- **Interactive star tracing** — click the guide stars to activate them; when two connected stars are both clicked, a bright glowing line appears between them
+- **Faint guide lines** — unconnected edges show as subtle dashed lines so you can see the pattern you're tracing
+- **Completion celebration** — when all edges of a constellation are connected, a fanfare plays, star particles burst from every node, and a golden completion message appears
+- **Smart constellation selection** — the system picks uncompleted constellations first, cycling through all 8 before offering re-traces
+- **Constellation connect sound** — an ethereal two-note celestial chime plays each time a new edge is connected
+- **Constellation complete sound** — a magical ascending five-note fanfare marks each completed constellation
+- **Speech reactions** — 8 unique speeches when completing constellations: "I drew the stars~!", "The sky is my canvas~!", and more
+- **Stats panel section** — a dedicated CONSTELLATIONS section shows how many of the 8 patterns you've discovered
+- **Stargazer achievement** — complete 5 constellations to unlock achievement #35 (🌌) with the message "The stars tell my story~! 🌌✨"
+- **Diary entries** — first completion of each constellation is logged to the pet diary with the constellation's icon and name
+- **Keyboard shortcut L** — added to the shortcut help overlay for toggling constellation mode
+- **Escape to exit** — pressing Escape while in constellation mode exits cleanly
+- **Night-only enforcement** — trying to activate constellation mode during the day triggers a gentle reminder that stars only come out at night
+- **Sleep-aware** — constellation mode auto-disables if time transitions to daytime
+- **Twinkling stars** — each guide star pulses with a unique phase for a living, breathing sky feel
+- **Happiness and care boost** — each completed constellation gives +5 happiness, +2 care points, +3 friendship XP
+- **Full persistence** — completed constellations and total count are saved across sessions
+- **Total achievements: 35**
+
+**Why this feature:** Tamashii's night sky has become a rich, atmospheric space — fireflies drift, the pet sleeps with a nightcap, dream bubbles float by. But the sky itself has always been passive. Constellation drawing transforms the night into an interactive stargazing experience. When you press L, guide stars materialize in the darkness with soft pulsing glows and faint dashed lines hinting at the pattern beneath. Click one star, then another — when two connected stars are both lit, a bright celestial line blazes between them with a shimmering chime. Tracing each pattern is a tiny meditation: following The Crown's zigzag peaks, closing The Heart's loop, spreading The Wing's graceful arc. When the final edge connects, the whole constellation erupts in star particles and a triumphant fanfare. Eight distinct patterns give stargazers a collection to complete, and the smart selection system ensures each night offers something new. It's the kind of feature that makes you look forward to nighttime — not just for the fireflies and the dreams, but for the quiet joy of connecting the stars.
+
 ## [v0.57.0] — 2026-04-08 — Firefly Catching
 
 ### Added
