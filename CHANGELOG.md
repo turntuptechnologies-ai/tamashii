@@ -3,6 +3,27 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.56.0] — 2026-04-08 — Fortune Cookies
+
+### Added
+- **Fortune cookies** — press O to give your pet a fortune cookie that appears, cracks open with a satisfying snap, and reveals a unique fortune message
+- **50 unique fortunes** — a collection of wholesome, uplifting fortunes ranging from playful predictions to heartfelt affirmations, each with a thematic emoji
+- **Cookie animation** — the cookie appears with a scale-in animation, cracks open with sparkle particles, reveals a paper strip with the fortune, then fades away gracefully
+- **Smart fortune selection** — the system prefers fortunes you haven't collected yet (70% chance), making it easier to complete your collection while still allowing repeats
+- **Fortune crack sound** — a crisp cracking sound followed by magical chimes plays when the cookie opens
+- **Speech reactions** — the pet reacts with excitement when receiving a cookie: "Ooh, what does it say~?", "*crunch crunch*", and more
+- **Fortune collection tracking** — unique fortunes are tracked separately from total cookies opened, encouraging completionist play
+- **Stats panel section** — a dedicated FORTUNES section shows how many unique fortunes you've collected out of 50, plus total cookies opened
+- **Fortune Teller achievement** — collect 15 unique fortunes to unlock achievement #33 (🥠) with the message "The future is full of wonders~! 🥠✨"
+- **Diary entries** — discovering a new fortune is logged to the pet diary with a preview of the fortune text
+- **Keyboard shortcut O** — added to the shortcut help overlay for quick fortune cookie giving
+- **Cooldown system** — ~3 second cooldown between cookies to prevent spam
+- **Full persistence** — total cookies opened and unique fortune indices are saved across sessions
+- **Happiness and care boost** — each fortune cookie gives +3 happiness and +1 care point
+- **Total achievements: 33**
+
+**Why this feature:** Sometimes the simplest joys are the most meaningful. Fortune cookies add a moment of wonder and anticipation — the brief pause between cracking the cookie and reading what's inside. Each of the 50 fortunes is a tiny gift: a gentle prediction, a warm affirmation, or a playful observation that makes you smile. The collection mechanic transforms a simple interaction into a long-term treasure hunt, and the smart selection system ensures you're always making progress toward completing your set. With the cracking animation, sparkle particles, and magical chime, every cookie feels like a small ceremony. It's the kind of feature that rewards you for checking in — "maybe today's fortune will be my favorite one yet."
+
 ## [v0.55.0] — 2026-04-07 — Bubble Blowing
 
 ### Added

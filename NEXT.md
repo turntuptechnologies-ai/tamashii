@@ -3,20 +3,22 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.55.0 — Bubble Blowing (2026-04-07)
+## Last completed: v0.56.0 — Fortune Cookies (2026-04-08)
 
 ### What was done
-- Added bubble blowing system: press B to make the pet blow 3-6 iridescent soap bubbles that float upward
-- Click bubbles to pop them with satisfying pop sounds and sparkle bursts
-- Iridescent bubble rendering with per-bubble hue, shimmer animation, highlight reflections
-- Bubble physics: upward float, sine-wave wobble, edge bouncing, fade-out at end of life
-- Bubble blow and pop sound effects via Web Audio API
-- Speech reactions when blowing bubbles
-- Stats panel BUBBLES section showing total popped
-- Achievement #32: "Bubble Popper" (🫧) — pop 50 bubbles
-- Keyboard shortcut B added to help overlay
-- Added to SaveData: `totalBubblesPopped`
-- Total achievements: 32
+- Added fortune cookie system: press O to give the pet a fortune cookie that cracks open to reveal a unique fortune
+- 50 wholesome, uplifting fortune messages with thematic emojis
+- Cookie animation: scale-in appearance, crack with sparkle particles, paper strip reveal, fade out
+- Smart fortune selection: 70% chance to pick uncollected fortunes, encouraging completionist play
+- Fortune crack sound effect (crisp crack + magical chimes) via Web Audio API
+- Speech reactions when receiving cookies
+- Stats panel FORTUNES section showing unique fortunes collected (N/50) and total cookies opened
+- Achievement #33: "Fortune Teller" (🥠) — collect 15 unique fortunes
+- Keyboard shortcut O added to help overlay
+- Added to SaveData: `totalFortuneCookies`, `uniqueFortunesCollected` (number array)
+- Diary entries logged for new fortune discoveries
+- Each cookie gives +3 happiness, +1 care point, +1 friendship XP
+- Total achievements: 33
 
 ### Thoughts for next cycle
 - **Drag-and-drop feeding** — drag food items from a tray onto the pet for more interactive feeding
@@ -31,18 +33,22 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Combo hint system** — subtle visual hints when you're partway through a combo sequence
 - **Pet diary illustrations** — diary entries get tiny pixel-art illustrations alongside the text
 - **Seasonal events** — special one-time events on holidays (Halloween costume, Valentine hearts, etc.)
+- **Fortune cookie rarity tiers** — golden fortune cookies with extra-rare fortunes and bigger rewards
+- **Pet reactions to specific fortunes** — certain fortunes trigger unique animations or emotes
 
 ### Current architecture notes
-- Renderer is ~9700+ lines
-- Bubble system defined after Emote interface section (~line 632): Bubble interface, bubbles array, cooldown/timer state
-- `blowBubbles()` spawns bubbles with staggered setTimeout, checks sleep/minigame/cooldown guards
-- `tryPopBubble()` does circle collision detection on click, spawns sparkle particles, increments totalBubblesPopped
-- `updateBubbles()` handles physics (upward float, wobble, edge bounce, life decay) and cooldown timers
-- `drawBubble()` renders with radial gradient using HSL colors, two highlight spots, thin stroke outline
-- Bubbles drawn in draw() after emotes, before sad cloud
-- Bubble click detection in mousedown handler before mini-game checks (highest priority after settings panel)
-- Sound functions `playBubbleBlowSound()` and `playBubblePopSound(pitch)` added after achievement sound
+- Renderer is ~9900+ lines
+- Fortune cookie system defined before Bubble Blowing section (~line 645): FORTUNE_MESSAGES array (50 entries), FortuneCookie interface, state variables
+- `giveFortuneCookie()` handles cookie creation, fortune selection (prefers uncollected), speech reactions, diary logging
+- `updateFortuneCookie()` manages 4-phase animation: appearing (scale-in), cracking (sparkles), reading (speech), fading (scale-out)
+- `drawFortuneCookie()` renders whole cookie (crescent shape with highlight) or cracked halves with paper strip
+- `playFortuneCrackSound()` plays crack + chime sequence
+- Fortune cookie drawn in draw() after bubbles, before sad cloud
+- Update called in update() after updateBubbles()
+- Keyboard shortcut O in keydown handler
+- SaveData: `totalFortuneCookies` (number), `uniqueFortunesCollected` (number[] — indices into FORTUNE_MESSAGES)
+- Stats panel FORTUNES section after BUBBLES section
 - Context menu data unchanged this cycle
-- Total achievements: 32
+- Total achievements: 33
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

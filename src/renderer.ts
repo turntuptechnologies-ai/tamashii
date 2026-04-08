@@ -642,6 +642,271 @@ const particles: Particle[] = [];
 let zzzSpawnTimer = 0;
 let ambientSpawnTimer = 0;
 
+// --- Fortune Cookies ---
+const FORTUNE_MESSAGES: string[] = [
+  "A smile is your greatest accessory~ 😊",
+  "Good things come to those who wait... and click! 🖱️",
+  "Today is a perfect day for a nap~ 💤",
+  "Your lucky number is 7. Or maybe 42. 🔢",
+  "A butterfly will bring you good news~ 🦋",
+  "The stars are aligned in your favor tonight~ ⭐",
+  "Someone is thinking of you right now~ 💭",
+  "A tasty treat awaits you just around the corner~ 🍎",
+  "Your kindness ripples outward like a stone in water~ 🌊",
+  "Dance like nobody's watching! 💃",
+  "The best adventures start with a single step~ 🐾",
+  "You are braver than you believe~ 💪",
+  "A warm surprise will brighten your evening~ 🌅",
+  "Trust your instincts — they know the way~ 🧭",
+  "Happiness is homemade~ 🏠",
+  "The moon has a secret just for you~ 🌙",
+  "Every cloud has a silver lining... and sparkles! ✨",
+  "Your pet thinks you're the best human ever~ 💕",
+  "Fortune favors the bold — and the fluffy~ 🐾",
+  "A friend in need is a friend indeed~ 🤝",
+  "Tomorrow holds a pleasant surprise~ 🎁",
+  "Laughter is the best medicine~ 😄",
+  "You will master a new trick soon~ 🎪",
+  "The weather will be perfect for stargazing~ 🔭",
+  "A dream you had will come true~ 💫",
+  "Your creativity knows no bounds~ 🎨",
+  "Patience brings all good things~ ⏳",
+  "You radiate warmth wherever you go~ ☀️",
+  "An old friend will reach out to you~ 📬",
+  "The next bubble you blow will be the biggest yet~ 🫧",
+  "Wisdom comes from listening to your heart~ ❤️",
+  "A cozy blanket and warm cocoa await~ ☕",
+  "You will discover something wonderful today~ 🔍",
+  "The universe conspires in your favor~ 🌌",
+  "Be like water — gentle, but unstoppable~ 💧",
+  "Your smile lights up the darkest room~ 💡",
+  "Good fortune follows those who are kind~ 🌸",
+  "A melody in your heart will guide you home~ 🎵",
+  "The best is yet to come~ 🌈",
+  "You are exactly where you need to be~ 📍",
+  "A shooting star has your name on it~ 🌠",
+  "Believe in yourself — your pet already does~ 🐱",
+  "Every sunset promises a new dawn~ 🌄",
+  "Your next adventure will be legendary~ ⚔️",
+  "A little rest goes a long way~ 😴",
+  "The secret ingredient is always love~ 💖",
+  "You make the world a better place~ 🌍",
+  "Magic is all around you — just look closer~ ✨",
+  "Your lucky color today is golden~ 🟡",
+  "A purr of contentment echoes in the wind~ 🐾",
+];
+
+interface FortuneCookie {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  phase: "appearing" | "cracking" | "reading" | "fading";
+  timer: number;
+  fortuneIndex: number;
+}
+
+let activeFortuneCookie: FortuneCookie | null = null;
+let fortuneCookieCooldown = 0;
+const FORTUNE_COOKIE_COOLDOWN = 180; // ~3 seconds between cookies
+let totalFortuneCookies = 0;
+let uniqueFortunesCollected: Set<number> = new Set();
+
+function playFortuneCrackSound(): void {
+  // Crisp crack + magical chime
+  playTone(200, 0.08, "square", 0.08);
+  playTone(400, 0.06, "square", 0.05);
+  setTimeout(() => {
+    playTone(800, 0.2, "sine", 0.08);
+    playTone(1200, 0.25, "sine", 0.06);
+  }, 80);
+  setTimeout(() => {
+    playTone(1600, 0.3, "sine", 0.05);
+  }, 180);
+}
+
+function giveFortuneCookie(): void {
+  if (isSleeping || minigameActive || memoryGameActive || activeFortuneCookie !== null || fortuneCookieCooldown > 0) return;
+
+  fortuneCookieCooldown = FORTUNE_COOKIE_COOLDOWN;
+
+  // Pick a fortune — prefer uncollected ones if available
+  let fortuneIndex: number;
+  const uncollected = FORTUNE_MESSAGES.map((_, i) => i).filter(i => !uniqueFortunesCollected.has(i));
+  if (uncollected.length > 0 && Math.random() < 0.7) {
+    fortuneIndex = uncollected[Math.floor(Math.random() * uncollected.length)];
+  } else {
+    fortuneIndex = Math.floor(Math.random() * FORTUNE_MESSAGES.length);
+  }
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  activeFortuneCookie = {
+    x: cx,
+    y: cy + 15,
+    scale: 0,
+    rotation: (Math.random() - 0.5) * 0.3,
+    opacity: 0,
+    phase: "appearing",
+    timer: 0,
+    fortuneIndex,
+  };
+
+  totalFortuneCookies++;
+  const isNew = !uniqueFortunesCollected.has(fortuneIndex);
+  uniqueFortunesCollected.add(fortuneIndex);
+
+  // Cute reaction messages
+  const reactions = [
+    "A fortune cookie~! 🥠",
+    "Ooh, what does it say~? 🥠",
+    "Crack it open~! ✨",
+    "Fortune time~! 🥠",
+    "I wonder what my fortune is~!",
+    "*crunch crunch* 🥠",
+  ];
+  queueSpeechBubble(reactions[Math.floor(Math.random() * reactions.length)], 80);
+
+  if (isNew) {
+    addDiaryEntry("milestone", "🥠", `Found a new fortune: "${FORTUNE_MESSAGES[fortuneIndex].slice(0, 40)}..."`);
+  }
+
+  logDailyActivity("fortune");
+  addFriendshipXP(1);
+  petHappiness = Math.min(100, petHappiness + 3);
+  totalCarePoints++;
+  checkAchievements();
+  saveGame();
+}
+
+function updateFortuneCookie(): void {
+  if (fortuneCookieCooldown > 0) fortuneCookieCooldown--;
+  if (!activeFortuneCookie) return;
+
+  const fc = activeFortuneCookie;
+  fc.timer++;
+
+  switch (fc.phase) {
+    case "appearing":
+      fc.scale = Math.min(1, fc.scale + 0.06);
+      fc.opacity = Math.min(1, fc.opacity + 0.06);
+      if (fc.timer > 30) {
+        fc.phase = "cracking";
+        fc.timer = 0;
+        playFortuneCrackSound();
+        // Spawn sparkle particles
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2;
+          particles.push({
+            x: fc.x,
+            y: fc.y,
+            vx: Math.cos(angle) * 2,
+            vy: Math.sin(angle) * 2,
+            life: 30 + Math.random() * 20,
+            maxLife: 30 + Math.random() * 20,
+            size: 3 + Math.random() * 3,
+            type: "sparkle",
+          });
+        }
+      }
+      break;
+    case "cracking":
+      if (fc.timer > 20) {
+        fc.phase = "reading";
+        fc.timer = 0;
+        // Show the fortune as a speech bubble
+        queueSpeechBubble(FORTUNE_MESSAGES[fc.fortuneIndex], 200, true);
+      }
+      break;
+    case "reading":
+      if (fc.timer > 120) {
+        fc.phase = "fading";
+        fc.timer = 0;
+      }
+      break;
+    case "fading":
+      fc.opacity = Math.max(0, fc.opacity - 0.04);
+      fc.scale = Math.max(0, fc.scale - 0.02);
+      if (fc.opacity <= 0) {
+        activeFortuneCookie = null;
+      }
+      break;
+  }
+}
+
+function drawFortuneCookie(): void {
+  if (!activeFortuneCookie) return;
+  const fc = activeFortuneCookie;
+
+  ctx.save();
+  ctx.globalAlpha = fc.opacity;
+  ctx.translate(fc.x, fc.y);
+  ctx.rotate(fc.rotation);
+  ctx.scale(fc.scale, fc.scale);
+
+  if (fc.phase === "appearing" || fc.phase === "cracking" && fc.timer < 10) {
+    // Draw whole fortune cookie
+    // Cookie body (crescent shape)
+    ctx.fillStyle = "#e8b84b";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI, true);
+    ctx.quadraticCurveTo(-8, 6, 0, 2);
+    ctx.quadraticCurveTo(8, 6, 14, 0);
+    ctx.fill();
+
+    // Cookie highlight
+    ctx.fillStyle = "#f5d36e";
+    ctx.beginPath();
+    ctx.ellipse(0, -2, 10, 5, 0, Math.PI, Math.PI * 2, true);
+    ctx.fill();
+
+    // Cookie shadow line
+    ctx.strokeStyle = "#c49430";
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-10, 0);
+    ctx.quadraticCurveTo(0, 3, 10, 0);
+    ctx.stroke();
+  } else if (fc.phase === "cracking" || fc.phase === "reading" || fc.phase === "fading") {
+    // Draw cracked cookie halves
+    ctx.fillStyle = "#e8b84b";
+
+    // Left half
+    ctx.save();
+    ctx.translate(-5, 0);
+    ctx.rotate(-0.2);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 8, 0, Math.PI * 0.6, Math.PI * 1.8);
+    ctx.fill();
+    ctx.restore();
+
+    // Right half
+    ctx.save();
+    ctx.translate(5, 0);
+    ctx.rotate(0.2);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 8, 0, -Math.PI * 0.8, Math.PI * 0.6);
+    ctx.fill();
+    ctx.restore();
+
+    // Paper strip sticking out
+    ctx.fillStyle = "#fff8e8";
+    ctx.save();
+    ctx.rotate(0.05);
+    ctx.fillRect(-12, -2, 24, 4);
+    // Tiny text hint on paper
+    ctx.fillStyle = "rgba(180, 140, 80, 0.5)";
+    ctx.font = "3px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("~ fortune ~", 0, 1);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 // --- Bubble Blowing ---
 interface Bubble {
   x: number;
@@ -4478,6 +4743,11 @@ const achievements: Achievement[] = [
     icon: "🫧", unlockMessage: "Pop pop pop~! I love bubbles! 🫧✨",
     condition: () => totalBubblesPopped >= 50, unlocked: false,
   },
+  {
+    id: "fortune_teller", name: "Fortune Teller", description: "Collect 15 unique fortunes",
+    icon: "🥠", unlockMessage: "The future is full of wonders~! 🥠✨",
+    condition: () => uniqueFortunesCollected.size >= 15, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -4932,6 +5202,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🫧 ${totalBubblesPopped} popped`, panelX + panelW - 12, y);
 
+  // Fortune Cookies section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#e8b84b";
+  ctx.fillText("FORTUNES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🥠 ${uniqueFortunesCollected.size}/${FORTUNE_MESSAGES.length} collected`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${totalFortuneCookies} cookies opened`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -5331,6 +5623,8 @@ interface SaveData {
   totalNightsSlept: number;
   lastSleepDate: string;
   totalBubblesPopped: number;
+  totalFortuneCookies: number;
+  uniqueFortunesCollected: number[];
   version: number;
 }
 
@@ -5380,6 +5674,8 @@ function buildSaveData(): SaveData {
     totalNightsSlept,
     lastSleepDate,
     totalBubblesPopped,
+    totalFortuneCookies,
+    uniqueFortunesCollected: Array.from(uniqueFortunesCollected),
     version: 1,
   };
 }
@@ -5565,6 +5861,14 @@ function applySaveData(data: SaveData): void {
   // Restore bubbles popped
   if (typeof (data as SaveData).totalBubblesPopped === "number") {
     totalBubblesPopped = (data as SaveData).totalBubblesPopped;
+  }
+
+  // Restore fortune cookies
+  if (typeof (data as SaveData).totalFortuneCookies === "number") {
+    totalFortuneCookies = (data as SaveData).totalFortuneCookies;
+  }
+  if (Array.isArray((data as SaveData).uniqueFortunesCollected)) {
+    uniqueFortunesCollected = new Set((data as SaveData).uniqueFortunesCollected);
   }
 
   // Restore diary
@@ -7902,6 +8206,9 @@ function update(): void {
   // Bubble update
   updateBubbles();
 
+  // Fortune cookie update
+  updateFortuneCookie();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -9163,6 +9470,9 @@ function draw(): void {
     drawBubble(b);
   }
 
+  // Fortune cookie (above bubbles, below speech bubble)
+  drawFortuneCookie();
+
   // Sad rain cloud (drawn above particles, below speech bubble)
   if (sadCloudActive) {
     drawSadCloud(sadCloudX, sadCloudY);
@@ -9500,6 +9810,7 @@ function drawShortcutHelp(): void {
     ["G", "Settings Panel"],
     ["E", "Pet Emote"],
     ["B", "Blow Bubbles"],
+    ["O", "Fortune Cookie"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -9693,6 +10004,11 @@ window.addEventListener("keydown", (e) => {
     case "e":
       spawnRandomEmote();
       playClickSound();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "o":
+      giveFortuneCookie();
       shortcutUsageCount++;
       checkAchievements();
       break;
