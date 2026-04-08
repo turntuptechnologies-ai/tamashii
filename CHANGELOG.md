@@ -3,6 +3,31 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.57.0] — 2026-04-08 — Firefly Catching
+
+### Added
+- **Firefly catching** — at night and evening, glowing fireflies appear around your pet, drifting with organic movement and pulsing with warm yellow-green light
+- **Click to catch** — click any firefly to catch it with a satisfying magical chime and sparkle burst; it flies into a small glass jar in the corner
+- **Firefly jar** — a tiny glass jar in the bottom-right corner collects your catches, glowing brighter as more fireflies are caught; shows the session count
+- **Organic firefly movement** — each firefly has unique drift patterns, wobble, random direction changes, and gentle boundary bouncing for realistic behavior
+- **Pulsing glow rendering** — each firefly has a unique hue (warm yellow to green), an outer radial glow that pulses, a solid core body, and a bright center dot
+- **Release fireflies (R key)** — press R to release all caught fireflies back into the night sky, with a cascade of ascending chime notes and a farewell speech
+- **Speech reactions** — the pet reacts with delight: "Ooh, a glowing friend~!", "*gasp* A firefly~!!", "Twinkle twinkle~", and more
+- **Firefly catch sound** — a gentle ascending three-note magical chime plays on each catch
+- **Firefly appear sound** — a very soft, subtle twinkle when a new firefly spawns
+- **Stats tracking** — total fireflies caught (persisted) and session catches displayed in a dedicated FIREFLIES section of the stats panel
+- **Firefly Catcher achievement** — catch 25 fireflies to unlock achievement #34 (🪲) with the message "The night glows just for me~! 🪲✨"
+- **Diary entries** — first firefly catch of each session is logged to the pet diary
+- **Contextual dreams** — catching fireflies influences dream content (stars, moons, butterflies)
+- **Happiness and care boost** — each caught firefly gives +2 happiness, +1 care point, +1 friendship XP
+- **Night-only spawning** — fireflies only appear during evening and night, with more frequent spawns at night
+- **Sleep-aware** — fireflies stop spawning when the pet is sleeping
+- **Keyboard shortcut R** — added to the shortcut help overlay for releasing caught fireflies
+- **Full persistence** — total fireflies caught is saved across sessions
+- **Total achievements: 34**
+
+**Why this feature:** Tamashii's nighttime has always been a quieter, more atmospheric time — the pet gets sleepy, dream bubbles float by, stars twinkle in the background. But there was never a reason to *interact* with the night. Firefly catching transforms evening and nighttime into a magical experience. Little glowing creatures drift across the canvas with realistic organic movement — each one a tiny warm light with its own rhythm and hue. The impulse to click them is irresistible, and the reward is delightful: a musical chime, a burst of sparkles, and the firefly spiraling gently into your collection jar. Watching the jar fill up with soft light is deeply satisfying. And when you're ready, pressing R releases them all — a cascade of lights rising into the sky while your pet waves goodbye. It's a nighttime ritual: peaceful, beautiful, and uniquely yours. The 25-catch achievement gives firefly enthusiasts a gentle goal, and the dream integration means catching fireflies before bed colors your pet's dreams with stars and moonlight.
+
 ## [v0.56.0] — 2026-04-08 — Fortune Cookies
 
 ### Added

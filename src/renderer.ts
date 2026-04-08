@@ -388,6 +388,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("petted")) contextIcons.push("heart", "heart");
   if (dailyActivityLog.includes("music")) contextIcons.push("music", "music");
   if (dailyActivityLog.includes("photo")) contextIcons.push("flower", "butterfly");
+  if (dailyActivityLog.includes("fireflies")) contextIcons.push("star", "moon", "butterfly");
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
   const allIcons = [...contextIcons, ...baseline];
@@ -712,6 +713,413 @@ let fortuneCookieCooldown = 0;
 const FORTUNE_COOKIE_COOLDOWN = 180; // ~3 seconds between cookies
 let totalFortuneCookies = 0;
 let uniqueFortunesCollected: Set<number> = new Set();
+
+// --- Firefly Catching ---
+interface Firefly {
+  x: number;
+  y: number;
+  baseX: number;
+  baseY: number;
+  vx: number;
+  vy: number;
+  size: number;
+  glowPhase: number;
+  glowSpeed: number;
+  hue: number; // 50-80 range for warm yellow-green
+  driftAngle: number;
+  driftSpeed: number;
+  wobbleOffset: number;
+  life: number;
+  maxLife: number;
+  caught: boolean;
+  catchAnimProgress: number; // 0-1 animation to jar
+}
+
+const fireflies: Firefly[] = [];
+let fireflySpawnTimer = 0;
+const FIREFLY_SPAWN_INTERVAL = 180; // ~3 seconds between spawns
+const FIREFLY_MAX_COUNT = 8;
+let totalFirefliesCaught = 0;
+let sessionFirefliesCaught = 0;
+let firstFireflyCaughtThisSession = false;
+let fireflyCatchJarGlow = 0; // glow animation when catching
+
+const FIREFLY_CATCH_SPEECHES = [
+  "Ooh, a glowing friend~! ✨",
+  "So pretty~! Come here little light~ 🌟",
+  "*gasp* A firefly~!! 🪲",
+  "Twinkle twinkle~ ✨",
+  "I caught a star~! ⭐",
+  "How magical~! 💫",
+  "The night is full of wonders~ 🌙",
+  "Another one for the collection~! 🫙",
+];
+
+function playFireflyCatchSound(): void {
+  // Soft magical chime — gentle ascending tinkle
+  playTone(1200, 0.12, "sine", 0.06);
+  setTimeout(() => playTone(1500, 0.1, "sine", 0.05), 60);
+  setTimeout(() => playTone(1800, 0.08, "sine", 0.04), 120);
+}
+
+function playFireflyAppearSound(): void {
+  // Very subtle soft twinkle
+  playTone(2000, 0.06, "sine", 0.02);
+  setTimeout(() => playTone(2400, 0.05, "sine", 0.015), 80);
+}
+
+function spawnFirefly(): void {
+  if (fireflies.length >= FIREFLY_MAX_COUNT) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+  if (isSleeping) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  // Spawn from edges or random positions in upper 2/3 of canvas
+  const edge = Math.random();
+  let x: number, y: number;
+  if (edge < 0.3) {
+    x = -10;
+    y = 20 + Math.random() * (h * 0.5);
+  } else if (edge < 0.6) {
+    x = w + 10;
+    y = 20 + Math.random() * (h * 0.5);
+  } else {
+    x = 20 + Math.random() * (w - 40);
+    y = 10 + Math.random() * (h * 0.4);
+  }
+
+  fireflies.push({
+    x, y,
+    baseX: x,
+    baseY: y,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: (Math.random() - 0.5) * 0.3,
+    size: 2.5 + Math.random() * 1.5,
+    glowPhase: Math.random() * Math.PI * 2,
+    glowSpeed: 0.03 + Math.random() * 0.03,
+    hue: 50 + Math.random() * 30,
+    driftAngle: Math.random() * Math.PI * 2,
+    driftSpeed: 0.005 + Math.random() * 0.01,
+    wobbleOffset: Math.random() * Math.PI * 2,
+    life: 0,
+    maxLife: 600 + Math.floor(Math.random() * 600), // 10-20 seconds
+    caught: false,
+    catchAnimProgress: 0,
+  });
+
+  playFireflyAppearSound();
+}
+
+function updateFireflies(): void {
+  // Only spawn at night/evening
+  if (currentTimeOfDay === "night" || currentTimeOfDay === "evening") {
+    fireflySpawnTimer++;
+    // Spawn more frequently at night than evening
+    const interval = currentTimeOfDay === "night" ? FIREFLY_SPAWN_INTERVAL : FIREFLY_SPAWN_INTERVAL * 2;
+    if (fireflySpawnTimer >= interval && !isSleeping) {
+      fireflySpawnTimer = 0;
+      if (Math.random() < 0.7) { // 70% chance each interval
+        spawnFirefly();
+      }
+    }
+  } else {
+    // Daytime — fireflies fade away
+    fireflySpawnTimer = 0;
+  }
+
+  // Jar glow decay
+  if (fireflyCatchJarGlow > 0) {
+    fireflyCatchJarGlow = Math.max(0, fireflyCatchJarGlow - 0.02);
+  }
+
+  for (let i = fireflies.length - 1; i >= 0; i--) {
+    const f = fireflies[i];
+    f.life++;
+
+    if (f.caught) {
+      // Animate toward jar position (bottom-right corner)
+      f.catchAnimProgress = Math.min(1, f.catchAnimProgress + 0.04);
+      const jarX = canvas.width - 22;
+      const jarY = canvas.height - 25;
+      const t = f.catchAnimProgress;
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      f.x = f.x + (jarX - f.x) * eased * 0.15;
+      f.y = f.y + (jarY - f.y) * eased * 0.15;
+      f.size *= 0.97;
+      if (f.catchAnimProgress >= 1 || f.size < 0.5) {
+        fireflies.splice(i, 1);
+        fireflyCatchJarGlow = 1;
+      }
+      continue;
+    }
+
+    // Organic movement: drift + wobble + gentle direction changes
+    f.driftAngle += (Math.random() - 0.5) * 0.1;
+    f.vx += Math.cos(f.driftAngle) * f.driftSpeed;
+    f.vy += Math.sin(f.driftAngle) * f.driftSpeed;
+
+    // Dampen velocity
+    f.vx *= 0.98;
+    f.vy *= 0.98;
+
+    // Wobble
+    f.x += f.vx + Math.sin(f.life * 0.02 + f.wobbleOffset) * 0.3;
+    f.y += f.vy + Math.cos(f.life * 0.015 + f.wobbleOffset) * 0.2;
+
+    // Soft boundary bouncing
+    const margin = 15;
+    if (f.x < margin) f.vx += 0.05;
+    if (f.x > canvas.width - margin) f.vx -= 0.05;
+    if (f.y < margin) f.vy += 0.03;
+    if (f.y > canvas.height * 0.7) f.vy -= 0.04;
+
+    // Glow pulsing
+    f.glowPhase += f.glowSpeed;
+
+    // Remove if life expired or out of bounds
+    if (f.life > f.maxLife) {
+      // Fade out by shrinking
+      f.size *= 0.95;
+      if (f.size < 0.3) {
+        fireflies.splice(i, 1);
+      }
+    }
+  }
+}
+
+function drawFireflies(): void {
+  for (const f of fireflies) {
+    const glowIntensity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(f.glowPhase));
+    const fadeIn = Math.min(1, f.life / 30); // fade in over 0.5 seconds
+    const alpha = fadeIn * glowIntensity;
+
+    if (f.caught) {
+      // Shrinking as it flies to jar
+      const catchAlpha = 1 - f.catchAnimProgress;
+      ctx.save();
+      ctx.globalAlpha = catchAlpha * alpha;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${f.hue}, 100%, 75%, 1)`;
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Outer glow
+    const glowRadius = f.size * (3 + glowIntensity * 2);
+    const glowGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, glowRadius);
+    glowGrad.addColorStop(0, `hsla(${f.hue}, 100%, 80%, 0.4)`);
+    glowGrad.addColorStop(0.4, `hsla(${f.hue}, 100%, 70%, 0.15)`);
+    glowGrad.addColorStop(1, `hsla(${f.hue}, 100%, 60%, 0)`);
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, glowRadius, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Core body
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${f.hue}, 100%, 85%, 1)`;
+    ctx.fill();
+
+    // Bright center dot
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.size * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${f.hue}, 100%, 95%, 1)`;
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+function drawFireflyJar(): void {
+  // Only show jar when there are fireflies or catches this session
+  if (sessionFirefliesCaught <= 0 && fireflies.length === 0) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+
+  const jarX = canvas.width - 22;
+  const jarY = canvas.height - 25;
+  const jarW = 14;
+  const jarH = 20;
+
+  ctx.save();
+
+  // Jar glow effect when catching
+  if (fireflyCatchJarGlow > 0) {
+    ctx.globalAlpha = fireflyCatchJarGlow * 0.5;
+    const catchGlow = ctx.createRadialGradient(jarX, jarY, 0, jarX, jarY, jarH);
+    catchGlow.addColorStop(0, "hsla(60, 100%, 80%, 0.6)");
+    catchGlow.addColorStop(1, "hsla(60, 100%, 60%, 0)");
+    ctx.beginPath();
+    ctx.arc(jarX, jarY, jarH, 0, Math.PI * 2);
+    ctx.fillStyle = catchGlow;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Jar body (glass)
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.roundRect(jarX - jarW / 2, jarY - jarH / 2, jarW, jarH, 3);
+  ctx.fillStyle = "rgba(180, 220, 255, 0.15)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(180, 220, 255, 0.4)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Jar lid
+  ctx.fillStyle = "rgba(160, 140, 120, 0.5)";
+  ctx.beginPath();
+  ctx.roundRect(jarX - jarW / 2 - 1, jarY - jarH / 2 - 3, jarW + 2, 4, 1.5);
+  ctx.fill();
+
+  // Inner glow based on session catches (more catches = brighter)
+  if (sessionFirefliesCaught > 0) {
+    const innerGlowAlpha = Math.min(0.7, sessionFirefliesCaught * 0.08);
+    const innerGlow = ctx.createRadialGradient(jarX, jarY + 2, 0, jarX, jarY + 2, jarW * 0.8);
+    innerGlow.addColorStop(0, `hsla(60, 100%, 75%, ${innerGlowAlpha})`);
+    innerGlow.addColorStop(1, `hsla(60, 100%, 50%, 0)`);
+    ctx.globalAlpha = 0.8 + 0.2 * Math.sin(frame * 0.03);
+    ctx.beginPath();
+    ctx.arc(jarX, jarY + 2, jarW * 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = innerGlow;
+    ctx.fill();
+
+    // Tiny dots inside jar representing caught fireflies
+    const dotCount = Math.min(sessionFirefliesCaught, 5);
+    for (let i = 0; i < dotCount; i++) {
+      const dotX = jarX + Math.sin(frame * 0.02 + i * 1.3) * 3;
+      const dotY = jarY + Math.cos(frame * 0.025 + i * 1.7) * 4;
+      const dotAlpha = 0.4 + 0.4 * Math.sin(frame * 0.04 + i * 2);
+      ctx.globalAlpha = dotAlpha;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${55 + i * 5}, 100%, 80%, 1)`;
+      ctx.fill();
+    }
+  }
+
+  // Count label
+  if (sessionFirefliesCaught > 0) {
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = "#FFE87C";
+    ctx.font = "bold 7px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`${sessionFirefliesCaught}`, jarX, jarY + jarH / 2 + 9);
+  }
+
+  ctx.restore();
+}
+
+function tryClickFirefly(clickX: number, clickY: number): boolean {
+  for (const f of fireflies) {
+    if (f.caught) continue;
+    const dx = clickX - f.x;
+    const dy = clickY - f.y;
+    const hitRadius = f.size * 4; // generous hit area around the glow
+    if (dx * dx + dy * dy < hitRadius * hitRadius) {
+      // Caught!
+      f.caught = true;
+      f.catchAnimProgress = 0;
+      totalFirefliesCaught++;
+      sessionFirefliesCaught++;
+      playFireflyCatchSound();
+
+      // Sparkle particles at catch point
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        particles.push({
+          x: f.x,
+          y: f.y,
+          vx: Math.cos(angle) * 1.5,
+          vy: Math.sin(angle) * 1.2,
+          life: 30 + Math.random() * 20,
+          maxLife: 30 + Math.random() * 20,
+          size: 2 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+
+      // Speech reaction (occasional, not every catch)
+      if (sessionFirefliesCaught === 1 || Math.random() < 0.3) {
+        const speech = FIREFLY_CATCH_SPEECHES[Math.floor(Math.random() * FIREFLY_CATCH_SPEECHES.length)];
+        queueSpeechBubble(speech, 150, true);
+      }
+
+      // First firefly this session — diary entry
+      if (!firstFireflyCaughtThisSession) {
+        firstFireflyCaughtThisSession = true;
+        addDiaryEntry("milestone", "🪲", "Caught my first firefly of the evening~! The night is magical ✨");
+        // Track daily activity for contextual dreams
+        logDailyActivity("fireflies");
+      }
+
+      // Happiness boost
+      petHappiness = Math.min(100, petHappiness + 2);
+      totalCarePoints++;
+      friendshipXP += 1;
+
+      // Check achievements
+      checkAchievements();
+      saveGame();
+
+      return true;
+    }
+  }
+  return false;
+}
+
+function releaseFireflies(): void {
+  if (sessionFirefliesCaught <= 0) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+
+  // Release all session catches — spawn several fireflies that fly upward and away
+  const releaseCount = Math.min(sessionFirefliesCaught, 6);
+  const jarX = canvas.width - 22;
+  const jarY = canvas.height - 25;
+
+  for (let i = 0; i < releaseCount; i++) {
+    setTimeout(() => {
+      fireflies.push({
+        x: jarX + (Math.random() - 0.5) * 10,
+        y: jarY + (Math.random() - 0.5) * 8,
+        baseX: jarX,
+        baseY: jarY,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -(1 + Math.random() * 1.5),
+        size: 2.5 + Math.random() * 1,
+        glowPhase: Math.random() * Math.PI * 2,
+        glowSpeed: 0.04 + Math.random() * 0.02,
+        hue: 50 + Math.random() * 30,
+        driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 1,
+        driftSpeed: 0.01,
+        wobbleOffset: Math.random() * Math.PI * 2,
+        life: 0,
+        maxLife: 300 + Math.floor(Math.random() * 200),
+        caught: false,
+        catchAnimProgress: 0,
+      });
+    }, i * 100);
+  }
+
+  // Play release sound — gentle ascending cascade
+  playTone(800, 0.15, "sine", 0.05);
+  setTimeout(() => playTone(1000, 0.12, "sine", 0.04), 80);
+  setTimeout(() => playTone(1200, 0.1, "sine", 0.04), 160);
+  setTimeout(() => playTone(1500, 0.08, "sine", 0.03), 240);
+
+  queueSpeechBubble("Fly free, little lights~! ✨🪲", 150, true);
+  addDiaryEntry("general", "🫙", `Released ${sessionFirefliesCaught} fireflies back into the night sky~`);
+
+  sessionFirefliesCaught = 0;
+  fireflyCatchJarGlow = 0;
+}
 
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
@@ -3185,6 +3593,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for firefly catches before bubbles
+  if (fireflies.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickFirefly(clickX, clickY)) {
+      return; // Caught a firefly, don't start drag
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -4748,6 +5165,11 @@ const achievements: Achievement[] = [
     icon: "🥠", unlockMessage: "The future is full of wonders~! 🥠✨",
     condition: () => uniqueFortunesCollected.size >= 15, unlocked: false,
   },
+  {
+    id: "firefly_catcher", name: "Firefly Catcher", description: "Catch 25 fireflies",
+    icon: "🪲", unlockMessage: "The night glows just for me~! 🪲✨",
+    condition: () => totalFirefliesCaught >= 25, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -5224,6 +5646,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${totalFortuneCookies} cookies opened`, w / 2, y);
 
+  // Fireflies section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#b8e060";
+  ctx.fillText("FIREFLIES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🪲 ${totalFirefliesCaught} caught`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${sessionFirefliesCaught} this session`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -5625,6 +6069,7 @@ interface SaveData {
   totalBubblesPopped: number;
   totalFortuneCookies: number;
   uniqueFortunesCollected: number[];
+  totalFirefliesCaught: number;
   version: number;
 }
 
@@ -5676,6 +6121,7 @@ function buildSaveData(): SaveData {
     totalBubblesPopped,
     totalFortuneCookies,
     uniqueFortunesCollected: Array.from(uniqueFortunesCollected),
+    totalFirefliesCaught,
     version: 1,
   };
 }
@@ -5869,6 +6315,11 @@ function applySaveData(data: SaveData): void {
   }
   if (Array.isArray((data as SaveData).uniqueFortunesCollected)) {
     uniqueFortunesCollected = new Set((data as SaveData).uniqueFortunesCollected);
+  }
+
+  // Restore fireflies caught
+  if (typeof (data as SaveData).totalFirefliesCaught === "number") {
+    totalFirefliesCaught = (data as SaveData).totalFirefliesCaught;
   }
 
   // Restore diary
@@ -8209,6 +8660,9 @@ function update(): void {
   // Fortune cookie update
   updateFortuneCookie();
 
+  // Firefly update
+  updateFireflies();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -9470,6 +9924,10 @@ function draw(): void {
     drawBubble(b);
   }
 
+  // Fireflies (above bubbles, atmospheric layer)
+  drawFireflies();
+  drawFireflyJar();
+
   // Fortune cookie (above bubbles, below speech bubble)
   drawFortuneCookie();
 
@@ -9811,6 +10269,7 @@ function drawShortcutHelp(): void {
     ["E", "Pet Emote"],
     ["B", "Blow Bubbles"],
     ["O", "Fortune Cookie"],
+    ["R", "Release Fireflies"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -10009,6 +10468,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "o":
       giveFortuneCookie();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "r":
+      releaseFireflies();
       shortcutUsageCount++;
       checkAchievements();
       break;
