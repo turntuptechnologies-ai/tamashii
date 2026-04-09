@@ -3,24 +3,22 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.59.0 — Shooting Stars (2026-04-08)
+## Last completed: v0.60.0 — Morning Dew Drops (2026-04-09)
 
 ### What was done
-- Added shooting star system: rare shooting stars streak across the night sky during evening/night
-- Click a shooting star to make a wish — 20 unique heartwarming wish messages
-- Glowing meteor rendering with radial glow head, streak tail, and fading trail particles
-- Natural trajectories from top/sides with varied angles, speeds, and slight gravity
-- Two new sounds: ethereal descending shimmer (star appearance) and magical ascending chime (wish made)
-- 8 speech reactions when shooting stars appear (~40% chance)
-- Generous click hitbox on both star head and trail for forgiving interaction
-- Golden sparkle burst of 15 particles when making a wish
-- Stats panel SHOOTING STARS section showing wishes made and session sightings
-- Achievement #36: "Wish Maker" (🌠) — make 10 wishes on shooting stars
-- Diary entries for first wish and every 10th wish
-- Each wish gives +8 happiness, +3 care points, +5 friendship XP
-- More frequent spawns at night than evening; sleep-aware; auto-cleanup at daytime
-- Added to SaveData: `totalWishesMade`
-- Total achievements: 36
+- Added morning dew drop system: glistening water droplets appear during morning hours (6 AM–12 PM)
+- Click dew drops to collect them — soft watery plink sound + water splash particle burst
+- Translucent teardrop rendering with gradient fill, outer glow, shimmer highlights, and wobble animation
+- Natural evaporation when morning ends (drops shrink and fade)
+- Two new sounds: crystalline ping (appear) and descending watery plink (collect)
+- 8 speech reactions when collecting (~25% chance)
+- Stats panel MORNING DEW section showing total collected and session count
+- Achievement #37: "Dew Collector" (💧) — collect 20 morning dew drops
+- Diary entry for first collection each session
+- Each drop gives +2 happiness, +1 care point, +1 friendship XP
+- Up to 6 drops on screen; spawn every ~3.3s with 60% chance; sleep-aware
+- Added to SaveData: `totalDewDropsCollected`
+- Total achievements: 37
 
 ### Thoughts for next cycle
 - **Bedtime stories** — read the pet a bedtime story before sleep that affects its dreams (narrative depth)
@@ -35,24 +33,23 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Fortune cookie rarity tiers** — golden fortune cookies with rare fortunes
 - **Weather-specific activities** — pet plays in rain puddles, builds snowmen, chases leaves
 - **Combo hint system** — subtle visual hints when you're partway through a combo sequence
-- **Pet diary illustrations** — diary entries get tiny pixel-art illustrations
+- **Afternoon activities** — interactive elements specific to afternoon (wind chimes, sun beams, etc.)
 - **Custom color mixer** — let users define their own RGB palette
-- **Morning dew drops** — interactive dew drops on the canvas during morning hours
+- **Pet stretching/morning routine** — pet does cute stretches when waking up in the morning
 
 ### Current architecture notes
-- Renderer is ~11,200+ lines
-- Shooting star system defined after Constellation section (~line 1545): ShootingStar/ActiveWish interfaces, WISH_MESSAGES pool, SHOOTING_STAR_SPEECH reactions, state variables, spawn/click/wish/update/draw functions
-- `shootingStars` array holds active meteors; `activeWish` holds current wish display (nullable)
-- `spawnShootingStar()` — creates meteor from random edge with varied trajectory
-- `tryClickShootingStar()` — hit-tests head (20px) and trail points (12px)
-- `makeWish()` — picks random wish, creates sparkle burst, updates stats, plays sound
-- `updateShootingStars()` — handles spawn timer, movement, trail, gravity, cleanup; also updates wish display
-- `drawShootingStars()` — renders trail particles, radial glow head, streak line, wish text with sparkles
-- Click handling: shooting star check added BEFORE constellation check in mousedown handler
-- Shooting star update in update() after constellation update
-- Shooting star drawing in draw() before constellations (furthest sky layer)
-- SaveData: `totalWishesMade` (number)
-- Stats panel SHOOTING STARS section after CONSTELLATIONS section
-- Total achievements: 36
+- Renderer is ~11,650+ lines
+- Morning dew drop system defined after Shooting Stars section (~line 1923): DewDrop interface, DEW_DROP_SPEECHES, state variables, sound/spawn/update/click/draw functions
+- `dewDrops` array holds active drops; max 6 on screen
+- `spawnDewDrop()` — creates drop near ground level at random x position
+- `updateDewDrops()` — handles spawn timer, wobble, shimmer, life, evaporation at non-morning
+- `tryClickDewDrop()` — hit-tests with generous radius (size * 3), spawns water splash particles
+- `drawDewDrops()` — renders teardrop body with gradient, glow, shimmer highlights
+- Click handling: dew drop check added BEFORE bubble check in mousedown handler
+- Dew drop update in update() before firefly update
+- Dew drop drawing in draw() before fortune cookie
+- SaveData: `totalDewDropsCollected` (number)
+- Stats panel MORNING DEW section after SHOOTING STARS section
+- Total achievements: 37
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

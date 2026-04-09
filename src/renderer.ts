@@ -1920,6 +1920,260 @@ function drawShootingStars(): void {
   ctx.restore();
 }
 
+// --- Morning Dew Drops (Morning-only interactive drops, click to collect) ---
+
+interface DewDrop {
+  x: number;
+  y: number;
+  size: number;
+  wobblePhase: number;
+  wobbleSpeed: number;
+  shimmerPhase: number;
+  life: number;
+  maxLife: number;
+  collected: boolean;
+  collectAnimProgress: number;
+  hue: number; // 180-220 range for cool water blues
+  surfaceY: number; // the "ground" y-position it sits on
+}
+
+const dewDrops: DewDrop[] = [];
+let dewDropSpawnTimer = 0;
+const DEW_DROP_SPAWN_INTERVAL = 200; // ~3.3 seconds between spawns
+const DEW_DROP_MAX_COUNT = 6;
+let totalDewDropsCollected = 0;
+let sessionDewDropsCollected = 0;
+let firstDewDropCollectedThisSession = false;
+
+const DEW_DROP_SPEECHES = [
+  "Morning dew~! So sparkly~! ✨",
+  "Little water jewels~! 💎",
+  "*touch* So cool and fresh~! 💧",
+  "The morning left me presents~! 🌸",
+  "Dewdrops are nature's gems~! 💫",
+  "Sparkle sparkle~! ✨",
+  "The world is glistening~! 🌅",
+  "Fresh morning magic~! 💧",
+];
+
+function playDewDropCollectSound(): void {
+  // Soft watery plink — gentle descending droplet
+  playTone(1600, 0.1, "sine", 0.07);
+  setTimeout(() => playTone(1200, 0.12, "sine", 0.05), 40);
+  setTimeout(() => playTone(900, 0.15, "sine", 0.04, 3), 80);
+}
+
+function playDewDropAppearSound(): void {
+  // Very subtle crystalline ping
+  playTone(2200, 0.05, "sine", 0.015);
+}
+
+function spawnDewDrop(): void {
+  if (dewDrops.length >= DEW_DROP_MAX_COUNT) return;
+  if (currentTimeOfDay !== "morning") return;
+  if (isSleeping) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  // Dew drops appear on surfaces: ground level area, on ledges near the pet
+  const groundY = h / 2 + 50; // near the pet's feet area
+  const x = 15 + Math.random() * (w - 30);
+  const surfaceY = groundY + (Math.random() - 0.5) * 30;
+
+  dewDrops.push({
+    x,
+    y: surfaceY,
+    size: 3 + Math.random() * 3,
+    wobblePhase: Math.random() * Math.PI * 2,
+    wobbleSpeed: 0.02 + Math.random() * 0.02,
+    shimmerPhase: Math.random() * Math.PI * 2,
+    life: 0,
+    maxLife: 900 + Math.floor(Math.random() * 600), // 15-25 seconds
+    collected: false,
+    collectAnimProgress: 0,
+    hue: 180 + Math.random() * 40,
+    surfaceY,
+  });
+
+  playDewDropAppearSound();
+}
+
+function updateDewDrops(): void {
+  // Only spawn in the morning
+  if (currentTimeOfDay === "morning") {
+    dewDropSpawnTimer++;
+    if (dewDropSpawnTimer >= DEW_DROP_SPAWN_INTERVAL && !isSleeping) {
+      dewDropSpawnTimer = 0;
+      if (Math.random() < 0.6) {
+        spawnDewDrop();
+      }
+    }
+  } else {
+    // Not morning — dew drops evaporate
+    dewDropSpawnTimer = 0;
+    for (let i = dewDrops.length - 1; i >= 0; i--) {
+      const d = dewDrops[i];
+      if (!d.collected) {
+        d.size *= 0.96; // shrink/evaporate
+        if (d.size < 0.3) {
+          dewDrops.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  for (let i = dewDrops.length - 1; i >= 0; i--) {
+    const d = dewDrops[i];
+    d.life++;
+
+    if (d.collected) {
+      // Animate upward + fade out (splash)
+      d.collectAnimProgress = Math.min(1, d.collectAnimProgress + 0.05);
+      d.y -= 1.5;
+      d.size *= 0.94;
+      if (d.collectAnimProgress >= 1 || d.size < 0.3) {
+        dewDrops.splice(i, 1);
+      }
+      continue;
+    }
+
+    // Gentle wobble — the drop jiggles slightly
+    d.wobblePhase += d.wobbleSpeed;
+    d.shimmerPhase += 0.04;
+
+    // Remove if life expired
+    if (d.life > d.maxLife) {
+      d.size *= 0.97; // slowly evaporate
+      if (d.size < 0.5) {
+        dewDrops.splice(i, 1);
+      }
+    }
+  }
+}
+
+function tryClickDewDrop(clickX: number, clickY: number): boolean {
+  for (const d of dewDrops) {
+    if (d.collected) continue;
+    const dx = clickX - d.x;
+    const dy = clickY - d.y;
+    const hitRadius = d.size * 3; // generous hit area
+    if (dx * dx + dy * dy < hitRadius * hitRadius) {
+      // Collected!
+      d.collected = true;
+      d.collectAnimProgress = 0;
+      totalDewDropsCollected++;
+      sessionDewDropsCollected++;
+      playDewDropCollectSound();
+
+      // Water splash particles — tiny droplets burst outward
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const speed = 0.8 + Math.random() * 1.2;
+        particles.push({
+          x: d.x,
+          y: d.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1,
+          life: 25 + Math.random() * 15,
+          maxLife: 25 + Math.random() * 15,
+          size: 1.5 + Math.random() * 1.5,
+          type: "raindrop",
+        });
+      }
+
+      // Speech reaction (occasional)
+      if (sessionDewDropsCollected === 1 || Math.random() < 0.25) {
+        const speech = DEW_DROP_SPEECHES[Math.floor(Math.random() * DEW_DROP_SPEECHES.length)];
+        queueSpeechBubble(speech, 150, true);
+      }
+
+      // First dew drop this session — diary entry
+      if (!firstDewDropCollectedThisSession) {
+        firstDewDropCollectedThisSession = true;
+        addDiaryEntry("milestone", "💧", "Collected my first morning dewdrop~! The world sparkles at dawn ✨");
+        logDailyActivity("dewdrops");
+      }
+
+      // Happiness boost
+      petHappiness = Math.min(100, petHappiness + 2);
+      totalCarePoints++;
+      friendshipXP += 1;
+
+      // Check achievements
+      checkAchievements();
+      return true;
+    }
+  }
+  return false;
+}
+
+function drawDewDrops(): void {
+  for (const d of dewDrops) {
+    const fadeIn = Math.min(1, d.life / 40); // fade in over ~0.7 seconds
+    const collectFade = d.collected ? 1 - d.collectAnimProgress : 1;
+    const alpha = fadeIn * collectFade;
+
+    if (alpha <= 0) continue;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    const wobbleX = Math.sin(d.wobblePhase) * 0.5;
+    const drawX = d.x + wobbleX;
+    const drawY = d.y;
+    const s = d.size;
+
+    // Shimmer highlight position oscillates
+    const shimmerOffset = Math.sin(d.shimmerPhase) * s * 0.2;
+
+    // Outer glow — soft morning light reflection
+    const glowRadius = s * 2.5;
+    const glowGrad = ctx.createRadialGradient(drawX, drawY, 0, drawX, drawY, glowRadius);
+    glowGrad.addColorStop(0, `hsla(${d.hue}, 80%, 85%, 0.25)`);
+    glowGrad.addColorStop(0.5, `hsla(${d.hue}, 70%, 80%, 0.08)`);
+    glowGrad.addColorStop(1, `hsla(${d.hue}, 60%, 70%, 0)`);
+    ctx.beginPath();
+    ctx.arc(drawX, drawY, glowRadius, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Drop body — teardrop/dome shape (rounded bottom, pointed top)
+    ctx.beginPath();
+    ctx.moveTo(drawX, drawY - s * 1.2);
+    ctx.quadraticCurveTo(drawX + s * 0.8, drawY - s * 0.2, drawX + s * 0.5, drawY + s * 0.3);
+    ctx.quadraticCurveTo(drawX, drawY + s * 0.6, drawX - s * 0.5, drawY + s * 0.3);
+    ctx.quadraticCurveTo(drawX - s * 0.8, drawY - s * 0.2, drawX, drawY - s * 1.2);
+    ctx.closePath();
+
+    // Fill with gradient — translucent water
+    const bodyGrad = ctx.createLinearGradient(drawX, drawY - s, drawX, drawY + s * 0.5);
+    bodyGrad.addColorStop(0, `hsla(${d.hue}, 60%, 90%, 0.7)`);
+    bodyGrad.addColorStop(0.5, `hsla(${d.hue}, 70%, 80%, 0.5)`);
+    bodyGrad.addColorStop(1, `hsla(${d.hue}, 80%, 70%, 0.4)`);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // Subtle outline
+    ctx.strokeStyle = `hsla(${d.hue}, 60%, 75%, 0.3)`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Highlight — white specular reflection
+    ctx.beginPath();
+    ctx.arc(drawX - s * 0.15 + shimmerOffset, drawY - s * 0.5, s * 0.25, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + Math.sin(d.shimmerPhase) * 0.2})`;
+    ctx.fill();
+
+    // Secondary smaller highlight
+    ctx.beginPath();
+    ctx.arc(drawX + s * 0.2 + shimmerOffset * 0.5, drawY - s * 0.15, s * 0.12, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, 0.35)`;
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
   playTone(200, 0.08, "square", 0.08);
@@ -4419,6 +4673,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Caught a firefly, don't start drag
     }
   }
+  // Check for dew drop clicks
+  if (dewDrops.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickDewDrop(clickX, clickY)) {
+      return; // Collected a dew drop, don't start drag
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -5997,6 +6260,11 @@ const achievements: Achievement[] = [
     icon: "🌠", unlockMessage: "Every wish lights up the sky~! 🌠✨",
     condition: () => totalWishesMade >= 10, unlocked: false,
   },
+  {
+    id: "dew_collector", name: "Dew Collector", description: "Collect 20 morning dew drops",
+    icon: "💧", unlockMessage: "Every morning sparkles just for me~! 💧✨",
+    condition: () => totalDewDropsCollected >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -6534,6 +6802,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${sessionShootingStarsSeen} seen this session`, w / 2, y);
 
+  // Morning Dew Drops section
+  y += 14;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.beginPath();
+  ctx.moveTo(panelX + 12, y);
+  ctx.lineTo(panelX + panelW - 12, y);
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#88ccee";
+  ctx.fillText("MORNING DEW", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`💧 ${totalDewDropsCollected} collected`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${sessionDewDropsCollected} this session`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -6939,6 +7229,7 @@ interface SaveData {
   completedConstellations: number[];
   totalConstellationsCompleted: number;
   totalWishesMade: number;
+  totalDewDropsCollected: number;
   version: number;
 }
 
@@ -6994,6 +7285,7 @@ function buildSaveData(): SaveData {
     completedConstellations: Array.from(completedConstellations),
     totalConstellationsCompleted,
     totalWishesMade,
+    totalDewDropsCollected,
     version: 1,
   };
 }
@@ -7205,6 +7497,11 @@ function applySaveData(data: SaveData): void {
   // Restore wishes made
   if (typeof (data as SaveData).totalWishesMade === "number") {
     totalWishesMade = (data as SaveData).totalWishesMade;
+  }
+
+  // Restore dew drops collected
+  if (typeof (data as SaveData).totalDewDropsCollected === "number") {
+    totalDewDropsCollected = (data as SaveData).totalDewDropsCollected;
   }
 
   // Restore diary
@@ -9545,6 +9842,9 @@ function update(): void {
   // Fortune cookie update
   updateFortuneCookie();
 
+  // Morning dew drops update
+  updateDewDrops();
+
   // Firefly update
   updateFireflies();
 
@@ -10824,6 +11124,9 @@ function draw(): void {
   // Fireflies (above bubbles, atmospheric layer)
   drawFireflies();
   drawFireflyJar();
+
+  // Morning dew drops (ground-level, above particles)
+  drawDewDrops();
 
   // Fortune cookie (above bubbles, below speech bubble)
   drawFortuneCookie();

@@ -3,6 +3,29 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.60.0] — 2026-04-09 — Morning Dew Drops
+
+### Added
+- **Morning dew drops** — glistening water droplets appear on surfaces around your pet during morning hours (6 AM–12 PM), sparkling with translucent blue-green water effects
+- **Click to collect** — click any dew drop to collect it with a satisfying watery plink sound and a burst of tiny water splash particles
+- **Translucent drop rendering** — each dew drop has a teardrop body with gradient water fill, outer glow, white specular highlights that shimmer over time, and subtle outline
+- **Gentle wobble animation** — each drop jiggles slightly with its own unique phase, giving them a liquid, living feel
+- **Natural evaporation** — dew drops slowly evaporate when it's no longer morning, shrinking and fading away naturally
+- **Dew drop collect sound** — a soft descending watery plink (three-note cascade) plays when collecting a drop
+- **Dew drop appear sound** — a very subtle crystalline ping when a new drop materializes
+- **Speech reactions** — ~25% chance the pet reacts: "Morning dew~! So sparkly~! ✨", "Little water jewels~! 💎", and more
+- **Water splash particles** — 8 tiny raindrop particles burst outward from the collected drop's position
+- **Stats panel section** — a dedicated MORNING DEW section shows total drops collected and session count
+- **Dew Collector achievement** — collect 20 morning dew drops to unlock achievement #37 (💧) with the message "Every morning sparkles just for me~! 💧✨"
+- **Diary entry** — first dew drop collected each session is logged to the pet diary
+- **Happiness and care boost** — each collected dew drop gives +2 happiness, +1 care point, +1 friendship XP
+- **Morning-only spawning** — dew drops only appear during morning hours, with up to 6 on screen at once
+- **Sleep-aware** — dew drops stop spawning when the pet is sleeping
+- **Full persistence** — total dew drops collected is saved across sessions
+- **Total achievements: 37**
+
+**Why this feature:** Tamashii's nighttime has become a rich, interactive wonderland — fireflies, constellations, shooting stars, dream bubbles. But mornings? Just golden sparkles. Morning dew drops transform the dawn into its own magical moment. Little water jewels materialize on surfaces around your pet, each one a tiny translucent gem that catches the morning light with shimmering highlights. The impulse to tap them is gentle and satisfying — a soft watery plink, a burst of tiny droplets, and the quiet joy of collecting nature's morning gifts. They evaporate naturally as the day progresses, making each morning a fresh canvas of sparkle. It's the perfect counterpart to the nighttime features: where the night is dramatic and rare (shooting stars, wishes), the morning is gentle and abundant (dewdrops, sparkles). The 20-drop achievement gives morning enthusiasts a gentle goal, and the diary integration means your pet remembers the sparkling dawns.
+
 ## [v0.59.0] — 2026-04-08 — Shooting Stars
 
 ### Added
