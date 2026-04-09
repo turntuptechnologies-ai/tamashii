@@ -2486,6 +2486,355 @@ function updateBedtimeStory(): void {
   }
 }
 
+// --- Message in a Bottle ---
+interface MessageBottle {
+  x: number;
+  y: number;
+  vx: number;
+  bobPhase: number;
+  bobSpeed: number;
+  rotation: number;
+  rotationSpeed: number;
+  life: number;
+  opened: boolean;
+  openAnimProgress: number;
+  messageIndex: number;
+  fromSide: "left" | "right"; // which side it drifted in from
+}
+
+const BOTTLE_MESSAGES: string[] = [
+  "Dear friend~ I found a seashell that sings! 🐚✨",
+  "Greetings from across the sea~ The sunsets here are pink! 🌅",
+  "I made a flower crown today~ I wish I could share it! 🌸",
+  "The clouds here look like bunnies~ Do yours look like bunnies too? 🐰☁️",
+  "I learned to whistle! ...sort of. It sounds like a teapot~ 🫖",
+  "My garden grew a sunflower taller than me~! 🌻",
+  "I saw a rainbow with SEVEN colors today~ Is that normal? 🌈",
+  "I found a rock shaped like a heart~ Sending it to you via imagination! 💎",
+  "The fireflies here spell out words at night~ Last night they spelled 'hello'! ✨",
+  "I taught a fish to wave~ ...okay maybe it was just swimming. 🐟",
+  "Do you ever talk to the moon? It's a good listener~ 🌙",
+  "I built a tiny castle out of sand~ Population: 1 hermit crab 🏰🦀",
+  "The stars rearranged themselves into a smiley face last night~ 😊⭐",
+  "I found a four-leaf clover! I'm sending you all the luck~ 🍀",
+  "A butterfly landed on my nose today~ It tickled! 🦋",
+  "I'm collecting interesting clouds~ I have 47 so far! ☁️",
+  "The waves here sound like a lullaby~ I fell asleep three times today 💤",
+  "I made friends with a seagull~ Its name is Gerald 🐦",
+  "There's a cave nearby that echoes everything THREE times! ...times! ...times! 🗣️",
+  "I drew a picture of you in the sand~ The tide says hi too! 🌊",
+];
+
+const BOTTLE_SPEECHES = [
+  "Oh! A message in a bottle~! 🍾",
+  "Someone sent me a letter~! 📜",
+  "A bottle washed ashore~! ✨",
+  "I wonder who wrote this~! 💌",
+  "From a faraway friend~! 🌊",
+  "A message from the sea~! 🐚",
+];
+
+const BOTTLE_REACTION_SPEECHES = [
+  "How wonderful~! 💕",
+  "I wish I could write back~! ✉️",
+  "What a lovely message~! 🌟",
+  "I'll treasure this forever~! 💎",
+  "Somewhere out there, a friend~! 🌍",
+  "This made my day~! ☀️",
+];
+
+let activeBottle: MessageBottle | null = null;
+let bottleSpawnTimer = 0;
+const BOTTLE_SPAWN_CHECK_INTERVAL = 300; // check every ~5 seconds
+const BOTTLE_SPAWN_CHANCE = 0.03; // 3% chance per check — rare!
+let totalBottlesOpened = 0;
+let sessionBottlesOpened = 0;
+let firstBottleThisSession = false;
+let bottleCooldown = 0;
+const BOTTLE_COOLDOWN = 600; // ~10 seconds after opening before next can spawn
+
+function playBottleSplashSound(): void {
+  // Watery splash + gentle cork pop
+  playTone(180, 0.12, "sine", 0.06);
+  playTone(350, 0.08, "sine", 0.04);
+  setTimeout(() => playTone(600, 0.1, "sine", 0.06), 60);
+  setTimeout(() => playTone(900, 0.15, "sine", 0.05), 120);
+}
+
+function playBottleOpenSound(): void {
+  // Cork pop + paper unfurl
+  playTone(400, 0.05, "square", 0.08); // pop
+  playTone(800, 0.03, "square", 0.05);
+  setTimeout(() => {
+    playTone(1200, 0.12, "sine", 0.06); // shimmer
+    playTone(1500, 0.15, "sine", 0.04);
+  }, 80);
+  setTimeout(() => {
+    playTone(1800, 0.2, "sine", 0.03); // magical reveal
+  }, 160);
+}
+
+function spawnMessageBottle(): void {
+  if (activeBottle !== null) return;
+  if (isSleeping) return;
+  if (bottleCooldown > 0) return;
+  if (minigameActive || memoryGameActive) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const fromSide = Math.random() < 0.5 ? "left" : "right";
+  const startX = fromSide === "left" ? -15 : w + 15;
+  const speed = (fromSide === "left" ? 1 : -1) * (0.3 + Math.random() * 0.2);
+  const groundY = h / 2 + 40 + Math.random() * 15;
+
+  activeBottle = {
+    x: startX,
+    y: groundY,
+    vx: speed,
+    bobPhase: Math.random() * Math.PI * 2,
+    bobSpeed: 0.03 + Math.random() * 0.02,
+    rotation: (Math.random() - 0.5) * 0.3,
+    rotationSpeed: (Math.random() - 0.5) * 0.005,
+    life: 0,
+    opened: false,
+    openAnimProgress: 0,
+    messageIndex: Math.floor(Math.random() * BOTTLE_MESSAGES.length),
+    fromSide,
+  };
+
+  playBottleSplashSound();
+}
+
+function updateMessageBottle(): void {
+  if (bottleCooldown > 0) bottleCooldown--;
+
+  // Spawn check
+  if (activeBottle === null && !isSleeping && !minigameActive && !memoryGameActive) {
+    bottleSpawnTimer++;
+    if (bottleSpawnTimer >= BOTTLE_SPAWN_CHECK_INTERVAL) {
+      bottleSpawnTimer = 0;
+      if (Math.random() < BOTTLE_SPAWN_CHANCE) {
+        spawnMessageBottle();
+      }
+    }
+  }
+
+  if (!activeBottle) return;
+
+  const b = activeBottle;
+  b.life++;
+  b.bobPhase += b.bobSpeed;
+  b.rotation += b.rotationSpeed;
+
+  if (b.opened) {
+    b.openAnimProgress = Math.min(1, b.openAnimProgress + 0.02);
+    // Float upward and fade
+    b.y -= 0.3;
+    if (b.openAnimProgress >= 1) {
+      activeBottle = null;
+    }
+    return;
+  }
+
+  // Drift across screen
+  b.x += b.vx;
+
+  // Slow down as it reaches center area
+  const centerX = canvas.width / 2;
+  const distToCenter = Math.abs(b.x - centerX);
+  if (distToCenter < 40) {
+    b.vx *= 0.98; // decelerate near center
+  }
+
+  // Remove if drifted off the other side
+  if ((b.fromSide === "left" && b.x > canvas.width + 20) ||
+      (b.fromSide === "right" && b.x < -20)) {
+    activeBottle = null;
+    return;
+  }
+
+  // Also remove if it's been around too long without being clicked (30 seconds)
+  if (b.life > 1800) {
+    activeBottle = null;
+  }
+}
+
+function tryClickBottle(clickX: number, clickY: number): boolean {
+  if (!activeBottle || activeBottle.opened) return false;
+
+  const b = activeBottle;
+  const bobY = b.y + Math.sin(b.bobPhase) * 3;
+  const dx = clickX - b.x;
+  const dy = clickY - bobY;
+  const hitRadius = 18; // generous click area
+
+  if (dx * dx + dy * dy < hitRadius * hitRadius) {
+    // Opened!
+    b.opened = true;
+    b.openAnimProgress = 0;
+    totalBottlesOpened++;
+    sessionBottlesOpened++;
+    bottleCooldown = BOTTLE_COOLDOWN;
+
+    playBottleOpenSound();
+
+    // Show discovery speech
+    const speech = BOTTLE_SPEECHES[Math.floor(Math.random() * BOTTLE_SPEECHES.length)];
+    queueSpeechBubble(speech, 100, true);
+
+    // Show the message after a short delay (queued)
+    queueSpeechBubble(`"${BOTTLE_MESSAGES[b.messageIndex]}"`, 250);
+
+    // Reaction speech
+    if (Math.random() < 0.6) {
+      const reaction = BOTTLE_REACTION_SPEECHES[Math.floor(Math.random() * BOTTLE_REACTION_SPEECHES.length)];
+      queueSpeechBubble(reaction, 150);
+    }
+
+    // Sparkle particles — magical bottle opening
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const speed = 0.8 + Math.random() * 1.2;
+      particles.push({
+        x: b.x,
+        y: bobY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 0.8,
+        life: 35 + Math.random() * 25,
+        maxLife: 35 + Math.random() * 25,
+        size: 2 + Math.random() * 2,
+        type: "sparkle",
+      });
+    }
+
+    // Water splash particles
+    for (let i = 0; i < 6; i++) {
+      const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.8;
+      particles.push({
+        x: b.x,
+        y: bobY,
+        vx: Math.cos(angle) * (0.5 + Math.random()),
+        vy: Math.sin(angle) * (1 + Math.random()) - 0.5,
+        life: 20 + Math.random() * 15,
+        maxLife: 20 + Math.random() * 15,
+        size: 1.5 + Math.random() * 1,
+        type: "raindrop",
+      });
+    }
+
+    // Happiness boost
+    petHappiness = Math.min(100, petHappiness + 4);
+    totalCarePoints += 2;
+    friendshipXP += 3;
+
+    // First bottle this session — diary entry
+    if (!firstBottleThisSession) {
+      firstBottleThisSession = true;
+      addDiaryEntry("milestone", "🍾", `Found a message in a bottle from a faraway friend~! 🌊✨`);
+      logDailyActivity("bottle");
+    }
+
+    isHappy = true;
+    happyTimer = 60;
+    squishAmount = 0.4;
+
+    checkAchievements();
+    saveGame();
+    return true;
+  }
+  return false;
+}
+
+function drawMessageBottle(): void {
+  if (!activeBottle) return;
+
+  const b = activeBottle;
+  const fadeIn = Math.min(1, b.life / 30);
+  const fadeOut = b.opened ? 1 - b.openAnimProgress : 1;
+  const alpha = fadeIn * fadeOut;
+
+  if (alpha <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  const bobY = b.y + Math.sin(b.bobPhase) * 3;
+  const drawX = b.x;
+  const drawY = bobY;
+
+  ctx.translate(drawX, drawY);
+  ctx.rotate(b.rotation + Math.sin(b.bobPhase * 0.7) * 0.08);
+
+  // Bottle body — glass green
+  const bottleH = 14;
+  const bottleW = 7;
+
+  // Glass body
+  ctx.beginPath();
+  ctx.moveTo(-bottleW / 2, -bottleH / 2 + 3);
+  ctx.quadraticCurveTo(-bottleW / 2 - 1, bottleH / 2 - 1, -bottleW / 2 + 1, bottleH / 2);
+  ctx.lineTo(bottleW / 2 - 1, bottleH / 2);
+  ctx.quadraticCurveTo(bottleW / 2 + 1, bottleH / 2 - 1, bottleW / 2, -bottleH / 2 + 3);
+  ctx.closePath();
+
+  const glassGrad = ctx.createLinearGradient(-bottleW / 2, 0, bottleW / 2, 0);
+  glassGrad.addColorStop(0, "rgba(100, 200, 150, 0.7)");
+  glassGrad.addColorStop(0.3, "rgba(140, 220, 170, 0.5)");
+  glassGrad.addColorStop(0.7, "rgba(100, 200, 150, 0.6)");
+  glassGrad.addColorStop(1, "rgba(80, 180, 130, 0.7)");
+  ctx.fillStyle = glassGrad;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(60, 160, 120, 0.5)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Bottle neck
+  ctx.beginPath();
+  ctx.moveTo(-2.5, -bottleH / 2 + 3);
+  ctx.lineTo(-2, -bottleH / 2 - 2);
+  ctx.lineTo(2, -bottleH / 2 - 2);
+  ctx.lineTo(2.5, -bottleH / 2 + 3);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(120, 210, 160, 0.6)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(60, 160, 120, 0.4)";
+  ctx.stroke();
+
+  // Cork
+  ctx.beginPath();
+  ctx.roundRect(-2, -bottleH / 2 - 5, 4, 4, 1);
+  ctx.fillStyle = "#c8956a";
+  ctx.fill();
+  ctx.strokeStyle = "#a0784e";
+  ctx.lineWidth = 0.3;
+  ctx.stroke();
+
+  // Glass highlight
+  ctx.beginPath();
+  ctx.moveTo(-bottleW / 2 + 1.5, -bottleH / 2 + 5);
+  ctx.lineTo(-bottleW / 2 + 1.5, bottleH / 2 - 3);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Paper scroll visible inside (tiny rolled paper)
+  ctx.beginPath();
+  ctx.roundRect(-1.5, -2, 3, 6, 0.5);
+  ctx.fillStyle = "rgba(255, 245, 220, 0.6)";
+  ctx.fill();
+
+  // Gentle glow around bottle
+  ctx.beginPath();
+  ctx.arc(0, 0, 15, 0, Math.PI * 2);
+  const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 15);
+  glowGrad.addColorStop(0, "rgba(180, 230, 200, 0.15)");
+  glowGrad.addColorStop(1, "rgba(180, 230, 200, 0)");
+  ctx.fillStyle = glowGrad;
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
   playTone(200, 0.08, "square", 0.08);
@@ -4985,6 +5334,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Caught a firefly, don't start drag
     }
   }
+  // Check for message bottle clicks
+  if (activeBottle && !activeBottle.opened) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickBottle(clickX, clickY)) {
+      return; // Opened a bottle, don't start drag
+    }
+  }
   // Check for dew drop clicks
   if (dewDrops.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -6582,6 +6940,11 @@ const achievements: Achievement[] = [
     icon: "📖", unlockMessage: "Every story is a dream waiting to happen~! 📖✨",
     condition: () => uniqueStoriesRead.size >= 8, unlocked: false,
   },
+  {
+    id: "pen_pal", name: "Pen Pal", description: "Open 10 messages in bottles",
+    icon: "🍾", unlockMessage: "Friends across the sea know my name~! 🍾✨",
+    condition: () => totalBottlesOpened >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -7163,6 +7526,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${uniqueStoriesRead.size}/${BEDTIME_STORIES.length} unique stories discovered`, w / 2, y);
 
+  // --- MESSAGE BOTTLES section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#80d8a0";
+  ctx.fillText("MESSAGE BOTTLES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🍾 ${totalBottlesOpened} opened`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${sessionBottlesOpened} found this session`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -7571,6 +7956,7 @@ interface SaveData {
   totalDewDropsCollected: number;
   totalStoriesRead: number;
   uniqueStoriesRead: number[];
+  totalBottlesOpened: number;
   version: number;
 }
 
@@ -7629,6 +8015,7 @@ function buildSaveData(): SaveData {
     totalDewDropsCollected,
     totalStoriesRead,
     uniqueStoriesRead: Array.from(uniqueStoriesRead),
+    totalBottlesOpened,
     version: 1,
   };
 }
@@ -7853,6 +8240,11 @@ function applySaveData(data: SaveData): void {
   }
   if (Array.isArray((data as SaveData).uniqueStoriesRead)) {
     uniqueStoriesRead = new Set((data as SaveData).uniqueStoriesRead);
+  }
+
+  // Restore bottles opened
+  if (typeof (data as SaveData).totalBottlesOpened === "number") {
+    totalBottlesOpened = (data as SaveData).totalBottlesOpened;
   }
 
   // Restore diary
@@ -10196,6 +10588,9 @@ function update(): void {
   // Morning dew drops update
   updateDewDrops();
 
+  // Message in a bottle update
+  updateMessageBottle();
+
   // Bedtime story update
   updateBedtimeStory();
 
@@ -11481,6 +11876,9 @@ function draw(): void {
 
   // Morning dew drops (ground-level, above particles)
   drawDewDrops();
+
+  // Message in a bottle (ground-level, drifting)
+  drawMessageBottle();
 
   // Fortune cookie (above bubbles, below speech bubble)
   drawFortuneCookie();

@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.62.0] — 2026-04-09 — 🧬 Mutation: Message in a Bottle
+
+### Added
+- **Message in a bottle** — tiny glass bottles drift in from the edge of the screen at random intervals, bobbing gently on invisible waves
+- **20 unique messages** — each bottle contains a charming letter from a "far-away pet friend" with whimsical stories about seashell songs, four-leaf clovers, pet hermit crabs, and more
+- **Click to open** — click a drifting bottle to pop the cork, unfurl the message, and read the letter in speech bubbles
+- **Bottle rendering** — hand-drawn glass bottle with green-tinted body, visible cork, paper scroll inside, glass highlight, and soft glow
+- **Bobbing animation** — each bottle gently bobs up and down with its own phase and rotation, mimicking water movement
+- **Drift physics** — bottles enter from left or right edge and slowly drift across, decelerating near the center for easy clicking
+- **Cork pop sound** — a satisfying pop + paper unfurl + magical shimmer plays when opening a bottle
+- **Splash sound** — a watery splash plays when a new bottle appears
+- **Speech reactions** — pet reacts with excitement ("A message in a bottle~! 🍾") and warmth after reading ("I wish I could write back~! ✉️")
+- **Sparkle + water particles** — 10 golden sparkles and 6 water droplets burst from the bottle when opened
+- **Rare spawning** — bottles appear roughly every ~2.5 minutes with a 3% chance per check, making each one feel special
+- **Stats panel section** — dedicated MESSAGE BOTTLES section showing total opened and session count
+- **Pen Pal achievement** — open 10 messages in bottles to unlock achievement #39 (🍾) with the message "Friends across the sea know my name~! 🍾✨"
+- **Diary entry** — first bottle each session is logged to the pet diary
+- **Happiness and care boost** — each opened bottle gives +4 happiness, +2 care points, +3 friendship XP
+- **Cooldown system** — ~10 second cooldown between bottles to keep them feeling rare
+- **Auto-cleanup** — bottles that aren't clicked within 30 seconds drift away naturally
+- **Sleep-aware** — bottles don't appear while the pet is sleeping
+- **Full persistence** — total bottles opened is saved across sessions
+- **Total achievements: 39**
+
+**Why this feature:** 🧬 MUTATION — This one came from nowhere! Instead of following the suggested path of afternoon activities or lullaby modes, evolution took an unexpected turn. Tamashii's world has been self-contained — everything happens within the pet's immediate environment. Message in a Bottle breaks that boundary by hinting at a wider world beyond the screen. Somewhere out there, other little pets are having adventures, finding seashells that sing, befriending seagulls named Gerald, and teaching fish to wave. Each bottle is a tiny window into an unseen world, and the messages are deliberately whimsical and heartwarming. The rarity is key — bottles appear maybe once or twice per session, so each one feels like a genuine surprise. You hear the splash, see the little green glass bottle bobbing in from the edge, and there's a moment of pure "ooh!" as you click to read the letter. It's the kind of feature that makes the pet's world feel bigger, warmer, and more connected — even though it's just a cute desktop window.
+
 ## [v0.61.0] — 2026-04-09 — Bedtime Stories
 
 ### Added
