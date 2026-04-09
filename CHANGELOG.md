@@ -3,6 +3,30 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.63.0] — 2026-04-09 — Afternoon Cloud Watching
+
+### Added
+- **Afternoon cloud watching** — soft, fluffy clouds drift across the sky during afternoon hours (12 PM–6 PM), each hiding a secret shape
+- **12 cloud shapes** — Bunny, Dragon, Whale, Castle, Cat, Star, Heart, Bird, Fish, Mushroom, Flower, and Boat — each with a unique icon
+- **Click to identify** — click an unidentified cloud to reveal its hidden shape, with the icon appearing above and the name below
+- **Cloud rendering** — hand-drawn puffy clouds built from overlapping ellipses with highlights, shadows, and gentle bobbing animation
+- **Dreamy identify sound** — a soft ascending three-note chime plays when you identify a cloud shape
+- **Subtle appear sound** — a gentle whoosh when a new cloud drifts in from the edge
+- **Speech reactions** — pet reacts with delight: "That cloud looks like a bunny~! ☁️", "I see a dragon up there~! ☁️✨", "*gazes at the sky dreamily*"
+- **Soft puff particles** — 6 white sparkle particles burst gently from the cloud when identified
+- **Afternoon-only spawning** — clouds only appear during afternoon hours, with up to 4 on screen at once
+- **Graceful fade-out** — clouds slowly fade away when it's no longer afternoon, rather than disappearing abruptly
+- **Slow drift physics** — clouds float at varying speeds with gentle vertical bobbing on their own phase
+- **Stats panel section** — dedicated CLOUD WATCHING section showing total identified, shapes discovered (out of 12), and session count
+- **Cloud Gazer achievement** — identify 8 different cloud shapes to unlock achievement #40 (☁️) with the message "The sky is full of stories~! ☁️✨"
+- **Diary entry** — first cloud identified each session is logged to the pet diary
+- **Happiness and care boost** — each identified cloud gives +2 happiness, +1 care point, +2 friendship XP
+- **Sleep-aware** — clouds don't spawn while the pet is sleeping
+- **Full persistence** — total clouds identified and unique shapes discovered are saved across sessions
+- **Total achievements: 40**
+
+**Why this feature:** Tamashii's afternoon has been the quietest time of day. Mornings have dew drops, evenings have sunset warmth, nights are packed with fireflies, constellations, shooting stars, and dream bubbles. But afternoons? Just... content. Cloud watching transforms the afternoon sky into a gentle discovery game. Soft white clouds drift lazily across the top of the screen, each one secretly shaped like something — a bunny, a whale, a castle. Click one and your pet looks up, identifies the shape with delight, and the icon floats above the cloud for a few seconds. It's deliberately slow and meditative — clouds spawn infrequently, drift gently, and the whole interaction is quiet and dreamy. The 12 shapes give collectors something to discover over multiple sessions, and the Cloud Gazer achievement rewards those who find 8 different ones. It's the perfect afternoon activity — lying back, looking up, and finding stories in the sky.
+
 ## [v0.62.0] — 2026-04-09 — 🧬 Mutation: Message in a Bottle
 
 ### Added

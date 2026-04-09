@@ -2835,6 +2835,266 @@ function drawMessageBottle(): void {
   ctx.restore();
 }
 
+// --- Afternoon Cloud Watching ---
+interface Cloud {
+  x: number;
+  y: number;
+  vx: number;
+  scale: number;
+  shape: number; // index into CLOUD_SHAPES
+  opacity: number;
+  bobPhase: number;
+  identified: boolean;
+  identifyTimer: number; // frames showing the shape name
+  puffScale: number; // animation scale when identified
+}
+
+const CLOUD_SHAPES = [
+  { name: "Bunny", icon: "🐰", description: "It looks like a bunny~! 🐰" },
+  { name: "Dragon", icon: "🐉", description: "A dragon in the sky~! 🐉" },
+  { name: "Whale", icon: "🐋", description: "A big gentle whale~! 🐋" },
+  { name: "Castle", icon: "🏰", description: "A castle in the clouds~! 🏰" },
+  { name: "Cat", icon: "🐱", description: "A fluffy cloud cat~! 🐱" },
+  { name: "Star", icon: "⭐", description: "A star-shaped cloud~! ⭐" },
+  { name: "Heart", icon: "💕", description: "A heart in the sky~! 💕" },
+  { name: "Bird", icon: "🐦", description: "A bird soaring high~! 🐦" },
+  { name: "Fish", icon: "🐟", description: "A fish swimming through air~! 🐟" },
+  { name: "Mushroom", icon: "🍄", description: "A mushroom cloud~! 🍄" },
+  { name: "Flower", icon: "🌸", description: "A flower blooming above~! 🌸" },
+  { name: "Boat", icon: "⛵", description: "A boat sailing the sky~! ⛵" },
+];
+
+let clouds: Cloud[] = [];
+let cloudSpawnTimer = 0;
+let totalCloudsIdentified = 0;
+let sessionCloudsIdentified = 0;
+let uniqueCloudShapesSeen = new Set<number>();
+let cloudSessionDiaryLogged = false;
+const CLOUD_SPAWN_INTERVAL = 360; // check every ~6 seconds
+const CLOUD_SPAWN_CHANCE = 0.12; // 12% chance per check
+const MAX_CLOUDS = 4;
+
+const cloudSpeechReactions = [
+  "That cloud looks like a %s~! ☁️",
+  "I see a %s up there~! ☁️✨",
+  "Look! A %s cloud~! ☁️",
+  "Ooh~! It's shaped like a %s~! ☁️",
+  "Cloud watching is so relaxing~! ☁️💭",
+  "*gazes at the sky dreamily* ☁️",
+];
+
+function playCloudIdentifySound(): void {
+  // Soft dreamy chime — gentle ascending notes
+  playTone(600, 0.2, "sine", 0.06);
+  setTimeout(() => playTone(800, 0.18, "sine", 0.05), 100);
+  setTimeout(() => playTone(1000, 0.25, "sine", 0.04), 200);
+}
+
+function playCloudAppearSound(): void {
+  // Very subtle soft whoosh
+  playTone(300, 0.3, "sine", 0.02);
+  playTone(400, 0.2, "sine", 0.015, 5);
+}
+
+function spawnCloud(): void {
+  if (clouds.length >= MAX_CLOUDS) return;
+  if (isSleeping) return;
+  if (currentTimeOfDay !== "afternoon") return;
+
+  const fromLeft = Math.random() > 0.5;
+  const shape = Math.floor(Math.random() * CLOUD_SHAPES.length);
+  const cloud: Cloud = {
+    x: fromLeft ? -40 : canvas.width + 40,
+    y: 15 + Math.random() * 35,
+    vx: (fromLeft ? 1 : -1) * (0.15 + Math.random() * 0.15),
+    scale: 0.7 + Math.random() * 0.5,
+    shape,
+    opacity: 0,
+    bobPhase: Math.random() * Math.PI * 2,
+    identified: false,
+    identifyTimer: 0,
+    puffScale: 1,
+  };
+  clouds.push(cloud);
+  playCloudAppearSound();
+}
+
+function updateClouds(): void {
+  if (currentTimeOfDay !== "afternoon") {
+    // Fade out clouds when it's no longer afternoon
+    for (const c of clouds) {
+      c.opacity = Math.max(0, c.opacity - 0.005);
+    }
+    clouds = clouds.filter(c => c.opacity > 0);
+    return;
+  }
+
+  // Spawn timer
+  cloudSpawnTimer++;
+  if (cloudSpawnTimer >= CLOUD_SPAWN_INTERVAL) {
+    cloudSpawnTimer = 0;
+    if (Math.random() < CLOUD_SPAWN_CHANCE && !isSleeping) {
+      spawnCloud();
+    }
+  }
+
+  for (const c of clouds) {
+    // Drift
+    c.x += c.vx;
+    c.bobPhase += 0.015;
+
+    // Fade in
+    if (c.opacity < 0.85) {
+      c.opacity = Math.min(0.85, c.opacity + 0.008);
+    }
+
+    // Identify timer countdown
+    if (c.identifyTimer > 0) {
+      c.identifyTimer--;
+      c.puffScale = 1 + Math.sin(c.identifyTimer * 0.1) * 0.03;
+    }
+  }
+
+  // Remove clouds that drifted off screen
+  clouds = clouds.filter(c => c.x > -60 && c.x < canvas.width + 60);
+}
+
+function tryClickCloud(clickX: number, clickY: number): boolean {
+  for (const c of clouds) {
+    if (c.identified) continue;
+    const bobY = c.y + Math.sin(c.bobPhase) * 3;
+    const dx = clickX - c.x;
+    const dy = clickY - bobY;
+    const hitRadius = 22 * c.scale;
+    if (dx * dx + dy * dy < hitRadius * hitRadius) {
+      c.identified = true;
+      c.identifyTimer = 180; // show label for 3 seconds
+      c.puffScale = 1.15;
+
+      totalCloudsIdentified++;
+      sessionCloudsIdentified++;
+      uniqueCloudShapesSeen.add(c.shape);
+
+      const shape = CLOUD_SHAPES[c.shape];
+      playCloudIdentifySound();
+
+      // Speech reaction
+      if (Math.random() < 0.6) {
+        const template = cloudSpeechReactions[Math.floor(Math.random() * 4)];
+        queueSpeechBubble(template.replace("%s", shape.name.toLowerCase()), 180, true);
+      } else {
+        queueSpeechBubble(cloudSpeechReactions[4 + Math.floor(Math.random() * 2)], 150, true);
+      }
+
+      // Particles — soft white puffs
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        particles.push({
+          x: c.x + Math.cos(angle) * 8,
+          y: bobY + Math.sin(angle) * 5,
+          vx: Math.cos(angle) * 0.8,
+          vy: Math.sin(angle) * 0.5 - 0.3,
+          life: 40 + Math.random() * 20,
+          maxLife: 40 + Math.random() * 20,
+          size: 3 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+
+      // Stat boosts
+      petHappiness = Math.min(100, petHappiness + 2);
+      totalCarePoints += 1;
+      friendshipXP += 2;
+
+      // Diary
+      if (!cloudSessionDiaryLogged) {
+        cloudSessionDiaryLogged = true;
+        addDiaryEntry("general", "☁️", `Spent the afternoon cloud watching — spotted a ${shape.name.toLowerCase()}!`);
+      }
+
+      squishAmount = 0.2;
+      saveGame();
+      checkAchievements();
+      return true;
+    }
+  }
+  return false;
+}
+
+function drawClouds(): void {
+  for (const c of clouds) {
+    if (c.opacity <= 0) continue;
+    const bobY = c.y + Math.sin(c.bobPhase) * 3;
+
+    ctx.save();
+    ctx.translate(c.x, bobY);
+    ctx.scale(c.scale * c.puffScale, c.scale * c.puffScale);
+    ctx.globalAlpha = c.opacity;
+
+    // Cloud body — several overlapping ellipses
+    const cloudColor = c.identified ? "rgba(255, 255, 255, 0.95)" : "rgba(245, 248, 255, 0.85)";
+    const shadowColor = c.identified ? "rgba(200, 215, 255, 0.4)" : "rgba(200, 210, 230, 0.3)";
+
+    // Shadow
+    ctx.beginPath();
+    ctx.ellipse(2, 4, 20, 8, 0, 0, Math.PI * 2);
+    ctx.fillStyle = shadowColor;
+    ctx.fill();
+
+    // Main body puffs
+    ctx.fillStyle = cloudColor;
+    ctx.beginPath();
+    ctx.ellipse(-8, 0, 12, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(8, 0, 12, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, -4, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-4, 2, 10, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(5, 2, 10, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight on top
+    ctx.beginPath();
+    ctx.ellipse(-2, -7, 8, 4, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.fill();
+
+    // If identified, show shape icon and name
+    if (c.identified && c.identifyTimer > 0) {
+      const fadeAlpha = Math.min(1, c.identifyTimer / 30);
+      ctx.globalAlpha = c.opacity * fadeAlpha;
+      const shape = CLOUD_SHAPES[c.shape];
+
+      // Icon above cloud
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(shape.icon, 0, -16);
+
+      // Name label below cloud
+      ctx.font = "bold 7px monospace";
+      ctx.fillStyle = "rgba(100, 140, 200, 0.9)";
+      ctx.fillText(shape.name, 0, 16);
+
+      // Soft glow around identified cloud
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 25);
+      glowGrad.addColorStop(0, "rgba(200, 220, 255, 0.15)");
+      glowGrad.addColorStop(1, "rgba(200, 220, 255, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
 function playFortuneCrackSound(): void {
   // Crisp crack + magical chime
   playTone(200, 0.08, "square", 0.08);
@@ -5307,6 +5567,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for cloud clicks (afternoon cloud watching)
+  if (clouds.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCloud(clickX, clickY)) {
+      return; // Identified a cloud shape, don't start drag
+    }
+  }
   // Check for shooting star clicks
   if (shootingStars.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -6945,6 +7214,11 @@ const achievements: Achievement[] = [
     icon: "🍾", unlockMessage: "Friends across the sea know my name~! 🍾✨",
     condition: () => totalBottlesOpened >= 10, unlocked: false,
   },
+  {
+    id: "cloud_gazer", name: "Cloud Gazer", description: "Identify 8 different cloud shapes",
+    icon: "☁️", unlockMessage: "The sky is full of stories~! ☁️✨",
+    condition: () => uniqueCloudShapesSeen.size >= 8, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -7548,6 +7822,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${sessionBottlesOpened} found this session`, w / 2, y);
 
+  // --- CLOUD WATCHING section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#87CEEB";
+  ctx.fillText("CLOUD WATCHING", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`☁️ ${totalCloudsIdentified} identified`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${uniqueCloudShapesSeen.size}/${CLOUD_SHAPES.length} shapes discovered | ${sessionCloudsIdentified} this session`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -7957,6 +8253,8 @@ interface SaveData {
   totalStoriesRead: number;
   uniqueStoriesRead: number[];
   totalBottlesOpened: number;
+  totalCloudsIdentified: number;
+  uniqueCloudShapesSeen: number[];
   version: number;
 }
 
@@ -8016,6 +8314,8 @@ function buildSaveData(): SaveData {
     totalStoriesRead,
     uniqueStoriesRead: Array.from(uniqueStoriesRead),
     totalBottlesOpened,
+    totalCloudsIdentified,
+    uniqueCloudShapesSeen: Array.from(uniqueCloudShapesSeen),
     version: 1,
   };
 }
@@ -8245,6 +8545,14 @@ function applySaveData(data: SaveData): void {
   // Restore bottles opened
   if (typeof (data as SaveData).totalBottlesOpened === "number") {
     totalBottlesOpened = (data as SaveData).totalBottlesOpened;
+  }
+
+  // Restore clouds identified
+  if (typeof (data as SaveData).totalCloudsIdentified === "number") {
+    totalCloudsIdentified = (data as SaveData).totalCloudsIdentified;
+  }
+  if (Array.isArray((data as SaveData).uniqueCloudShapesSeen)) {
+    uniqueCloudShapesSeen = new Set((data as SaveData).uniqueCloudShapesSeen);
   }
 
   // Restore diary
@@ -10591,6 +10899,9 @@ function update(): void {
   // Message in a bottle update
   updateMessageBottle();
 
+  // Afternoon clouds update
+  updateClouds();
+
   // Bedtime story update
   updateBedtimeStory();
 
@@ -11667,6 +11978,9 @@ function draw(): void {
 
   // Weather overlay (atmosphere effects — behind pet)
   drawWeatherOverlay();
+
+  // Afternoon clouds (sky layer, behind pet)
+  drawClouds();
 
   // Footprints (on the ground, behind everything else)
   drawFootprints();
