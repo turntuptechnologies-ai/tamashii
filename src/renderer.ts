@@ -389,6 +389,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("music")) contextIcons.push("music", "music");
   if (dailyActivityLog.includes("photo")) contextIcons.push("flower", "butterfly");
   if (dailyActivityLog.includes("fireflies")) contextIcons.push("star", "moon", "butterfly");
+  if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
   const allIcons = [...contextIcons, ...baseline];
@@ -2171,6 +2172,317 @@ function drawDewDrops(): void {
     ctx.fill();
 
     ctx.restore();
+  }
+}
+
+// --- Bedtime Stories ---
+interface BedtimeStory {
+  title: string;
+  icon: string;
+  pages: string[];
+  dreamTheme: string[]; // dream icons this story inspires
+}
+
+const BEDTIME_STORIES: BedtimeStory[] = [
+  {
+    title: "The Starlight Garden",
+    icon: "🌟",
+    pages: [
+      "Once upon a time, a little pet found a garden that only bloomed at night...",
+      "Each flower glowed with soft starlight, humming a gentle melody~",
+      "The pet danced among them, and the flowers swayed along~ 🌸",
+      "From that night on, the garden bloomed whenever the pet dreamed of it~ ✨",
+    ],
+    dreamTheme: ["flower", "star", "music"],
+  },
+  {
+    title: "The Cloud Pillow",
+    icon: "☁️",
+    pages: [
+      "High above the world, a fluffy cloud drifted down to say hello...",
+      "\"You look sleepy,\" it whispered. \"Rest on me~\"",
+      "The pet curled up on the softest cloud and floated through the sky~ ☁️",
+      "And the cloud promised to come back every bedtime~ 💤",
+    ],
+    dreamTheme: ["moon", "star", "butterfly"],
+  },
+  {
+    title: "The Moonlit River",
+    icon: "🌊",
+    pages: [
+      "A silver river appeared one night, flowing with liquid moonlight...",
+      "Little fish made of starlight leaped and splashed along the way~",
+      "The pet followed the river to a hidden waterfall of dreams~ 🌙",
+      "There, the moon whispered: \"Sweet dreams are made of wonder~\" ✨",
+    ],
+    dreamTheme: ["fish", "moon", "star"],
+  },
+  {
+    title: "The Friendly Firefly",
+    icon: "🪲",
+    pages: [
+      "One evening, a tiny firefly with an extra-bright glow appeared...",
+      "\"I'm lost,\" it said softly. \"Will you help me find my family?\"",
+      "Together they searched, following trails of gentle light~ 💛",
+      "They found the firefly family, and they all danced together until dawn~ ✨",
+    ],
+    dreamTheme: ["star", "heart", "butterfly"],
+  },
+  {
+    title: "The Dream Baker",
+    icon: "🧁",
+    pages: [
+      "In a tiny kitchen made of clouds, a dream baker stirred a pot of wishes...",
+      "\"One pinch of stardust, two scoops of moonbeam~\" the baker hummed~",
+      "The pet helped sprinkle happiness on each dream cookie~ 🍪",
+      "\"Now everyone will have sweet dreams tonight!\" the baker smiled~ ✨",
+    ],
+    dreamTheme: ["food", "star", "heart"],
+  },
+  {
+    title: "The Singing Shell",
+    icon: "🐚",
+    pages: [
+      "The pet found a beautiful shell that glowed with inner light...",
+      "When held close, it sang the softest lullaby ever heard~ 🎵",
+      "The melody drifted up and painted colors across the night sky~",
+      "Now the pet listens to the shell whenever the stars come out~ ✨",
+    ],
+    dreamTheme: ["music", "star", "flower"],
+  },
+  {
+    title: "The Tiny Dragon",
+    icon: "🐉",
+    pages: [
+      "A small dragon, no bigger than a teacup, landed on the windowsill...",
+      "It couldn't breathe fire — instead it breathed warm, cozy light~ 🔥",
+      "The pet and the dragon snuggled together under a blanket of stars~",
+      "And the dragon's warm glow kept all nightmares far, far away~ ✨",
+    ],
+    dreamTheme: ["star", "heart", "moon"],
+  },
+  {
+    title: "The Midnight Parade",
+    icon: "🎪",
+    pages: [
+      "At the stroke of midnight, a tiny parade marched across the room...",
+      "Toy soldiers, dancing bears, and spinning tops all joined in~ 🎠",
+      "The pet clapped along as confetti rained down like stardust~",
+      "\"Come back tomorrow night!\" the pet called as they marched away~ ✨",
+    ],
+    dreamTheme: ["music", "heart", "star"],
+  },
+  {
+    title: "The Wishing Well",
+    icon: "💫",
+    pages: [
+      "Deep in a forest of sleeping trees, the pet found a glowing well...",
+      "\"Whisper your wish,\" the well bubbled gently. \"I'll keep it safe~\"",
+      "The pet wished for happiness for everyone it loved~ 💕",
+      "The well glowed brighter, and a warm feeling filled the night~ ✨",
+    ],
+    dreamTheme: ["heart", "heart", "star"],
+  },
+  {
+    title: "The Blanket of Stars",
+    icon: "🌌",
+    pages: [
+      "The night sky reached down and offered the pet a blanket woven from stars...",
+      "Each thread sparkled with a different memory — happy days, warm hugs~",
+      "Wrapped in starlight, the pet felt safe and loved~ 🌟",
+      "\"Goodnight, little one,\" the sky whispered. \"I'll watch over you~\" ✨",
+    ],
+    dreamTheme: ["star", "moon", "heart"],
+  },
+  {
+    title: "The Butterfly's Dream",
+    icon: "🦋",
+    pages: [
+      "A sleeping butterfly rested on a moonbeam near the pet...",
+      "\"What do butterflies dream of?\" the pet wondered~ 🤔",
+      "The butterfly smiled in its sleep: fields of flowers stretching forever~",
+      "The pet closed its eyes and dreamed the same beautiful dream~ 🌸✨",
+    ],
+    dreamTheme: ["butterfly", "flower", "butterfly"],
+  },
+  {
+    title: "The Night Music Box",
+    icon: "🎵",
+    pages: [
+      "Hidden under a loose floorboard, the pet discovered a tiny music box...",
+      "Its melody was so gentle, even the wind stopped to listen~ 🎶",
+      "The notes turned into tiny glowing birds that circled the room~",
+      "As the last note faded, the pet drifted into the sweetest sleep~ ✨",
+    ],
+    dreamTheme: ["music", "music", "star"],
+  },
+];
+
+const BEDTIME_STORY_SPEECHES: string[] = [
+  "Read me a story~! 📖",
+  "Storytime! I love this part~! 🌙",
+  "Once upon a time... 💫",
+  "Another page, another dream~! ✨",
+  "This story is so nice~ 😊",
+  "Tell me more~ tell me more~! 📚",
+  "I love bedtime stories~! 💕",
+  "*listens intently* 👀✨",
+];
+
+let bedtimeStoryActive = false;
+let bedtimeStoryIndex = -1;      // which story is being read
+let bedtimeStoryPage = 0;        // current page within story
+let bedtimeStoryTimer = 0;       // timer between pages
+let bedtimeStoryCooldown = 0;    // prevent spam
+let totalStoriesRead = 0;
+let uniqueStoriesRead: Set<number> = new Set();
+let sessionStoriesRead = 0;
+let firstStoryThisSession = false;
+let activeStoryDreamTheme: string[] = []; // current dream influence
+const BEDTIME_STORY_PAGE_INTERVAL = 240; // ~4 seconds between pages
+const BEDTIME_STORY_COOLDOWN = 300;      // ~5 seconds between stories
+
+function playPageTurnSound(): void {
+  // Soft paper rustle + gentle chime
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Paper rustle — filtered noise-like effect using detuned oscillators
+  playTone(150, 0.08, "triangle", 0.04, 20);
+  playTone(200, 0.06, "triangle", 0.03, -15);
+  // Gentle chime
+  setTimeout(() => {
+    playTone(880, 0.15, "sine", 0.05);
+    playTone(1100, 0.12, "sine", 0.03);
+  }, 60);
+}
+
+function playStoryCompleteSound(): void {
+  // Warm, dreamy ascending melody
+  playTone(523, 0.2, "sine", 0.07);  // C5
+  setTimeout(() => playTone(659, 0.2, "sine", 0.06), 150);  // E5
+  setTimeout(() => playTone(784, 0.2, "sine", 0.06), 300);  // G5
+  setTimeout(() => playTone(1047, 0.35, "sine", 0.08), 450); // C6
+  setTimeout(() => playTone(880, 0.4, "sine", 0.04), 550);  // A5 (dreamy resolve)
+}
+
+function startBedtimeStory(): void {
+  if (bedtimeStoryActive || bedtimeStoryCooldown > 0) return;
+  if (isSleeping || minigameActive || memoryGameActive) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") {
+    queueSpeechBubble("Stories are best at bedtime~ Come back tonight! 🌙", 150, true);
+    return;
+  }
+
+  // Pick a story — prefer unread ones
+  const unread = BEDTIME_STORIES.map((_, i) => i).filter(i => !uniqueStoriesRead.has(i));
+  if (unread.length > 0 && Math.random() < 0.75) {
+    bedtimeStoryIndex = unread[Math.floor(Math.random() * unread.length)];
+  } else {
+    bedtimeStoryIndex = Math.floor(Math.random() * BEDTIME_STORIES.length);
+  }
+
+  bedtimeStoryActive = true;
+  bedtimeStoryPage = 0;
+  bedtimeStoryTimer = 0;
+
+  const story = BEDTIME_STORIES[bedtimeStoryIndex];
+
+  // Announce the story
+  playPageTurnSound();
+  queueSpeechBubble(`${story.icon} "${story.title}" ${story.icon}`, 180, true);
+
+  // Set dream theme for this story
+  activeStoryDreamTheme = [...story.dreamTheme];
+  logDailyActivity("story");
+}
+
+function updateBedtimeStory(): void {
+  // Cooldown tick
+  if (bedtimeStoryCooldown > 0) bedtimeStoryCooldown--;
+
+  if (!bedtimeStoryActive) return;
+
+  bedtimeStoryTimer++;
+
+  const story = BEDTIME_STORIES[bedtimeStoryIndex];
+  if (!story) {
+    bedtimeStoryActive = false;
+    return;
+  }
+
+  // Time to show next page
+  if (bedtimeStoryTimer >= BEDTIME_STORY_PAGE_INTERVAL) {
+    bedtimeStoryTimer = 0;
+
+    if (bedtimeStoryPage < story.pages.length) {
+      // Show the current page
+      playPageTurnSound();
+      queueSpeechBubble(story.pages[bedtimeStoryPage], 220, true);
+      bedtimeStoryPage++;
+
+      // Occasional reaction speech from the pet (30% chance, not on first/last page)
+      if (bedtimeStoryPage > 1 && bedtimeStoryPage < story.pages.length && Math.random() < 0.3) {
+        const reaction = BEDTIME_STORY_SPEECHES[Math.floor(Math.random() * BEDTIME_STORY_SPEECHES.length)];
+        // Queue it (non-immediate) so it shows after the story page
+        queueSpeechBubble(reaction, 120);
+      }
+    } else {
+      // Story complete!
+      bedtimeStoryActive = false;
+      bedtimeStoryCooldown = BEDTIME_STORY_COOLDOWN;
+
+      totalStoriesRead++;
+      sessionStoriesRead++;
+      const isNewStory = !uniqueStoriesRead.has(bedtimeStoryIndex);
+      uniqueStoriesRead.add(bedtimeStoryIndex);
+
+      playStoryCompleteSound();
+
+      // Happiness boost
+      petHappiness = Math.min(100, petHappiness + 5);
+      petEnergy = Math.min(100, petEnergy + 3);
+      totalCarePoints += 2;
+      friendshipXP += 3;
+
+      // Completion message
+      const completeMsgs = [
+        "That was a lovely story~ 💤✨",
+        "I feel so sleepy and happy now~ 🌙",
+        "Best bedtime story ever~! 💕",
+        "My dreams will be wonderful tonight~ ✨",
+        "*yaaawn* ...so cozy~ 😊💤",
+        "Read me another one tomorrow~ 📖✨",
+      ];
+      queueSpeechBubble(completeMsgs[Math.floor(Math.random() * completeMsgs.length)], 200, true);
+
+      // Sparkle particles at story completion
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      for (let i = 0; i < 10; i++) {
+        const angle = (Math.PI * 2 * i) / 10;
+        const speed = 1 + Math.random() * 1.5;
+        particles.push({
+          x: cx, y: cy - 20,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.5,
+          life: 50 + Math.random() * 30,
+          maxLife: 80,
+          size: 2 + Math.random() * 2,
+          color: Math.random() < 0.5 ? "#FFD700" : "#E0C0FF",
+          type: "sparkle",
+        });
+      }
+
+      // Diary entry for first story this session, or new unique story
+      if (!firstStoryThisSession) {
+        firstStoryThisSession = true;
+        addDiaryEntry("milestone", "📖", `Heard "${story.title}" — a bedtime story under the stars~ 🌙✨`);
+      } else if (isNewStory) {
+        addDiaryEntry("milestone", "📖", `Discovered a new story: "${story.title}"~ ${story.icon}`);
+      }
+
+      checkAchievements();
+    }
   }
 }
 
@@ -6265,6 +6577,11 @@ const achievements: Achievement[] = [
     icon: "💧", unlockMessage: "Every morning sparkles just for me~! 💧✨",
     condition: () => totalDewDropsCollected >= 20, unlocked: false,
   },
+  {
+    id: "storyteller", name: "Storyteller", description: "Read 8 different bedtime stories",
+    icon: "📖", unlockMessage: "Every story is a dream waiting to happen~! 📖✨",
+    condition: () => uniqueStoriesRead.size >= 8, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -6824,6 +7141,28 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${sessionDewDropsCollected} this session`, w / 2, y);
 
+  // --- BEDTIME STORIES section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#d4a0ff";
+  ctx.fillText("BEDTIME STORIES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`📖 ${totalStoriesRead} read`, panelX + panelW - 12, y);
+  y += 12;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.fillText(`${uniqueStoriesRead.size}/${BEDTIME_STORIES.length} unique stories discovered`, w / 2, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -7230,6 +7569,8 @@ interface SaveData {
   totalConstellationsCompleted: number;
   totalWishesMade: number;
   totalDewDropsCollected: number;
+  totalStoriesRead: number;
+  uniqueStoriesRead: number[];
   version: number;
 }
 
@@ -7286,6 +7627,8 @@ function buildSaveData(): SaveData {
     totalConstellationsCompleted,
     totalWishesMade,
     totalDewDropsCollected,
+    totalStoriesRead,
+    uniqueStoriesRead: Array.from(uniqueStoriesRead),
     version: 1,
   };
 }
@@ -7502,6 +7845,14 @@ function applySaveData(data: SaveData): void {
   // Restore dew drops collected
   if (typeof (data as SaveData).totalDewDropsCollected === "number") {
     totalDewDropsCollected = (data as SaveData).totalDewDropsCollected;
+  }
+
+  // Restore bedtime stories
+  if (typeof (data as SaveData).totalStoriesRead === "number") {
+    totalStoriesRead = (data as SaveData).totalStoriesRead;
+  }
+  if (Array.isArray((data as SaveData).uniqueStoriesRead)) {
+    uniqueStoriesRead = new Set((data as SaveData).uniqueStoriesRead);
   }
 
   // Restore diary
@@ -9845,6 +10196,9 @@ function update(): void {
   // Morning dew drops update
   updateDewDrops();
 
+  // Bedtime story update
+  updateBedtimeStory();
+
   // Firefly update
   updateFireflies();
 
@@ -11471,6 +11825,7 @@ function drawShortcutHelp(): void {
     ["O", "Fortune Cookie"],
     ["R", "Release Fireflies"],
     ["L", "Constellations"],
+    ["Y", "Bedtime Story"],
     ["Esc", "Close Overlay"],
     ["?", "This Help"],
   ];
@@ -11685,6 +12040,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "l":
       toggleConstellationMode();
+      shortcutUsageCount++;
+      checkAchievements();
+      break;
+    case "y":
+      startBedtimeStory();
       shortcutUsageCount++;
       checkAchievements();
       break;

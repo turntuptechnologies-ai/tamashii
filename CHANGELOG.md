@@ -3,6 +3,30 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.61.0] — 2026-04-09 — Bedtime Stories
+
+### Added
+- **Bedtime stories** — press Y at night or evening to read your pet a bedtime story, with 12 unique tales told through sequential speech bubbles
+- **12 unique stories** — "The Starlight Garden", "The Cloud Pillow", "The Moonlit River", "The Friendly Firefly", "The Dream Baker", "The Singing Shell", "The Tiny Dragon", "The Midnight Parade", "The Wishing Well", "The Blanket of Stars", "The Butterfly's Dream", and "The Night Music Box"
+- **Page-turning sound** — a soft paper rustle + gentle chime plays as each new page of the story appears
+- **Story complete sound** — a warm, dreamy ascending melody plays when the story finishes
+- **Dream influence** — each story has a theme that shapes the pet's dream bubble icons for that session (e.g., "The Moonlit River" inspires fish and moon dreams)
+- **Speech reactions** — ~30% chance the pet reacts between pages: "Read me more~!", "I love bedtime stories~!", "*listens intently*", and more
+- **Smart story selection** — the system prefers unread stories first, cycling through all 12 before repeating
+- **Completion sparkles** — 10 golden/lavender sparkle particles burst outward when a story finishes
+- **Happiness and care boost** — each completed story gives +5 happiness, +3 energy, +2 care points, +3 friendship XP
+- **Stats panel section** — a dedicated BEDTIME STORIES section shows total stories read and unique stories discovered (out of 12)
+- **Storyteller achievement** — read 8 different bedtime stories to unlock achievement #38 (📖) with the message "Every story is a dream waiting to happen~! 📖✨"
+- **Diary entries** — first story each session and each newly discovered story are logged to the pet diary
+- **Night/evening only** — trying to start a story during the day gives a gentle reminder to come back at bedtime
+- **Sleep-aware** — stories cannot be started while the pet is sleeping
+- **Cooldown system** — ~5 second cooldown between stories to prevent spam
+- **Full persistence** — total stories read and unique stories discovered are saved across sessions
+- **Keyboard shortcut Y** — added to the shortcut help overlay for starting a bedtime story
+- **Total achievements: 38**
+
+**Why this feature:** Tamashii's nighttime is full of visual wonder — fireflies dance, constellations await tracing, shooting stars streak by. But the experience has been purely visual and reactive. Bedtime stories add a narrative dimension that transforms the pet relationship from caretaker to storyteller. When you press Y, a story title appears, and over the next ~20 seconds, four gentle story pages unfold as speech bubbles — little tales of starlight gardens, friendly fireflies, tiny dragons, and magical music boxes. The pet listens, occasionally reacting with delight. When the story ends, completion sparkles burst out and the pet says something cozy like "My dreams will be wonderful tonight~". And they will be — each story's theme shapes the dream bubbles that float by while the pet sleeps, so reading "The Moonlit River" means fish and moon dreams, while "The Dream Baker" inspires food and star dreams. It's the kind of feature that makes bedtime feel like a ritual — tender, personal, and deeply connected to the pet's inner world. The 12 unique stories give collectors something to discover, and the Storyteller achievement rewards those who read them all.
+
 ## [v0.60.0] — 2026-04-09 — Morning Dew Drops
 
 ### Added
