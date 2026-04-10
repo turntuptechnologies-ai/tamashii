@@ -3,6 +3,28 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.66.0] — 2026-04-10 — Spring Cherry Blossom Festival
+
+### Added
+- **Cherry blossom petals** — during April, delicate pink petals drift gently across the screen, swaying on invisible breezes with realistic rotation and sway physics
+- **Click to catch** — click a falling petal to catch it, triggering a sparkle burst and a soft ascending chime
+- **8 unique speech reactions** — pet reacts with delight: "A cherry blossom petal~! 🌸", "Hanami time~! 🌸🎀", "Pink snow from the sky~! 🌸", and more
+- **Petal rendering** — hand-drawn teardrop-shaped petals with pink radial gradient, subtle highlight, varying sizes, and gentle rotation
+- **Sway physics** — each petal has its own sway phase and speed, creating natural-looking drift with occasional gentle gusts
+- **Sparkle particles** — 4 golden sparkles burst from each caught petal
+- **Petal catch sound** — a bright three-note ascending chime plays when you catch a petal
+- **Up to 8 petals on screen** — petals spawn every ~1.3 seconds, mostly from above with some drifting in from the sides
+- **Stats panel section** — dedicated CHERRY BLOSSOMS section showing total petals caught
+- **Hanami achievement** — catch 20 cherry blossom petals to unlock achievement #43 (🌸) with the message "The cherry blossoms bloom just for us~ 🌸✨ Happy spring!"
+- **Diary entry** — first petal caught each session is logged to the pet diary
+- **Stats boost** — each caught petal gives +1 happiness, +1 friendship XP
+- **Sleep-aware** — petals don't spawn while the pet is sleeping
+- **Graceful fade-out** — petals slowly fade away when it's no longer April, rather than disappearing abruptly
+- **Full persistence** — total petals caught is saved across sessions
+- **Total achievements: 43**
+
+**Why this feature:** It's April — cherry blossom season. In Japan, hanami (花見) is the centuries-old tradition of enjoying the beauty of spring blossoms. Tamashii's world has been growing richer with time-of-day activities, but it lacked something seasonal — an event that only happens at a certain time of year, making it feel special and ephemeral. The Spring Cherry Blossom Festival fills that gap beautifully. Soft pink petals drift across the screen all day long, swaying on invisible breezes with gentle rotation. Click one and your pet catches it with delight — sparkles burst, a bright chime plays, and the pet speaks about how pretty spring is. It's deliberately simple and calming, designed to evoke the peaceful feeling of sitting under a blooming cherry tree. The Hanami achievement rewards those who take the time to catch 20 petals, celebrating the arrival of spring with their pet.
+
 ## [v0.65.0] — 2026-04-10 — Evening Sunset Meditation
 
 ### Added

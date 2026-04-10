@@ -148,6 +148,12 @@ function playNapSound(): void {
   setTimeout(() => playTone(400, 0.25, "sine", 0.05), 150);
 }
 
+function playPetalCatchSound(): void {
+  playTone(1400, 0.1, "sine", 0.08);
+  setTimeout(() => playTone(1800, 0.08, "sine", 0.06), 60);
+  setTimeout(() => playTone(2100, 0.12, "sine", 0.05), 120);
+}
+
 function playComboSound(combo: number): void {
   // Ascending pitch with each combo hit — gets more excited
   const basePitch = 500 + Math.min(combo * 40, 600);
@@ -779,6 +785,179 @@ function drawMeditationGuide(): void {
   }
 
   ctx.restore();
+}
+
+// --- Spring Cherry Blossom Festival (April seasonal event) ---
+interface CherryBlossom {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  rotationSpeed: number;
+  size: number;
+  opacity: number;
+  swayPhase: number;
+  swaySpeed: number;
+  caught: boolean;
+  catchFade: number;
+}
+
+let cherryBlossoms: CherryBlossom[] = [];
+let cherryBlossomSpawnTimer = 0;
+let totalPetalsCaught = 0;
+let petalsCaughtThisSession = 0;
+let cherryBlossomActive = false;
+const CHERRY_BLOSSOM_MAX = 8;
+const CHERRY_BLOSSOM_SPAWN_INTERVAL = 80;
+
+const petalCatchSpeech = [
+  "A cherry blossom petal~! 🌸",
+  "So pretty! Spring is here~! 🌸✨",
+  "Hanami time~! 🌸🎀",
+  "Catch the petals~! 🌸💕",
+  "Spring breeze feels so nice~ 🌸",
+  "*catches petal* It's so soft~! 🌸",
+  "The blossoms are dancing~! 🌸💫",
+  "Pink snow from the sky~! 🌸",
+];
+
+function isSpringMonth(): boolean {
+  const month = new Date().getMonth();
+  return month === 3; // April (0-indexed)
+}
+
+function spawnCherryBlossom(): void {
+  if (cherryBlossoms.filter(b => !b.caught).length >= CHERRY_BLOSSOM_MAX) return;
+  const side = Math.random();
+  const x = side < 0.7 ? Math.random() * canvas.width : (side < 0.85 ? -10 : canvas.width + 10);
+  cherryBlossoms.push({
+    x,
+    y: -10,
+    vx: (Math.random() - 0.4) * 0.5,
+    vy: 0.3 + Math.random() * 0.4,
+    rotation: Math.random() * Math.PI * 2,
+    rotationSpeed: (Math.random() - 0.5) * 0.06,
+    size: 4 + Math.random() * 3,
+    opacity: 0.6 + Math.random() * 0.4,
+    swayPhase: Math.random() * Math.PI * 2,
+    swaySpeed: 0.02 + Math.random() * 0.02,
+    caught: false,
+    catchFade: 1,
+  });
+}
+
+function updateCherryBlossoms(): void {
+  const wasActive = cherryBlossomActive;
+  cherryBlossomActive = isSpringMonth();
+
+  if (!cherryBlossomActive) {
+    for (const b of cherryBlossoms) {
+      b.opacity -= 0.005;
+    }
+    cherryBlossoms = cherryBlossoms.filter(b => b.opacity > 0);
+    return;
+  }
+
+  if (isSleeping) return;
+
+  cherryBlossomSpawnTimer++;
+  if (cherryBlossomSpawnTimer >= CHERRY_BLOSSOM_SPAWN_INTERVAL) {
+    cherryBlossomSpawnTimer = 0;
+    spawnCherryBlossom();
+  }
+
+  for (let i = cherryBlossoms.length - 1; i >= 0; i--) {
+    const b = cherryBlossoms[i];
+    if (b.caught) {
+      b.catchFade -= 0.04;
+      b.vy = -1.5;
+      b.opacity = b.catchFade;
+      if (b.catchFade <= 0) {
+        cherryBlossoms.splice(i, 1);
+      }
+      continue;
+    }
+    b.swayPhase += b.swaySpeed;
+    b.x += b.vx + Math.sin(b.swayPhase) * 0.6;
+    b.y += b.vy;
+    b.rotation += b.rotationSpeed;
+    if (Math.random() < 0.01) b.vx += (Math.random() - 0.5) * 0.3;
+    if (b.y > canvas.height + 15 || b.x < -20 || b.x > canvas.width + 20) {
+      cherryBlossoms.splice(i, 1);
+    }
+  }
+}
+
+function tryClickCherryBlossom(clickX: number, clickY: number): boolean {
+  for (const b of cherryBlossoms) {
+    if (b.caught) continue;
+    const dx = clickX - b.x;
+    const dy = clickY - b.y;
+    if (dx * dx + dy * dy < (b.size + 8) * (b.size + 8)) {
+      b.caught = true;
+      b.catchFade = 1;
+      totalPetalsCaught++;
+      petalsCaughtThisSession++;
+      playPetalCatchSound();
+      petHappiness = Math.min(100, petHappiness + 1);
+      addFriendshipXP(1);
+      for (let j = 0; j < 4; j++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.5 + Math.random() * 1;
+        particles.push({
+          x: b.x, y: b.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.5,
+          life: 30 + Math.random() * 20,
+          maxLife: 50,
+          size: 3 + Math.random() * 2,
+          type: "sparkle",
+        });
+      }
+      if (petalsCaughtThisSession === 1 || (petalsCaughtThisSession % 5 === 0 && Math.random() < 0.5)) {
+        queueSpeechBubble(petalCatchSpeech[Math.floor(Math.random() * petalCatchSpeech.length)], 150, true);
+      }
+      if (petalsCaughtThisSession === 1) {
+        addDiaryEntry("milestone", "🌸", `Cherry blossom festival! Caught ${totalPetalsCaught} petals so far~`);
+      }
+      checkAchievements();
+      return true;
+    }
+  }
+  return false;
+}
+
+function drawCherryBlossoms(): void {
+  for (const b of cherryBlossoms) {
+    ctx.save();
+    ctx.globalAlpha = b.opacity;
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.rotation);
+
+    // Petal shape — teardrop/oval with pink gradient
+    const s = b.size;
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.bezierCurveTo(s * 0.8, -s * 0.5, s * 0.8, s * 0.5, 0, s * 0.3);
+    ctx.bezierCurveTo(-s * 0.8, s * 0.5, -s * 0.8, -s * 0.5, 0, -s);
+    ctx.closePath();
+
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, s);
+    grad.addColorStop(0, "rgba(255, 200, 210, 0.9)");
+    grad.addColorStop(0.5, "rgba(255, 150, 170, 0.8)");
+    grad.addColorStop(1, "rgba(240, 120, 150, 0.6)");
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Subtle highlight
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.15, -s * 0.2, s * 0.2, s * 0.3, 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 240, 245, 0.5)";
+    ctx.fill();
+
+    ctx.restore();
+  }
 }
 
 function playLullabySound(): void {
@@ -5977,6 +6156,15 @@ canvas.addEventListener("mousedown", (e) => {
     }
     return; // block dragging while settings is open
   }
+  // Check for cherry blossom petal clicks (spring festival)
+  if (cherryBlossoms.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCherryBlossom(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for cloud clicks (afternoon cloud watching)
   if (clouds.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -7639,6 +7827,11 @@ const achievements: Achievement[] = [
     icon: "🧘", unlockMessage: "Inner peace flows through me like the evening breeze~ 🧘✨",
     condition: () => totalMeditations >= 5, unlocked: false,
   },
+  {
+    id: "hanami", name: "Hanami", description: "Catch 20 cherry blossom petals",
+    icon: "🌸", unlockMessage: "The cherry blossoms bloom just for us~ 🌸✨ Happy spring!",
+    condition: () => totalPetalsCaught >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -8298,6 +8491,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🧘 ${totalMeditations} sessions`, panelX + panelW - 12, y);
 
+  // --- CHERRY BLOSSOM section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FF88AA";
+  ctx.fillText("CHERRY BLOSSOMS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌸 ${totalPetalsCaught} petals caught`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -8711,6 +8921,7 @@ interface SaveData {
   uniqueCloudShapesSeen: number[];
   totalMorningStretches: number;
   totalMeditations: number;
+  totalPetalsCaught: number;
   version: number;
 }
 
@@ -8774,6 +8985,7 @@ function buildSaveData(): SaveData {
     uniqueCloudShapesSeen: Array.from(uniqueCloudShapesSeen),
     totalMorningStretches,
     totalMeditations,
+    totalPetalsCaught,
     version: 1,
   };
 }
@@ -9017,6 +9229,9 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).totalMeditations === "number") {
     totalMeditations = (data as SaveData).totalMeditations;
+  }
+  if (typeof (data as SaveData).totalPetalsCaught === "number") {
+    totalPetalsCaught = (data as SaveData).totalPetalsCaught;
   }
 
   // Restore diary
@@ -11378,6 +11593,9 @@ function update(): void {
   // Message in a bottle update
   updateMessageBottle();
 
+  // Cherry blossom festival update (April)
+  updateCherryBlossoms();
+
   // Afternoon clouds update
   updateClouds();
 
@@ -12457,6 +12675,9 @@ function draw(): void {
 
   // Weather overlay (atmosphere effects — behind pet)
   drawWeatherOverlay();
+
+  // Cherry blossom petals (sky layer, behind pet)
+  drawCherryBlossoms();
 
   // Afternoon clouds (sky layer, behind pet)
   drawClouds();

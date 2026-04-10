@@ -3,28 +3,26 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.65.0 — Evening Sunset Meditation (2026-04-10)
+## Last completed: v0.66.0 — Spring Cherry Blossom Festival (2026-04-10)
 
 ### What was done
-- Added evening sunset meditation: a guided breathing exercise during evening hours (18-22)
-- Click-to-start with a "click pet to meditate" prompt that appears once per evening
-- Visual breathing guide: expanding/contracting golden circle with orbit particles and progress arc
-- 3 breath cycles over ~12 seconds with inhale/exhale instruction text
-- Pet breathing animation via getMeditationTransform() — gentle expand/contract in sync
-- Meditation bell, breath in/out tones, and completion chime sounds
-- Speech reactions at start (5 messages) and end (6 messages)
-- 12 sparkle/heart particles burst on completion
-- Stats boost: +8 happiness, +4 energy, +3 friendship XP
-- Wandering and idle animations blocked during meditation
-- Stats panel SUNSET MEDITATION section showing total sessions
-- Achievement #42: "Zen Master" (🧘) — complete 5 sunset meditation sessions
-- Diary entry for each completed meditation
-- Added to SaveData: `totalMeditations`
-- Total achievements: 42
+- Added spring cherry blossom festival: a seasonal event active during April
+- Delicate pink petals drift across the screen with sway physics, rotation, and varying sizes
+- Click petals to catch them — sparkle burst, ascending chime, speech reactions
+- 8 unique catch speech messages with cherry blossom theme
+- Hand-drawn teardrop-shaped petals with pink radial gradient and highlight
+- Up to 8 petals on screen, spawning every ~1.3 seconds
+- Stats boost: +1 happiness, +1 friendship XP per caught petal
+- Stats panel CHERRY BLOSSOMS section showing total petals caught
+- Achievement #43: "Hanami" (🌸) — catch 20 cherry blossom petals
+- Diary entry for first petal caught each session
+- Graceful fade-out when leaving April
+- Added to SaveData: `totalPetalsCaught`
+- Total achievements: 43
 
 ### Thoughts for next cycle
+- **Seasonal events expansion** — now that the seasonal system exists, add events for other months (summer fireworks in July, autumn leaves in October, winter snowball fights in December)
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster
-- **Seasonal events** — special time-limited events based on calendar date (spring cherry blossom festival, summer fireworks)
 - **Pet outfits** — full body cosmetic sets beyond single accessories
 - **Friendship milestones** — friendship levels unlock exclusive cosmetics or abilities
 - **Constellation lore** — clicking a completed constellation shows a short mythical story
@@ -39,26 +37,22 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Story continuation** — bedtime stories that span multiple nights, with cliffhangers
 - **Cloud shape evolution** — identified clouds slowly morph into their shape before fading
 - **Afternoon tea time** — a special interaction where the pet has a tea party during afternoon
-- **Pet stretches before nap** — when the user manually triggers a nap, play a shorter stretch sequence in reverse (settling in)
 - **Guided stargazing** — pet points out specific stars and tells you their names during night
 - **Meditation streaks** — track consecutive days with meditation, unlock special rewards
-- **Mood-responsive meditation** — different breathing patterns based on current mood (calm vs energizing)
+- **Petal crown cosmetic** — earn a flower crown accessory by catching enough cherry blossoms (spring exclusive)
+- **Summer cicadas** — ambient cicada sounds during summer months with a catch mechanic
 
 ### Current architecture notes
-- Renderer is ~13,200+ lines
-- Meditation system defined after morning stretches section (~line 550): state variables, sounds, start/complete/update/transform/draw functions
-- `meditationActive` boolean gates the entire system
-- `meditationPromptVisible` controls the "click to meditate" hint (once per evening)
-- `meditationSessionThisEvening` prevents repeat prompts, resets when time leaves evening
-- `updateMeditation()` called each frame in main update loop, manages prompt timing, breath phase, and progress
-- `getMeditationTransform()` returns scale/offset for pet breathing, applied after morning stretch transform
-- `drawMeditationGuide()` renders the breathing circle, progress arc, orbit particles, and breath text
-- `completeMeditation()` handles particles, speech, stats, diary, achievement check
-- Click interception in `onPetClicked()` starts meditation when prompt is visible
-- Wandering blocked during meditation (`!meditationActive` added to wander condition)
-- Idle animations blocked during meditation (added to `startIdleAnimation` guard)
-- SaveData: `totalMeditations` (number)
-- Stats panel SUNSET MEDITATION section after MORNING STRETCHES section
-- Total achievements: 42
+- Renderer is ~13,400+ lines
+- Cherry blossom system defined after meditation section (~line 790): interface, state variables, spawn/update/click/draw functions
+- `cherryBlossomActive` boolean gates the entire system, set by `isSpringMonth()` which checks for April
+- `CherryBlossom` interface: position, velocity, rotation, sway, opacity, caught/catchFade
+- `updateCherryBlossoms()` called each frame in main update loop, handles spawning and physics
+- `tryClickCherryBlossom()` called from mousedown handler before cloud clicks
+- `drawCherryBlossoms()` renders petals with radial gradient in sky layer before clouds
+- `petalsCaughtThisSession` tracks session-local count for speech/diary gating
+- SaveData: `totalPetalsCaught` (number)
+- Stats panel CHERRY BLOSSOMS section after SUNSET MEDITATION section
+- Total achievements: 43
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
