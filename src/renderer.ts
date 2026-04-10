@@ -358,6 +358,195 @@ let sleepStartFrame = 0;           // frame when sleep began
 let sleepNightcapBob = 0;          // wobble for nightcap
 let dailyActivityLog: string[] = []; // tracks activities for contextual dreams
 
+// --- Morning Stretches ---
+type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
+let morningStretchPhase: MorningStretchPhase = "none";
+let morningStretchProgress = 0;    // 0 to 1 within current phase
+let morningStretchActive = false;
+let totalMorningStretches = 0;     // total stretch sequences witnessed
+
+const MORNING_STRETCH_DURATIONS: Record<MorningStretchPhase, number> = {
+  none: 0,
+  yawn: 90,         // ~1.5s — big yawn
+  stretch_up: 80,   // ~1.3s — stretch tall
+  shake: 60,        // ~1s — shake off sleep
+  hop: 40,          // ~0.7s — happy hop
+  sparkle: 50,      // ~0.8s — sparkle finish
+};
+
+const MORNING_STRETCH_PHASES: MorningStretchPhase[] = ["yawn", "stretch_up", "shake", "hop", "sparkle"];
+
+function startMorningStretchSequence(): void {
+  morningStretchActive = true;
+  morningStretchPhase = "yawn";
+  morningStretchProgress = 0;
+
+  // Yawn sound — descending gentle tone
+  playTone(520, 0.3, "sine", 0.05);
+  setTimeout(() => playTone(440, 0.4, "sine", 0.04), 150);
+
+  // Speech bubble for yawn
+  const yawnMessages = [
+    "*yaaawn~* 🥱",
+    "*biiiig yawn~* 😪",
+    "Mmmm... *yawn* ☀️",
+    "*stretchy yawn~* 🌅",
+  ];
+  queueSpeechBubble(yawnMessages[Math.floor(Math.random() * yawnMessages.length)], 80, true);
+}
+
+function advanceMorningStretch(): void {
+  const currentIndex = MORNING_STRETCH_PHASES.indexOf(morningStretchPhase);
+  if (currentIndex < 0 || currentIndex >= MORNING_STRETCH_PHASES.length - 1) {
+    // Sequence complete
+    completeMorningStretchSequence();
+    return;
+  }
+
+  const nextPhase = MORNING_STRETCH_PHASES[currentIndex + 1];
+  morningStretchPhase = nextPhase;
+  morningStretchProgress = 0;
+
+  // Phase-specific sounds and speech
+  switch (nextPhase) {
+    case "stretch_up":
+      // Ascending stretch tone
+      playTone(440, 0.15, "sine", 0.05);
+      setTimeout(() => playTone(554, 0.15, "sine", 0.06), 100);
+      setTimeout(() => playTone(659, 0.2, "sine", 0.07), 200);
+      if (Math.random() < 0.6) {
+        const msgs = ["*streeetch~!* 💪", "Reaching for the sky~! ✨", "Sooo stiff... ahh~!", "*stretch stretch*"];
+        queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 70, true);
+      }
+      break;
+    case "shake":
+      // Quick rattle sound
+      playTone(350, 0.05, "square", 0.03);
+      setTimeout(() => playTone(380, 0.05, "square", 0.03), 60);
+      setTimeout(() => playTone(350, 0.05, "square", 0.03), 120);
+      if (Math.random() < 0.4) {
+        const msgs = ["*shake shake~!*", "Shaking off the sleepies~!", "*wiggle wiggle*"];
+        queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 60, true);
+      }
+      break;
+    case "hop":
+      // Bouncy hop sound
+      playTone(523, 0.08, "sine", 0.06);
+      setTimeout(() => playTone(659, 0.08, "sine", 0.07), 80);
+      break;
+    case "sparkle":
+      // Sparkle chime
+      playTone(784, 0.15, "sine", 0.06);
+      setTimeout(() => playTone(988, 0.2, "sine", 0.07), 100);
+      setTimeout(() => playTone(1175, 0.25, "sine", 0.05), 220);
+      break;
+  }
+}
+
+function completeMorningStretchSequence(): void {
+  morningStretchActive = false;
+  morningStretchPhase = "none";
+  morningStretchProgress = 0;
+  totalMorningStretches++;
+
+  // Burst of energy sparkle particles
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+    particles.push({
+      x: cx,
+      y: cy - 15,
+      vx: Math.cos(angle) * (1.5 + Math.random() * 1.5),
+      vy: Math.sin(angle) * (1.2 + Math.random() * 1) - 0.5,
+      life: 35 + Math.random() * 25,
+      maxLife: 35 + Math.random() * 25,
+      size: 2.5 + Math.random() * 2,
+      type: "sparkle",
+    });
+  }
+
+  // Happy completion message
+  const doneMessages = [
+    "All stretched out! Ready for today~! ☀️✨",
+    "Feeling limber! Let's go~! 💪✨",
+    "Morning stretches done! I'm full of energy~! ⚡",
+    "What a good stretch~! Today's gonna be great! 🌟",
+    "Ahh~ All loosened up! Good morning world~! 🌈",
+  ];
+  queueSpeechBubble(doneMessages[Math.floor(Math.random() * doneMessages.length)], 160, true);
+
+  // Boost stats
+  petEnergy = Math.min(100, petEnergy + 5);
+  petHappiness = Math.min(100, petHappiness + 3);
+  friendshipXP += 2;
+
+  // Diary entry
+  addDiaryEntry("milestone", "🤸", `Morning stretch #${totalMorningStretches}! Starting the day right~`);
+
+  spawnEmoteSet("happy", 3);
+  squishAmount = 0.4;
+  isHappy = true;
+  happyTimer = 120;
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateMorningStretch(): void {
+  if (!morningStretchActive || morningStretchPhase === "none") return;
+
+  const duration = MORNING_STRETCH_DURATIONS[morningStretchPhase];
+  morningStretchProgress += 1 / duration;
+
+  if (morningStretchProgress >= 1) {
+    advanceMorningStretch();
+  }
+}
+
+function getMorningStretchTransform(): { rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number } | null {
+  if (!morningStretchActive || morningStretchPhase === "none") return null;
+
+  const t = morningStretchProgress;
+  const ease = Math.sin(t * Math.PI); // bell curve: 0→1→0
+
+  switch (morningStretchPhase) {
+    case "yawn": {
+      // Slight lean back + widen (opening mouth for yawn)
+      const leanBack = ease * 0.06;
+      const widen = ease * 0.04;
+      return { rotation: -leanBack, scaleX: 1 + widen, scaleY: 1 - widen * 0.5, offsetX: 0, offsetY: ease * -2 };
+    }
+    case "stretch_up": {
+      // Stretch tall — vertical elongation, arms up feel
+      const stretchY = ease * 0.15;
+      const stretchX = ease * -0.06;
+      const lift = ease * 6;
+      return { rotation: 0, scaleX: 1 + stretchX, scaleY: 1 + stretchY, offsetX: 0, offsetY: -lift };
+    }
+    case "shake": {
+      // Rapid side-to-side shake
+      const shakeAngle = Math.sin(t * Math.PI * 8) * 0.1 * (1 - t);
+      const shakeX = Math.sin(t * Math.PI * 8) * 3 * (1 - t);
+      return { rotation: shakeAngle, scaleX: 1, scaleY: 1, offsetX: shakeX, offsetY: 0 };
+    }
+    case "hop": {
+      // Happy hop — bounce up
+      const hopHeight = Math.sin(t * Math.PI) * 12;
+      const hopSquish = Math.sin(t * Math.PI) * 0.03;
+      return { rotation: 0, scaleX: 1 + hopSquish, scaleY: 1 - hopSquish, offsetX: 0, offsetY: -hopHeight };
+    }
+    case "sparkle": {
+      // Gentle happy sway — final celebratory wiggle
+      const sway = Math.sin(t * Math.PI * 3) * 0.05 * (1 - t * 0.5);
+      const pulse = Math.sin(t * Math.PI) * 0.03;
+      return { rotation: sway, scaleX: 1 + pulse, scaleY: 1 + pulse, offsetX: 0, offsetY: 0 };
+    }
+    default:
+      return null;
+  }
+}
+
 function playLullabySound(): void {
   // Gentle descending lullaby — soft, dreamy three-note melody
   playTone(659, 0.2, "sine", 0.06);  // E5
@@ -441,25 +630,12 @@ function completeWakingUp(): void {
   sleepBreathProgress = 0;
   dailyActivityLog = []; // reset daily activities for new day
 
-  // Wake up celebration
-  const wakeMessages = [
-    "Good morning~! ☀️ *stretch*",
-    "Rise and shine~! I slept so well!",
-    "What a great sleep! Ready for today!",
-    "*yawn* ...Morning! I feel refreshed~!",
-    "New day, new adventures~! ☀️",
-  ];
-  queueSpeechBubble(wakeMessages[Math.floor(Math.random() * wakeMessages.length)], 200, true);
-  playWakeUpSound();
-  spawnEmoteSet("happy", 2);
-
   // Full energy restore from a good night's sleep
   petEnergy = Math.min(100, petEnergy + 30);
 
-  // Squish animation for the stretch
-  squishAmount = 0.5;
-  isHappy = true;
-  happyTimer = 90;
+  // Start the morning stretch sequence instead of a simple wake-up
+  playWakeUpSound();
+  startMorningStretchSequence();
 
   saveGame();
 }
@@ -484,7 +660,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping || morningStretchActive) return;
   // Pick animation weighted by personality
   idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
@@ -7219,6 +7395,11 @@ const achievements: Achievement[] = [
     icon: "☁️", unlockMessage: "The sky is full of stories~! ☁️✨",
     condition: () => uniqueCloudShapesSeen.size >= 8, unlocked: false,
   },
+  {
+    id: "early_bird", name: "Early Bird", description: "Complete 7 morning stretch routines",
+    icon: "🤸", unlockMessage: "Rise and shine champion~! Every morning starts with a stretch! 🤸✨",
+    condition: () => totalMorningStretches >= 7, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -7844,6 +8025,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${uniqueCloudShapesSeen.size}/${CLOUD_SHAPES.length} shapes discovered | ${sessionCloudsIdentified} this session`, w / 2, y);
 
+  // --- MORNING STRETCHES section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFB347";
+  ctx.fillText("MORNING STRETCHES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🤸 ${totalMorningStretches} completed`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -8255,6 +8453,7 @@ interface SaveData {
   totalBottlesOpened: number;
   totalCloudsIdentified: number;
   uniqueCloudShapesSeen: number[];
+  totalMorningStretches: number;
   version: number;
 }
 
@@ -8316,6 +8515,7 @@ function buildSaveData(): SaveData {
     totalBottlesOpened,
     totalCloudsIdentified,
     uniqueCloudShapesSeen: Array.from(uniqueCloudShapesSeen),
+    totalMorningStretches,
     version: 1,
   };
 }
@@ -8553,6 +8753,9 @@ function applySaveData(data: SaveData): void {
   }
   if (Array.isArray((data as SaveData).uniqueCloudShapesSeen)) {
     uniqueCloudShapesSeen = new Set((data as SaveData).uniqueCloudShapesSeen);
+  }
+  if (typeof (data as SaveData).totalMorningStretches === "number") {
+    totalMorningStretches = (data as SaveData).totalMorningStretches;
   }
 
   // Restore diary
@@ -10538,6 +10741,9 @@ function update(): void {
     if (comboShakeAmount < 0.1) comboShakeAmount = 0;
   }
 
+  // Morning stretch sequence update
+  updateMorningStretch();
+
   // Idle animation logic
   if (idleAnim !== "none") {
     const duration = getIdleAnimDuration();
@@ -12045,6 +12251,17 @@ function draw(): void {
     ctx.translate(cx, feetY);
     ctx.scale(1 + breathScale, 1 - breathScale * 0.5);
     ctx.translate(-cx, -feetY);
+  }
+
+  // Morning stretch sequence transform
+  if (morningStretchActive && !isSpinning) {
+    const stretchTx = getMorningStretchTransform();
+    if (stretchTx) {
+      ctx.translate(cx + stretchTx.offsetX, feetY + stretchTx.offsetY);
+      ctx.rotate(stretchTx.rotation);
+      ctx.scale(stretchTx.scaleX, stretchTx.scaleY);
+      ctx.translate(-cx, -feetY);
+    }
   }
 
   // Droopy posture when happiness or energy is critically low

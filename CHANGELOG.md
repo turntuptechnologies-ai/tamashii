@@ -3,6 +3,24 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.64.0] — 2026-04-10 — Morning Stretches
+
+### Added
+- **Morning stretch sequence** — when the pet wakes up each morning, it performs a charming multi-phase stretch routine instead of just popping awake
+- **5 animation phases** — Yawn (lean back with wide stretch), Stretch Up (tall vertical elongation), Shake (rapid side-to-side to shake off sleepiness), Hop (happy bounce), and Sparkle (celebratory sway with particle burst)
+- **Phase-specific sounds** — each stretch phase has its own sound: descending yawn tone, ascending stretch chime, rattling shake, bouncy hop, and sparkling finish melody
+- **Speech reactions** — the pet comments during stretches: "*yaaawn~* 🥱", "*streeetch~!* 💪", "*shake shake~!*", and a happy completion message
+- **Energy sparkle burst** — 10 golden sparkle particles burst outward when the stretch routine finishes
+- **Stats boost** — completing a morning stretch gives +5 energy, +3 happiness, +2 friendship XP on top of the normal sleep restore
+- **Stats panel section** — dedicated MORNING STRETCHES section showing total stretch routines completed
+- **Early Bird achievement** — complete 7 morning stretch routines to unlock achievement #41 (🤸) with the message "Rise and shine champion~! Every morning starts with a stretch! 🤸✨"
+- **Diary entry** — each completed stretch routine is logged to the pet diary
+- **Animation-aware** — idle animations are blocked during the stretch sequence so nothing conflicts
+- **Full persistence** — total morning stretches completed is saved across sessions
+- **Total achievements: 41**
+
+**Why this feature:** Tamashii's mornings had a jarring transition — the pet would go from sleeping peacefully with gentle breathing to suddenly awake with a speech bubble and a squish. Morning Stretches transforms waking up into a cinematic sequence. When morning arrives, the pet first yawns (leaning back with a sleepy sound), then stretches tall (elongating upward with ascending chimes), shakes off the sleepiness (rapid wobble with rattling sounds), hops with joy (bouncing up), and finishes with a sparkly celebratory sway. Each phase has its own unique animation transform, sound effect, and optional speech bubble. The whole sequence takes about 5 seconds and makes waking up feel like a ritual — cozy, physical, and full of personality. The Early Bird achievement rewards players who witness 7 morning routines, encouraging them to check in on their pet at the start of the day.
+
 ## [v0.63.0] — 2026-04-09 — Afternoon Cloud Watching
 
 ### Added

@@ -3,28 +3,25 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.63.0 — Afternoon Cloud Watching (2026-04-09)
+## Last completed: v0.64.0 — Morning Stretches (2026-04-10)
 
 ### What was done
-- Added afternoon cloud watching: soft fluffy clouds drift across the sky during afternoon hours (12-6 PM)
-- 12 unique cloud shapes (Bunny, Dragon, Whale, Castle, Cat, Star, Heart, Bird, Fish, Mushroom, Flower, Boat)
-- Click unidentified clouds to reveal their hidden shape with icon and name label
-- Cloud rendering with overlapping ellipses, highlights, shadows, gentle bobbing
-- Dreamy ascending chime sound on identify, subtle whoosh on cloud appear
-- Speech reactions with ~60% chance on identify
-- Soft white puff particles burst from cloud on identify
-- Graceful fade-out when afternoon ends (clouds don't pop, they slowly vanish)
-- Stats panel CLOUD WATCHING section showing total identified, shapes discovered (out of 12), session count
-- Achievement #40: "Cloud Gazer" (☁️) — identify 8 different cloud shapes
-- Diary entry for first cloud each session
-- Happiness/care/friendship boosts on identify
-- Afternoon-only spawning, up to 4 clouds at once, 12% spawn chance every 6 seconds
-- Added to SaveData: `totalCloudsIdentified`, `uniqueCloudShapesSeen`
-- Total achievements: 40
+- Added morning stretch sequence: a multi-phase animated routine when the pet wakes up
+- 5 phases: Yawn → Stretch Up → Shake → Hop → Sparkle, each with unique transforms, sounds, and speech
+- Replaced the old instant wake-up (squish + message) with a ~5 second cinematic sequence
+- Phase-specific animation transforms via getMorningStretchTransform() with rotation, scale, and offset
+- Phase-specific sound effects: yawn descending tone, stretch ascending chime, shake rattle, hop bounce, sparkle melody
+- Speech reactions during yawn (~100%), stretch (~60%), shake (~40%), and completion (~100%)
+- 10 golden sparkle particles burst on completion
+- Stats panel MORNING STRETCHES section showing total completed
+- Achievement #41: "Early Bird" (🤸) — complete 7 morning stretch routines
+- Diary entry for each completed stretch
+- Stats boost: +5 energy, +3 happiness, +2 friendship XP on completion
+- Added to SaveData: `totalMorningStretches`
+- Total achievements: 41
 
 ### Thoughts for next cycle
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster
-- **Pet morning stretches** — cute stretching animation sequence when transitioning from night to morning
 - **Seasonal events** — special time-limited events based on calendar date (spring cherry blossom festival, summer fireworks)
 - **Pet outfits** — full body cosmetic sets beyond single accessories
 - **Friendship milestones** — friendship levels unlock exclusive cosmetics or abilities
@@ -37,22 +34,23 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Weather-specific activities** — pet plays in rain puddles, builds snowmen, chases leaves
 - **Combo hint system** — subtle visual hints when you're partway through a combo sequence
 - **Mini-game: Firefly Race** — timed variant where fireflies spawn rapidly and you race to catch as many as possible
-- **Custom color mixer** — let users define their own RGB palette
 - **Story continuation** — bedtime stories that span multiple nights, with cliffhangers
 - **Cloud shape evolution** — identified clouds slowly morph into their shape before fading
 - **Afternoon tea time** — a special interaction where the pet has a tea party during afternoon
+- **Evening sunset meditation** — a calming guided breathing exercise during sunset hours
+- **Pet stretches before nap** — when the user manually triggers a nap, play a shorter stretch sequence in reverse (settling in)
 
 ### Current architecture notes
-- Renderer is ~12,400+ lines
-- Cloud watching system defined after Message in a Bottle section (~line 2837): Cloud interface, 12 shapes, state variables, sound/spawn/update/click/draw functions
-- `clouds` array holds active clouds (max 4)
-- `cloudSpawnTimer` checks every 360 frames (~6s), 12% spawn chance during afternoon
-- `spawnCloud()` — creates cloud from left or right edge with drift velocity
-- `updateClouds()` — manages drift, bob, fade-in, fade-out when not afternoon, identify timer
-- `tryClickCloud()` — handles click detection, identifying, particles, speech, stats
-- `drawClouds()` — renders puffy clouds with ellipses, highlights, shape icon/name when identified
-- SaveData: `totalCloudsIdentified` (number), `uniqueCloudShapesSeen` (number[])
-- Stats panel CLOUD WATCHING section after MESSAGE BOTTLES section
-- Total achievements: 40
+- Renderer is ~12,970+ lines
+- Morning stretch system defined after sleep schedule section (~line 360): state variables, phase durations, start/advance/complete/update/transform functions
+- `morningStretchActive` boolean gates the entire system
+- `morningStretchPhase` cycles through: yawn → stretch_up → shake → hop → sparkle
+- `updateMorningStretch()` called each frame in main update loop, advances progress and transitions phases
+- `getMorningStretchTransform()` returns rotation/scale/offset for drawing, applied before idle animation transforms
+- `completeMorningStretchSequence()` handles particles, speech, stats, diary, achievement check
+- `completeWakingUp()` now triggers `startMorningStretchSequence()` instead of old instant wake
+- SaveData: `totalMorningStretches` (number)
+- Stats panel MORNING STRETCHES section after CLOUD WATCHING section
+- Total achievements: 41
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
