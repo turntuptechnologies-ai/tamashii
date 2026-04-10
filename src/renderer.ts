@@ -960,6 +960,336 @@ function drawCherryBlossoms(): void {
   }
 }
 
+// --- Afternoon Tea Time (2 PM – 5 PM) ---
+interface TeaSteam {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  opacity: number;
+  size: number;
+}
+
+const TEA_TYPES = [
+  { name: "Green Tea", color: "#7DB87D", emoji: "🍵" },
+  { name: "Earl Grey", color: "#8B6F4E", emoji: "🫖" },
+  { name: "Chamomile", color: "#F0D878", emoji: "🌼" },
+  { name: "Matcha", color: "#6BAF5C", emoji: "🍃" },
+  { name: "Rose Tea", color: "#E8A0B0", emoji: "🌹" },
+  { name: "Jasmine Tea", color: "#D4E8A0", emoji: "🌸" },
+  { name: "Honey Lemon", color: "#F0C860", emoji: "🍋" },
+  { name: "Lavender Tea", color: "#B08FC0", emoji: "💜" },
+];
+
+const teaPartySpeechStart = [
+  "Tea time~! Let's have a cozy cup! 🍵",
+  "Ooh, it's tea o'clock~! ☕✨",
+  "A warm cup of tea sounds lovely~ 🫖",
+  "Let's take a break and sip some tea~! 🍵💕",
+  "Nothing like afternoon tea~ ☕🌸",
+];
+
+const teaPartySpeechSip = [
+  "*sip sip*... Ahhh, so warm~ ☕",
+  "Mmm, this is delicious~! 🍵✨",
+  "*siiip*... Perfect temperature~ ☕💕",
+  "So cozy and warm inside~ 🫖✨",
+  "This tea tastes like happiness~ 🍵🌸",
+  "*slurp*... Oops, hehe~ ☕😊",
+];
+
+const teaPartySpeechEnd = [
+  "That was a lovely tea break~ 🍵💕",
+  "All done~! I feel so refreshed! ☕✨",
+  "What a wonderful tea party~ 🫖🌸",
+  "Tea time is the best time~ 🍵😊",
+  "Let's do this again tomorrow~! ☕💕",
+];
+
+let teaPartyActive = false;
+let teaPartyPhase: "idle" | "invite" | "sipping" | "done" = "idle";
+let teaPartyTimer = 0;
+let teaPartySipCount = 0;
+let teaPartyInviteShown = false;
+let teaPartyCupX = 0;
+let teaPartyCupY = 0;
+let teaPartyCupBob = 0;
+let teaSteamParticles: TeaSteam[] = [];
+let teaPartyCurrentTea = 0;
+let totalTeaParties = 0;
+let teaPartiesThisSession = 0;
+let teaPartyDoneToday = false;
+let teaPartyFadeOut = 1;
+
+const TEA_PARTY_SIP_INTERVAL = 120; // frames between sips
+const TEA_PARTY_TOTAL_SIPS = 4;
+const TEA_PARTY_INVITE_DELAY = 600; // frames after afternoon starts before invite
+
+function playTeaSipSound(): void {
+  playTone(440, 0.1, "sine", 0.06);
+  setTimeout(() => playTone(520, 0.08, "sine", 0.05), 60);
+  setTimeout(() => playTone(660, 0.12, "sine", 0.04), 120);
+}
+
+function playTeaCupClink(): void {
+  playTone(1400, 0.06, "sine", 0.08);
+  setTimeout(() => playTone(1800, 0.04, "sine", 0.05), 30);
+  playTone(700, 0.1, "triangle", 0.04);
+}
+
+function playTeaPartyComplete(): void {
+  playTone(523, 0.12, "sine", 0.07);
+  setTimeout(() => playTone(659, 0.12, "sine", 0.07), 120);
+  setTimeout(() => playTone(784, 0.12, "sine", 0.07), 240);
+  setTimeout(() => playTone(1047, 0.25, "sine", 0.09), 360);
+}
+
+function isTeaTime(): boolean {
+  const hour = new Date().getHours();
+  return hour >= 14 && hour < 17; // 2 PM – 5 PM
+}
+
+function spawnTeaSteam(): void {
+  if (teaSteamParticles.length >= 6) return;
+  teaSteamParticles.push({
+    x: teaPartyCupX + (Math.random() - 0.5) * 8,
+    y: teaPartyCupY - 12,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: -0.3 - Math.random() * 0.3,
+    opacity: 0.4 + Math.random() * 0.2,
+    size: 2 + Math.random() * 3,
+  });
+}
+
+function updateTeaParty(): void {
+  if (isSleeping || minigameActive || memoryGameActive || meditationActive) return;
+
+  const inTeaTime = isTeaTime();
+
+  if (!inTeaTime) {
+    if (teaPartyPhase === "invite") {
+      teaPartyPhase = "idle";
+      teaPartyInviteShown = false;
+    }
+    if (teaPartyPhase === "idle") {
+      teaPartyFadeOut = Math.max(0, teaPartyFadeOut - 0.01);
+    }
+    return;
+  }
+
+  teaPartyFadeOut = 1;
+
+  // Show invite after delay, once per afternoon
+  if (teaPartyPhase === "idle" && !teaPartyDoneToday && !teaPartyInviteShown) {
+    teaPartyTimer++;
+    if (teaPartyTimer > TEA_PARTY_INVITE_DELAY) {
+      teaPartyPhase = "invite";
+      teaPartyInviteShown = true;
+      teaPartyCurrentTea = Math.floor(Math.random() * TEA_TYPES.length);
+      // Position cup near the pet
+      teaPartyCupX = canvas.width / 2 + 45;
+      teaPartyCupY = canvas.height / 2 + 25;
+      playTeaCupClink();
+    }
+  }
+
+  // Update cup bob animation
+  teaPartyCupBob += 0.03;
+
+  // Steam particles
+  if (teaPartyPhase === "invite" || teaPartyPhase === "sipping") {
+    if (Math.random() < 0.08) spawnTeaSteam();
+  }
+  for (let i = teaSteamParticles.length - 1; i >= 0; i--) {
+    const s = teaSteamParticles[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    s.opacity -= 0.008;
+    s.size += 0.03;
+    if (s.opacity <= 0) teaSteamParticles.splice(i, 1);
+  }
+
+  // Sipping phase
+  if (teaPartyPhase === "sipping") {
+    teaPartyTimer++;
+    if (teaPartyTimer >= TEA_PARTY_SIP_INTERVAL) {
+      teaPartyTimer = 0;
+      teaPartySipCount++;
+
+      if (teaPartySipCount >= TEA_PARTY_TOTAL_SIPS) {
+        // Tea party complete
+        teaPartyPhase = "done";
+        teaPartyActive = false;
+        teaPartyDoneToday = true;
+        totalTeaParties++;
+        teaPartiesThisSession++;
+
+        // Stats boost
+        petHappiness = Math.min(100, petHappiness + 3);
+        petEnergy = Math.min(100, petEnergy + 2);
+        friendshipXP += 2;
+
+        // Speech
+        queueSpeechBubble(teaPartySpeechEnd[Math.floor(Math.random() * teaPartySpeechEnd.length)], 180, true);
+        playTeaPartyComplete();
+
+        // Sparkle burst
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          particles.push({
+            x: teaPartyCupX,
+            y: teaPartyCupY,
+            vx: Math.cos(angle) * 1.5,
+            vy: Math.sin(angle) * 1.5 - 1,
+            life: 40 + Math.random() * 20,
+            maxLife: 40 + Math.random() * 20,
+            size: 2.5 + Math.random() * 2,
+            type: "sparkle" as const,
+          });
+        }
+
+        // Diary entry
+        if (teaPartiesThisSession === 1) {
+          const tea = TEA_TYPES[teaPartyCurrentTea];
+          addDiaryEntry("general", "☕", `Had a lovely ${tea.name} tea party this afternoon ${tea.emoji}`);
+        }
+
+        // Fade out cup after a moment
+        setTimeout(() => {
+          teaPartyPhase = "idle";
+          teaSteamParticles = [];
+        }, 3000);
+      } else {
+        // Take a sip
+        playTeaSipSound();
+        if (Math.random() < 0.7) {
+          queueSpeechBubble(teaPartySpeechSip[Math.floor(Math.random() * teaPartySpeechSip.length)], 120, true);
+        }
+      }
+    }
+  }
+}
+
+function tryClickTeaCup(clickX: number, clickY: number): boolean {
+  if (teaPartyPhase !== "invite") return false;
+  const bobY = Math.sin(teaPartyCupBob) * 2;
+  const dx = clickX - teaPartyCupX;
+  const dy = clickY - (teaPartyCupY + bobY);
+  if (dx * dx + dy * dy < 25 * 25) {
+    // Start tea party
+    teaPartyPhase = "sipping";
+    teaPartyActive = true;
+    teaPartyTimer = 0;
+    teaPartySipCount = 0;
+
+    const tea = TEA_TYPES[teaPartyCurrentTea];
+    queueSpeechBubble(teaPartySpeechStart[Math.floor(Math.random() * teaPartySpeechStart.length)], 160, true);
+    playTeaCupClink();
+
+    // Show tea type
+    setTimeout(() => {
+      queueSpeechBubble(`Today's tea: ${tea.name} ${tea.emoji}`, 140, true);
+    }, 2000);
+
+    return true;
+  }
+  return false;
+}
+
+function drawTeaParty(): void {
+  if (teaPartyPhase === "idle" && teaSteamParticles.length === 0) return;
+
+  const bobY = Math.sin(teaPartyCupBob) * 2;
+  const cupX = teaPartyCupX;
+  const cupY = teaPartyCupY + bobY;
+  const tea = TEA_TYPES[teaPartyCurrentTea];
+
+  ctx.save();
+  ctx.globalAlpha = teaPartyFadeOut;
+
+  // Draw teacup
+  if (teaPartyPhase !== "idle") {
+    // Saucer
+    ctx.beginPath();
+    ctx.ellipse(cupX, cupY + 10, 14, 4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(200, 200, 200, 0.6)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Cup body
+    ctx.beginPath();
+    ctx.moveTo(cupX - 9, cupY - 4);
+    ctx.lineTo(cupX - 7, cupY + 8);
+    ctx.quadraticCurveTo(cupX, cupY + 12, cupX + 7, cupY + 8);
+    ctx.lineTo(cupX + 9, cupY - 4);
+    ctx.closePath();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180, 180, 180, 0.5)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Tea liquid
+    ctx.beginPath();
+    ctx.moveTo(cupX - 8, cupY - 2);
+    ctx.lineTo(cupX - 7, cupY + 7);
+    ctx.quadraticCurveTo(cupX, cupY + 10, cupX + 7, cupY + 7);
+    ctx.lineTo(cupX + 8, cupY - 2);
+    ctx.closePath();
+    ctx.fillStyle = tea.color;
+    ctx.globalAlpha = teaPartyFadeOut * 0.7;
+    ctx.fill();
+    ctx.globalAlpha = teaPartyFadeOut;
+
+    // Cup handle
+    ctx.beginPath();
+    ctx.arc(cupX + 12, cupY + 2, 5, -Math.PI * 0.4, Math.PI * 0.4);
+    ctx.strokeStyle = "rgba(200, 200, 200, 0.8)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Cup highlight
+    ctx.beginPath();
+    ctx.ellipse(cupX - 4, cupY, 2, 5, 0.1, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.fill();
+  }
+
+  // Draw steam particles
+  for (const s of teaSteamParticles) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity * teaPartyFadeOut})`;
+    ctx.fill();
+  }
+
+  // Invite hint text
+  if (teaPartyPhase === "invite") {
+    const hintAlpha = 0.5 + Math.sin(teaPartyCupBob * 2) * 0.2;
+    ctx.globalAlpha = hintAlpha * teaPartyFadeOut;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    ctx.fillText("☕ click cup for tea", cupX, cupY - 22);
+    ctx.globalAlpha = teaPartyFadeOut;
+  }
+
+  // Sipping animation — cup tilts toward pet during sips
+  if (teaPartyPhase === "sipping" && teaPartyTimer < 30) {
+    const sipProgress = teaPartyTimer / 30;
+    const tiltAngle = Math.sin(sipProgress * Math.PI) * -0.2;
+    ctx.save();
+    ctx.translate(cupX, cupY);
+    ctx.rotate(tiltAngle);
+    ctx.translate(-cupX, -cupY);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 function playLullabySound(): void {
   // Gentle descending lullaby — soft, dreamy three-note melody
   playTone(659, 0.2, "sine", 0.06);  // E5
@@ -6165,6 +6495,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for tea cup clicks (afternoon tea time)
+  if (teaPartyPhase === "invite") {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickTeaCup(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for cloud clicks (afternoon cloud watching)
   if (clouds.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -7832,6 +8171,11 @@ const achievements: Achievement[] = [
     icon: "🌸", unlockMessage: "The cherry blossoms bloom just for us~ 🌸✨ Happy spring!",
     condition: () => totalPetalsCaught >= 20, unlocked: false,
   },
+  {
+    id: "tea_connoisseur", name: "Tea Connoisseur", description: "Host 10 afternoon tea parties",
+    icon: "☕", unlockMessage: "A true connoisseur of the afternoon tea~ ☕✨ How refined!",
+    condition: () => totalTeaParties >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -8508,6 +8852,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🌸 ${totalPetalsCaught} petals caught`, panelX + panelW - 12, y);
 
+  // --- AFTERNOON TEA section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#D4A574";
+  ctx.fillText("AFTERNOON TEA", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`☕ ${totalTeaParties} tea parties`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -8922,6 +9283,7 @@ interface SaveData {
   totalMorningStretches: number;
   totalMeditations: number;
   totalPetalsCaught: number;
+  totalTeaParties: number;
   version: number;
 }
 
@@ -8986,6 +9348,7 @@ function buildSaveData(): SaveData {
     totalMorningStretches,
     totalMeditations,
     totalPetalsCaught,
+    totalTeaParties,
     version: 1,
   };
 }
@@ -9232,6 +9595,9 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).totalPetalsCaught === "number") {
     totalPetalsCaught = (data as SaveData).totalPetalsCaught;
+  }
+  if (typeof (data as SaveData).totalTeaParties === "number") {
+    totalTeaParties = (data as SaveData).totalTeaParties;
   }
 
   // Restore diary
@@ -11596,6 +11962,9 @@ function update(): void {
   // Cherry blossom festival update (April)
   updateCherryBlossoms();
 
+  // Afternoon tea time update
+  updateTeaParty();
+
   // Afternoon clouds update
   updateClouds();
 
@@ -11621,7 +11990,7 @@ function update(): void {
 
   // --- Wandering logic ---
   const wanderSpeed = getWanderSpeed();
-  if (!isDragging && wanderSpeed > 0 && wanderingEnabled && !isSleeping && !meditationActive) {
+  if (!isDragging && wanderSpeed > 0 && wanderingEnabled && !isSleeping && !meditationActive && !teaPartyActive) {
     // Fetch screen bounds periodically (every ~2 seconds)
     boundsFetchTimer++;
     if (boundsFetchTimer > 120) {
@@ -12678,6 +13047,9 @@ function draw(): void {
 
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
+
+  // Afternoon tea party (near pet)
+  drawTeaParty();
 
   // Afternoon clouds (sky layer, behind pet)
   drawClouds();

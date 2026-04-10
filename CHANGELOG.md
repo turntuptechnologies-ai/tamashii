@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.67.0] — 2026-04-10 — Afternoon Tea Time
+
+### Added
+- **Afternoon tea party** — between 2 PM and 5 PM, a dainty teacup appears near the pet with rising steam, inviting you to click for a cozy tea break
+- **8 tea varieties** — Green Tea, Earl Grey, Chamomile, Matcha, Rose Tea, Jasmine Tea, Honey Lemon, and Lavender Tea, randomly selected each session
+- **Click to start** — click the steaming cup to begin a multi-sip tea party with your pet
+- **Teacup rendering** — hand-drawn white porcelain cup with saucer, colored tea liquid, handle, and highlight, with gentle bobbing animation
+- **Steam particles** — wispy white steam curls rise from the hot tea, fading as they drift upward
+- **4-sip tea sequence** — each party lasts ~8 seconds with 4 sips, each accompanied by a soft sipping chime
+- **Speech reactions** — 5 start messages ("Tea time~! Let's have a cozy cup! 🍵"), 6 sip reactions ("*sip sip*... Ahhh, so warm~ ☕"), and 5 completion messages
+- **Tea type announcement** — after starting, the pet announces today's tea variety
+- **Teacup clink sound** — a bright porcelain clink when the cup appears and when you start the party
+- **Sipping sound** — a gentle three-note ascending tone accompanies each sip
+- **Completion melody** — a warm four-note ascending chime plays when the tea party finishes
+- **Sparkle burst** — 8 tea-colored sparkle particles burst from the cup on completion
+- **Stats boost** — each tea party gives +3 happiness, +2 energy, +2 friendship XP
+- **Once per afternoon** — the tea invite appears once per afternoon period to keep it special
+- **Wandering paused** — the pet stays still during tea time for a calm, seated experience
+- **Stats panel section** — dedicated AFTERNOON TEA section showing total tea parties hosted
+- **Tea Connoisseur achievement** — host 10 afternoon tea parties to unlock achievement #44 (☕) with the message "A true connoisseur of the afternoon tea~ ☕✨ How refined!"
+- **Diary entry** — first tea party each session is logged to the pet diary
+- **Full persistence** — total tea parties saved across sessions
+- **Total achievements: 44**
+
+**Why this feature:** Tamashii's afternoons had cloud watching but lacked a personal, intimate interaction — something where you and the pet share a quiet moment together. Afternoon Tea Time fills that gap with a cozy ritual between 2 PM and 5 PM. A teacup appears near your pet with steam curling upward, and clicking it starts a gentle tea party. The pet announces today's tea variety (one of eight, from classic Green Tea to fragrant Lavender Tea), then takes four sips over about 8 seconds, commenting on how warm and delicious it is. Each sip has its own gentle chime, and when it's done, sparkles burst from the cup and the pet sighs contentedly. It's designed to feel like a real break — a moment to pause with your pet and share something warm. The Tea Connoisseur achievement rewards those who make afternoon tea a regular habit.
+
 ## [v0.66.0] — 2026-04-10 — Spring Cherry Blossom Festival
 
 ### Added
