@@ -547,6 +547,240 @@ function getMorningStretchTransform(): { rotation: number; scaleX: number; scale
   }
 }
 
+// --- Evening Sunset Meditation ---
+let meditationActive = false;
+let meditationProgress = 0;        // 0 to 1 for entire session
+let meditationBreathPhase = 0;     // continuous phase for breathing circle
+let meditationFade = 0;            // fade in/out for the visual guide
+let meditationPromptVisible = false;
+let meditationPromptFade = 0;
+let meditationPromptTimer = 0;
+let meditationSessionThisEvening = false; // only prompt once per evening
+let totalMeditations = 0;
+const MEDITATION_DURATION = 720;   // ~12 seconds at 60fps (3 full breath cycles)
+const MEDITATION_BREATH_SPEED = 0.0087; // ~4 second breath cycle (in + out)
+
+const meditationSpeechStart = [
+  "Let's take a deep breath together~ 🧘",
+  "Time to relax and breathe~ 🌅",
+  "The sunset is so peaceful~ 🧘✨",
+  "Breathe in... breathe out~ 🌇",
+  "*settles down for meditation* 🧘",
+];
+
+const meditationSpeechEnd = [
+  "That felt so calming~ 🧘✨",
+  "I feel so peaceful now~ 🌅💫",
+  "My mind feels clear like the evening sky~ 🌇",
+  "Namaste~! 🧘💕",
+  "*sighs contentedly* So relaxing~ ✨",
+  "The world feels softer now~ 🌅",
+];
+
+function playMeditationBellSound(): void {
+  playTone(528, 0.6, "sine", 0.05);
+  setTimeout(() => playTone(396, 0.8, "sine", 0.04), 150);
+  setTimeout(() => playTone(528, 1.0, "sine", 0.03), 400);
+}
+
+function playMeditationBreathInSound(): void {
+  playTone(330, 0.5, "sine", 0.025);
+  playTone(440, 0.5, "sine", 0.02, 3);
+}
+
+function playMeditationBreathOutSound(): void {
+  playTone(440, 0.5, "sine", 0.02);
+  playTone(330, 0.5, "sine", 0.025, -3);
+}
+
+function playMeditationCompleteSound(): void {
+  playTone(528, 0.3, "sine", 0.06);
+  setTimeout(() => playTone(660, 0.3, "sine", 0.05), 200);
+  setTimeout(() => playTone(792, 0.5, "sine", 0.04), 400);
+  setTimeout(() => playTone(1056, 0.7, "sine", 0.03), 650);
+}
+
+function startMeditation(): void {
+  if (meditationActive || isSleeping || minigameActive || memoryGameActive) return;
+  meditationActive = true;
+  meditationProgress = 0;
+  meditationBreathPhase = 0;
+  meditationFade = 0;
+  meditationPromptVisible = false;
+  meditationPromptFade = 0;
+  meditationSessionThisEvening = true;
+
+  playMeditationBellSound();
+  const msg = meditationSpeechStart[Math.floor(Math.random() * meditationSpeechStart.length)];
+  queueSpeechBubble(msg, 180);
+}
+
+function completeMeditation(): void {
+  meditationActive = false;
+  totalMeditations++;
+
+  playMeditationCompleteSound();
+  const msg = meditationSpeechEnd[Math.floor(Math.random() * meditationSpeechEnd.length)];
+  queueSpeechBubble(msg, 200);
+
+  // Stats boost
+  petHappiness = Math.min(100, petHappiness + 8);
+  petEnergy = Math.min(100, petEnergy + 4);
+  friendshipXP += 3;
+
+  // Particles — soft warm golden sparkles
+  for (let i = 0; i < 12; i++) {
+    const angle = (Math.PI * 2 * i) / 12;
+    const speed = 0.5 + Math.random() * 0.8;
+    particles.push({
+      x: canvas.width / 2,
+      y: canvas.height / 2 - 20,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.3,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 3 + Math.random() * 2,
+      type: Math.random() > 0.5 ? "sparkle" : "heart",
+    });
+  }
+
+  addDiaryEntry("milestone", "🧘", `Sunset meditation #${totalMeditations}! Finding inner peace~`);
+  checkAchievements();
+}
+
+function updateMeditation(): void {
+  // Handle prompt visibility during evening
+  if (currentTimeOfDay === "evening" && !meditationActive && !meditationSessionThisEvening && !isSleeping) {
+    meditationPromptTimer++;
+    if (meditationPromptTimer > 600 && !meditationPromptVisible) {
+      meditationPromptVisible = true;
+    }
+  } else if (currentTimeOfDay !== "evening") {
+    meditationSessionThisEvening = false;
+    meditationPromptVisible = false;
+    meditationPromptTimer = 0;
+  }
+
+  // Fade prompt
+  if (meditationPromptVisible && !meditationActive) {
+    meditationPromptFade = Math.min(1, meditationPromptFade + 0.015);
+  } else {
+    meditationPromptFade = Math.max(0, meditationPromptFade - 0.03);
+  }
+
+  if (!meditationActive) {
+    meditationFade = Math.max(0, meditationFade - 0.02);
+    return;
+  }
+
+  // Fade in
+  meditationFade = Math.min(1, meditationFade + 0.02);
+
+  // Advance progress
+  meditationProgress += 1 / MEDITATION_DURATION;
+
+  // Advance breathing
+  meditationBreathPhase += MEDITATION_BREATH_SPEED;
+
+  // Play breath sounds at key points (every half cycle)
+  const prevBreathCycle = Math.floor((meditationBreathPhase - MEDITATION_BREATH_SPEED) * 2);
+  const currBreathCycle = Math.floor(meditationBreathPhase * 2);
+  if (currBreathCycle > prevBreathCycle && meditationProgress < 0.95) {
+    if (currBreathCycle % 2 === 0) {
+      playMeditationBreathInSound();
+    } else {
+      playMeditationBreathOutSound();
+    }
+  }
+
+  if (meditationProgress >= 1) {
+    completeMeditation();
+  }
+}
+
+function getMeditationTransform(): { rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number } | null {
+  if (!meditationActive || meditationFade <= 0) return null;
+  const breathT = Math.sin(meditationBreathPhase * Math.PI);
+  const expand = breathT * 0.04 * meditationFade;
+  return { rotation: 0, scaleX: 1 + expand, scaleY: 1 + expand * 0.6, offsetX: 0, offsetY: -breathT * 3 * meditationFade };
+}
+
+function drawMeditationGuide(): void {
+  if (meditationFade <= 0 && meditationPromptFade <= 0) return;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  // Draw prompt to start meditation
+  if (meditationPromptFade > 0 && !meditationActive) {
+    ctx.save();
+    ctx.globalAlpha = meditationPromptFade * 0.7;
+    ctx.textAlign = "center";
+    ctx.font = "8px monospace";
+    const pulse = Math.sin(Date.now() * 0.003) * 0.15 + 0.85;
+    ctx.fillStyle = `rgba(255, 180, 100, ${pulse})`;
+    ctx.fillText("🧘 click pet to meditate", cx, cy + 55);
+    ctx.restore();
+    return;
+  }
+
+  if (meditationFade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = meditationFade * 0.6;
+
+  // Breathing circle
+  const breathT = Math.sin(meditationBreathPhase * Math.PI);
+  const baseRadius = 45;
+  const radius = baseRadius + breathT * 15;
+
+  // Outer glow ring
+  const gradient = ctx.createRadialGradient(cx, cy - 20, radius - 8, cx, cy - 20, radius + 12);
+  gradient.addColorStop(0, `rgba(255, 160, 60, ${0.15 * meditationFade})`);
+  gradient.addColorStop(0.5, `rgba(255, 120, 40, ${0.08 * meditationFade})`);
+  gradient.addColorStop(1, "rgba(255, 100, 30, 0)");
+  ctx.beginPath();
+  ctx.arc(cx, cy - 20, radius + 12, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Main circle outline
+  ctx.beginPath();
+  ctx.arc(cx, cy - 20, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(255, 180, 80, ${0.4 * meditationFade})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Progress arc
+  ctx.beginPath();
+  ctx.arc(cx, cy - 20, radius + 3, -Math.PI / 2, -Math.PI / 2 + meditationProgress * Math.PI * 2);
+  ctx.strokeStyle = `rgba(255, 200, 100, ${0.7 * meditationFade})`;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Breath instruction text
+  const breathIn = breathT > 0;
+  ctx.textAlign = "center";
+  ctx.font = "7px monospace";
+  ctx.fillStyle = `rgba(255, 200, 140, ${0.6 * meditationFade})`;
+  ctx.fillText(breathIn ? "breathe in..." : "breathe out...", cx, cy + 50);
+
+  // Floating particles around the circle
+  const particleCount = 6;
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + Date.now() * 0.0008;
+    const px = cx + Math.cos(angle) * (radius + 6);
+    const py = (cy - 20) + Math.sin(angle) * (radius + 6);
+    const sparkleAlpha = (Math.sin(Date.now() * 0.004 + i) * 0.3 + 0.5) * meditationFade;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 220, 150, ${sparkleAlpha})`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function playLullabySound(): void {
   // Gentle descending lullaby — soft, dreamy three-note melody
   playTone(659, 0.2, "sine", 0.06);  // E5
@@ -660,7 +894,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping || morningStretchActive) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping || morningStretchActive || meditationActive) return;
   // Pick animation weighted by personality
   idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
@@ -7400,6 +7634,11 @@ const achievements: Achievement[] = [
     icon: "🤸", unlockMessage: "Rise and shine champion~! Every morning starts with a stretch! 🤸✨",
     condition: () => totalMorningStretches >= 7, unlocked: false,
   },
+  {
+    id: "zen_master", name: "Zen Master", description: "Complete 5 sunset meditation sessions",
+    icon: "🧘", unlockMessage: "Inner peace flows through me like the evening breeze~ 🧘✨",
+    condition: () => totalMeditations >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -8042,6 +8281,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🤸 ${totalMorningStretches} completed`, panelX + panelW - 12, y);
 
+  // --- SUNSET MEDITATION section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FF8866";
+  ctx.fillText("SUNSET MEDITATION", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🧘 ${totalMeditations} sessions`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -8454,6 +8710,7 @@ interface SaveData {
   totalCloudsIdentified: number;
   uniqueCloudShapesSeen: number[];
   totalMorningStretches: number;
+  totalMeditations: number;
   version: number;
 }
 
@@ -8516,6 +8773,7 @@ function buildSaveData(): SaveData {
     totalCloudsIdentified,
     uniqueCloudShapesSeen: Array.from(uniqueCloudShapesSeen),
     totalMorningStretches,
+    totalMeditations,
     version: 1,
   };
 }
@@ -8757,6 +9015,9 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).totalMorningStretches === "number") {
     totalMorningStretches = (data as SaveData).totalMorningStretches;
   }
+  if (typeof (data as SaveData).totalMeditations === "number") {
+    totalMeditations = (data as SaveData).totalMeditations;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -8901,6 +9162,15 @@ function onPetClicked(): void {
 
   // Don't allow normal interactions during sleep transitions
   if (sleepTransitionType) return;
+
+  // Start meditation if prompt is showing and it's evening
+  if (meditationPromptVisible && !meditationActive && currentTimeOfDay === "evening") {
+    startMeditation();
+    return;
+  }
+
+  // Don't allow normal interactions during meditation
+  if (meditationActive) return;
 
   // Double-click detection — trigger spin trick
   if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD && !isSpinning) {
@@ -10744,6 +11014,9 @@ function update(): void {
   // Morning stretch sequence update
   updateMorningStretch();
 
+  // Evening sunset meditation update
+  updateMeditation();
+
   // Idle animation logic
   if (idleAnim !== "none") {
     const duration = getIdleAnimDuration();
@@ -11130,7 +11403,7 @@ function update(): void {
 
   // --- Wandering logic ---
   const wanderSpeed = getWanderSpeed();
-  if (!isDragging && wanderSpeed > 0 && wanderingEnabled && !isSleeping) {
+  if (!isDragging && wanderSpeed > 0 && wanderingEnabled && !isSleeping && !meditationActive) {
     // Fetch screen bounds periodically (every ~2 seconds)
     boundsFetchTimer++;
     if (boundsFetchTimer > 120) {
@@ -12264,6 +12537,16 @@ function draw(): void {
     }
   }
 
+  // Meditation breathing transform
+  if (meditationActive && !isSpinning) {
+    const medTx = getMeditationTransform();
+    if (medTx) {
+      ctx.translate(cx + medTx.offsetX, feetY + medTx.offsetY);
+      ctx.scale(medTx.scaleX, medTx.scaleY);
+      ctx.translate(-cx, -feetY);
+    }
+  }
+
   // Droopy posture when happiness or energy is critically low
   if (!isSpinning && !isHappy && !isSleeping) {
     const droopFactor = Math.max(
@@ -12426,6 +12709,9 @@ function draw(): void {
   for (const db of dreamBubbles) {
     drawDreamBubble(db);
   }
+
+  // Sunset meditation guide (above dream bubbles)
+  drawMeditationGuide();
 
   // Achievement celebration glow
   if (achievementCelebrating) {

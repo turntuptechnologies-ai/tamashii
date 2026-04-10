@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.65.0] — 2026-04-10 — Evening Sunset Meditation
+
+### Added
+- **Sunset meditation** — during evening hours (6 PM–10 PM), a gentle prompt appears inviting you to click the pet to begin a guided breathing meditation
+- **Breathing guide circle** — an expanding and contracting golden circle surrounds the pet, pulsing with each breath cycle (~4 seconds per breath)
+- **3 breath cycles** — each meditation session lasts ~12 seconds with 3 full inhale/exhale cycles
+- **Visual progress arc** — a golden arc traces around the breathing circle showing session progress
+- **Floating orbit particles** — 6 warm sparkles orbit the breathing circle during meditation
+- **Breath instruction text** — "breathe in..." and "breathe out..." text gently guides the rhythm
+- **Meditation bell sound** — a resonant two-tone bell chime plays when meditation begins
+- **Breath sounds** — soft harmonic tones accompany each inhale (ascending) and exhale (descending)
+- **Completion chime** — an ascending four-note melody plays when meditation finishes
+- **Pet breathing animation** — the pet gently expands and contracts in sync with the breathing guide
+- **Speech reactions** — the pet speaks at the start ("Let's take a deep breath together~ 🧘") and end ("I feel so peaceful now~ 🌅💫") with 5+ unique messages each
+- **12 warm sparkle/heart particles** burst outward on completion
+- **Stats boost** — completing meditation gives +8 happiness, +4 energy, +3 friendship XP
+- **Once per evening** — the meditation prompt only appears once per evening period to avoid being intrusive
+- **Wandering paused** — the pet stays still during meditation for a calm, grounded experience
+- **Stats panel section** — dedicated SUNSET MEDITATION section showing total sessions completed
+- **Zen Master achievement** — complete 5 sunset meditation sessions to unlock achievement #42 (🧘) with the message "Inner peace flows through me like the evening breeze~ 🧘✨"
+- **Diary entry** — each completed meditation is logged to the pet diary
+- **Full persistence** — total meditation sessions saved across sessions
+- **Total achievements: 42**
+
+**Why this feature:** Tamashii's evenings have been all about nighttime activities — fireflies, constellations, shooting stars, and bedtime stories. But the transition from afternoon to night was missing something: a moment of stillness. Sunset Meditation fills that gap with a wellness-inspired breathing exercise. When evening arrives, after a brief delay, a soft prompt appears: "🧘 click pet to meditate." Click your pet and they settle into a peaceful breathing rhythm, surrounded by an expanding and contracting golden circle. The guide breathes with you — in... out... in... out — for three gentle cycles. Warm tones play with each breath, sparkles orbit the circle, and a progress arc shows how far along you are. When it's done, your pet sighs contentedly, sparkles burst outward, and both happiness and energy get a meaningful boost. It's designed to be a real moment of calm — not just for the pet, but for the player too. The Zen Master achievement rewards those who make meditation a regular evening ritual.
+
 ## [v0.64.0] — 2026-04-10 — Morning Stretches
 
 ### Added

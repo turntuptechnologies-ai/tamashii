@@ -3,22 +3,24 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.64.0 — Morning Stretches (2026-04-10)
+## Last completed: v0.65.0 — Evening Sunset Meditation (2026-04-10)
 
 ### What was done
-- Added morning stretch sequence: a multi-phase animated routine when the pet wakes up
-- 5 phases: Yawn → Stretch Up → Shake → Hop → Sparkle, each with unique transforms, sounds, and speech
-- Replaced the old instant wake-up (squish + message) with a ~5 second cinematic sequence
-- Phase-specific animation transforms via getMorningStretchTransform() with rotation, scale, and offset
-- Phase-specific sound effects: yawn descending tone, stretch ascending chime, shake rattle, hop bounce, sparkle melody
-- Speech reactions during yawn (~100%), stretch (~60%), shake (~40%), and completion (~100%)
-- 10 golden sparkle particles burst on completion
-- Stats panel MORNING STRETCHES section showing total completed
-- Achievement #41: "Early Bird" (🤸) — complete 7 morning stretch routines
-- Diary entry for each completed stretch
-- Stats boost: +5 energy, +3 happiness, +2 friendship XP on completion
-- Added to SaveData: `totalMorningStretches`
-- Total achievements: 41
+- Added evening sunset meditation: a guided breathing exercise during evening hours (18-22)
+- Click-to-start with a "click pet to meditate" prompt that appears once per evening
+- Visual breathing guide: expanding/contracting golden circle with orbit particles and progress arc
+- 3 breath cycles over ~12 seconds with inhale/exhale instruction text
+- Pet breathing animation via getMeditationTransform() — gentle expand/contract in sync
+- Meditation bell, breath in/out tones, and completion chime sounds
+- Speech reactions at start (5 messages) and end (6 messages)
+- 12 sparkle/heart particles burst on completion
+- Stats boost: +8 happiness, +4 energy, +3 friendship XP
+- Wandering and idle animations blocked during meditation
+- Stats panel SUNSET MEDITATION section showing total sessions
+- Achievement #42: "Zen Master" (🧘) — complete 5 sunset meditation sessions
+- Diary entry for each completed meditation
+- Added to SaveData: `totalMeditations`
+- Total achievements: 42
 
 ### Thoughts for next cycle
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster
@@ -37,20 +39,26 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Story continuation** — bedtime stories that span multiple nights, with cliffhangers
 - **Cloud shape evolution** — identified clouds slowly morph into their shape before fading
 - **Afternoon tea time** — a special interaction where the pet has a tea party during afternoon
-- **Evening sunset meditation** — a calming guided breathing exercise during sunset hours
 - **Pet stretches before nap** — when the user manually triggers a nap, play a shorter stretch sequence in reverse (settling in)
+- **Guided stargazing** — pet points out specific stars and tells you their names during night
+- **Meditation streaks** — track consecutive days with meditation, unlock special rewards
+- **Mood-responsive meditation** — different breathing patterns based on current mood (calm vs energizing)
 
 ### Current architecture notes
-- Renderer is ~12,970+ lines
-- Morning stretch system defined after sleep schedule section (~line 360): state variables, phase durations, start/advance/complete/update/transform functions
-- `morningStretchActive` boolean gates the entire system
-- `morningStretchPhase` cycles through: yawn → stretch_up → shake → hop → sparkle
-- `updateMorningStretch()` called each frame in main update loop, advances progress and transitions phases
-- `getMorningStretchTransform()` returns rotation/scale/offset for drawing, applied before idle animation transforms
-- `completeMorningStretchSequence()` handles particles, speech, stats, diary, achievement check
-- `completeWakingUp()` now triggers `startMorningStretchSequence()` instead of old instant wake
-- SaveData: `totalMorningStretches` (number)
-- Stats panel MORNING STRETCHES section after CLOUD WATCHING section
-- Total achievements: 41
+- Renderer is ~13,200+ lines
+- Meditation system defined after morning stretches section (~line 550): state variables, sounds, start/complete/update/transform/draw functions
+- `meditationActive` boolean gates the entire system
+- `meditationPromptVisible` controls the "click to meditate" hint (once per evening)
+- `meditationSessionThisEvening` prevents repeat prompts, resets when time leaves evening
+- `updateMeditation()` called each frame in main update loop, manages prompt timing, breath phase, and progress
+- `getMeditationTransform()` returns scale/offset for pet breathing, applied after morning stretch transform
+- `drawMeditationGuide()` renders the breathing circle, progress arc, orbit particles, and breath text
+- `completeMeditation()` handles particles, speech, stats, diary, achievement check
+- Click interception in `onPetClicked()` starts meditation when prompt is visible
+- Wandering blocked during meditation (`!meditationActive` added to wander condition)
+- Idle animations blocked during meditation (added to `startIdleAnimation` guard)
+- SaveData: `totalMeditations` (number)
+- Stats panel SUNSET MEDITATION section after MORNING STRETCHES section
+- Total achievements: 42
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
