@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.71.0] — 2026-04-11 — Ambient Night Sounds
+
+### Added
+- **Cricket chirps** — synthesized cricket trills play at random intervals during evening and night, with varied frequency (4200–5000Hz), volume, and double-chirp patterns for natural variation
+- **Owl hoots** — a two-part "hoo... hooo" owl call plays occasionally during deep night (night only, not evening), using low-frequency sine waves with gentle pitch descent
+- **Wind gusts** — soft filtered noise bursts simulate gentle breezes, with dynamic low-pass filter sweeps and smooth volume envelopes for a realistic whoosh
+- **Randomized timing** — crickets every ~1.5–5 seconds, owls every ~30–60 seconds, wind every ~15–30 seconds, all with randomized intervals to avoid repetition
+- **Speech reactions** — when the owl hoots and the pet is awake, there's a 30% chance it reacts with one of 5 charming messages ("Hoo hoo~! Was that an owl? 🦉")
+- **Automatic activation** — sounds begin at evening and fade naturally when morning arrives
+- **Diary entry** — first ambient night each session is logged to the pet diary
+- **Sound-aware** — all ambient sounds respect the global sound toggle
+- **Sleep-compatible** — sounds continue softly while the pet sleeps, creating a cozy backdrop for the zzz particles and dream bubbles
+- **Total achievements: 47** (unchanged)
+
+**Why this feature:** Tamashii's nighttime is already visually rich — fireflies, constellations, dream bubbles, shooting stars — but it was aurally silent beyond the occasional yawn or lullaby. Ambient night sounds transform the experience from watching a scene to *being in one*. Cricket chirps provide a gentle rhythmic backdrop, owl hoots add rare atmospheric surprises that make the pet react with wonder, and wind gusts give a sense of the world breathing around you. Together they make nighttime feel alive, cozy, and immersive — the perfect companion to an evening spent with your desktop pet.
+
 ## [v0.70.0] — 2026-04-11 — Yawn Chain
 
 ### Added

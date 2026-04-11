@@ -364,6 +364,19 @@ let sleepStartFrame = 0;           // frame when sleep began
 let sleepNightcapBob = 0;          // wobble for nightcap
 let dailyActivityLog: string[] = []; // tracks activities for contextual dreams
 
+// --- Ambient Night Sounds ---
+let ambientNightActive = false;
+let nextCricketTime = 0;
+let nextOwlTime = 0;
+let nextWindTime = 0;
+let ambientNightFirstSession = false;
+const CRICKET_MIN_INTERVAL = 90;
+const CRICKET_MAX_INTERVAL = 300;
+const OWL_MIN_INTERVAL = 1800;
+const OWL_MAX_INTERVAL = 3600;
+const WIND_MIN_INTERVAL = 900;
+const WIND_MAX_INTERVAL = 1800;
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -1819,6 +1832,143 @@ function playWakeUpSound(): void {
   setTimeout(() => playTone(523, 0.1, "sine", 0.07), 100);   // C5
   setTimeout(() => playTone(659, 0.12, "sine", 0.08), 200);  // E5
   setTimeout(() => playTone(784, 0.2, "sine", 0.09), 300);   // G5
+}
+
+// --- Ambient Night Sound Functions ---
+
+function playCricketChirp(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const baseFreq = 4200 + Math.random() * 800;
+  const vol = 0.015 + Math.random() * 0.01;
+  const chirpCount = 3 + Math.floor(Math.random() * 4);
+  const chirpGap = 40 + Math.random() * 15;
+  for (let i = 0; i < chirpCount; i++) {
+    setTimeout(() => {
+      playTone(baseFreq + Math.random() * 100, 0.025, "sine", vol);
+    }, i * chirpGap);
+  }
+  if (Math.random() < 0.4) {
+    const pause = chirpCount * chirpGap + 120 + Math.random() * 80;
+    const vol2 = vol * 0.7;
+    for (let i = 0; i < chirpCount; i++) {
+      setTimeout(() => {
+        playTone(baseFreq + Math.random() * 100, 0.025, "sine", vol2);
+      }, pause + i * chirpGap);
+    }
+  }
+}
+
+function playOwlHoot(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const osc1 = audioCtx.createOscillator();
+  const gain1 = audioCtx.createGain();
+  osc1.type = "sine";
+  osc1.frequency.setValueAtTime(340, t);
+  osc1.frequency.exponentialRampToValueAtTime(300, t + 0.3);
+  gain1.gain.setValueAtTime(0, t);
+  gain1.gain.linearRampToValueAtTime(0.025, t + 0.05);
+  gain1.gain.setValueAtTime(0.025, t + 0.15);
+  gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  osc1.connect(gain1);
+  gain1.connect(audioCtx.destination);
+  osc1.start(t);
+  osc1.stop(t + 0.4);
+
+  const osc2 = audioCtx.createOscillator();
+  const gain2 = audioCtx.createGain();
+  osc2.type = "sine";
+  osc2.frequency.setValueAtTime(320, t + 0.55);
+  osc2.frequency.exponentialRampToValueAtTime(280, t + 1.15);
+  gain2.gain.setValueAtTime(0, t + 0.55);
+  gain2.gain.linearRampToValueAtTime(0.03, t + 0.6);
+  gain2.gain.setValueAtTime(0.03, t + 0.85);
+  gain2.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+  osc2.connect(gain2);
+  gain2.connect(audioCtx.destination);
+  osc2.start(t + 0.55);
+  osc2.stop(t + 1.3);
+}
+
+function playWindGust(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const duration = 2 + Math.random() * 2;
+  const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(300, t);
+  filter.frequency.linearRampToValueAtTime(500, t + duration * 0.3);
+  filter.frequency.linearRampToValueAtTime(250, t + duration);
+  filter.Q.value = 1;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.015, t + duration * 0.25);
+  gain.gain.setValueAtTime(0.015, t + duration * 0.5);
+  gain.gain.linearRampToValueAtTime(0, t + duration);
+
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  source.start(t);
+  source.stop(t + duration);
+}
+
+const OWL_HOOT_REACTIONS = [
+  "Hoo hoo~! Was that an owl? 🦉",
+  "An owl! The night is alive~ 🦉",
+  "Whoo~ whoo~ I hear a friend out there!",
+  "Owl songs in the dark~ So mysterious! 🌙",
+  "Hoo hoo... the owl is singing tonight~",
+];
+
+function updateAmbientNightSounds(): void {
+  const isNighttime = currentTimeOfDay === "night" || currentTimeOfDay === "evening";
+
+  if (isNighttime && !ambientNightActive) {
+    ambientNightActive = true;
+    nextCricketTime = frame + 60 + Math.floor(Math.random() * 120);
+    nextOwlTime = frame + OWL_MIN_INTERVAL + Math.floor(Math.random() * (OWL_MAX_INTERVAL - OWL_MIN_INTERVAL));
+    nextWindTime = frame + 300 + Math.floor(Math.random() * 600);
+    if (!ambientNightFirstSession) {
+      ambientNightFirstSession = true;
+      addDiaryEntry("general", "🦗", "The night sounds began~ Crickets and owls keeping me company!");
+    }
+  } else if (!isNighttime && ambientNightActive) {
+    ambientNightActive = false;
+  }
+
+  if (!ambientNightActive) return;
+
+  if (frame >= nextCricketTime) {
+    playCricketChirp();
+    nextCricketTime = frame + CRICKET_MIN_INTERVAL + Math.floor(Math.random() * (CRICKET_MAX_INTERVAL - CRICKET_MIN_INTERVAL));
+  }
+
+  if (currentTimeOfDay === "night" && frame >= nextOwlTime) {
+    playOwlHoot();
+    nextOwlTime = frame + OWL_MIN_INTERVAL + Math.floor(Math.random() * (OWL_MAX_INTERVAL - OWL_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.3) {
+      queueSpeechBubble(OWL_HOOT_REACTIONS[Math.floor(Math.random() * OWL_HOOT_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (frame >= nextWindTime) {
+    playWindGust();
+    nextWindTime = frame + WIND_MIN_INTERVAL + Math.floor(Math.random() * (WIND_MAX_INTERVAL - WIND_MIN_INTERVAL));
+  }
 }
 
 function logDailyActivity(activity: string): void {
@@ -12977,6 +13127,9 @@ function update(): void {
     if (sleepBreathProgress > Math.PI * 2) sleepBreathProgress -= Math.PI * 2;
     sleepNightcapBob += 0.015;
   }
+
+  // --- Ambient Night Sounds ---
+  updateAmbientNightSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;
