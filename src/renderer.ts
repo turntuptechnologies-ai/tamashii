@@ -1201,6 +1201,21 @@ let sneezeCooldown = 0;
 let totalSneezesCured = 0;
 let sneezeCuredThisSession = false;
 let sneezeNoseTwitch = 0;
+
+// --- Yawn Chain system ---
+let yawnChainActive = false;
+let yawnChainCount = 0;
+let yawnChainPhase: "pet_yawn" | "wait_click" | "player_yawn" | "pause" = "pet_yawn";
+let yawnChainTimer = 0;
+let yawnChainBestLength = 0;
+let totalYawnChainsCaught = 0;
+let yawnChainCaughtThisSession = false;
+let yawnChainPlayerYawnProgress = 0;
+const YAWN_CHAIN_CLICK_WINDOW = 50;
+const YAWN_CHAIN_PLAYER_YAWN_DURATION = 55;
+const YAWN_CHAIN_PAUSE_DURATION = 40;
+const YAWN_CHAIN_CONTINUE_CHANCE_BASE = 0.85;
+const YAWN_CHAIN_CONTINUE_DECAY = 0.06;
 const SNEEZE_BUILDUP_FRAMES = 80;
 const SNEEZE_EPISODE_MIN = 2;
 const SNEEZE_EPISODE_MAX = 5;
@@ -1375,6 +1390,174 @@ function updateSneezes(): void {
   if (Math.random() < pollenBoost) {
     startSneezeEpisode();
   }
+}
+
+// --- Yawn Chain ---
+const YAWN_CHAIN_CATCH_MESSAGES = [
+  "Ahaha~! You caught my yawn! 🥱",
+  "It's contagious~! *yaaawn* 😄",
+  "Hehe, yawning together~! 🥱✨",
+  "You yawned too~! So funny! 😆",
+  "The yawn spread~! 🥱💕",
+];
+
+const YAWN_CHAIN_CONTINUE_MESSAGES = [
+  "*yaaawn*... here it comes again~! 🥱",
+  "Oh no, another one~! *yaaawn* 🥱",
+  "It won't stop~! *yaaawn* 😴",
+  "So... contagious~! *yaaawn* 🥱✨",
+];
+
+const YAWN_CHAIN_END_MESSAGES = [
+  "Ahh... that was a big yawn chain~! 😌✨",
+  "Finally stopped yawning~! That was fun! 🥱💕",
+  "Wow, so many yawns~! I feel sleepy now~ 😴✨",
+  "What a yawn-a-thon~! 🥱💕",
+  "Hehe, we yawned so much together~! 😊✨",
+];
+
+function playYawnChainCatchSound(): void {
+  playTone(400, 0.08, "sine", 0.05);
+  setTimeout(() => playTone(500, 0.1, "sine", 0.06), 70);
+  setTimeout(() => playTone(350, 0.12, "sine", 0.04), 150);
+}
+
+function playYawnChainEndSound(): void {
+  playTone(500, 0.08, "sine", 0.06);
+  setTimeout(() => playTone(600, 0.1, "sine", 0.07), 80);
+  setTimeout(() => playTone(800, 0.12, "sine", 0.08), 160);
+  setTimeout(() => playTone(1000, 0.15, "sine", 0.09), 260);
+}
+
+function tryStartYawnChain(): boolean {
+  if (!isYawning || yawnChainActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive || hiccupActive || sneezeActive) return false;
+  if (yawnProgress < 0.15 || yawnProgress > 0.85) return false;
+
+  yawnChainActive = true;
+  yawnChainCount = 1;
+  yawnChainPhase = "player_yawn";
+  yawnChainTimer = 0;
+  yawnChainPlayerYawnProgress = 0;
+
+  isYawning = false;
+  yawnProgress = 0;
+
+  playYawnChainCatchSound();
+  queueSpeechBubble(YAWN_CHAIN_CATCH_MESSAGES[Math.floor(Math.random() * YAWN_CHAIN_CATCH_MESSAGES.length)], 100, true);
+  totalYawnChainsCaught++;
+  addFriendshipXP(1);
+
+  if (!yawnChainCaughtThisSession) {
+    yawnChainCaughtThisSession = true;
+    addDiaryEntry("general", "🥱", `Caught ${petName}'s yawn and started a yawn chain!`);
+  }
+  return true;
+}
+
+function endYawnChain(): void {
+  yawnChainActive = false;
+  const chainLen = yawnChainCount;
+  if (chainLen > yawnChainBestLength) {
+    yawnChainBestLength = chainLen;
+  }
+  const happinessBoost = Math.min(5, 1 + Math.floor(chainLen / 2));
+  const friendshipBoost = Math.min(4, 1 + Math.floor(chainLen / 3));
+  petHappiness = Math.min(100, petHappiness + happinessBoost);
+  addFriendshipXP(friendshipBoost);
+  playYawnChainEndSound();
+  queueSpeechBubble(YAWN_CHAIN_END_MESSAGES[Math.floor(Math.random() * YAWN_CHAIN_END_MESSAGES.length)], 150, true);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const sparkleCount = Math.min(10, 4 + chainLen);
+  for (let i = 0; i < sparkleCount; i++) {
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 40,
+      y: cy + (Math.random() - 0.5) * 40,
+      vx: (Math.random() - 0.5) * 3,
+      vy: -1 - Math.random() * 2,
+      life: 40 + Math.random() * 20,
+      maxLife: 60,
+      type: "sparkle",
+      size: 3 + Math.random() * 3,
+    });
+  }
+  yawnChainCount = 0;
+  yawnChainPhase = "pet_yawn";
+  yawnChainTimer = 0;
+}
+
+function updateYawnChain(): void {
+  if (!yawnChainActive) return;
+  if (isSleeping || minigameActive || memoryGameActive) {
+    yawnChainActive = false;
+    yawnChainCount = 0;
+    return;
+  }
+
+  yawnChainTimer++;
+
+  if (yawnChainPhase === "player_yawn") {
+    yawnChainPlayerYawnProgress += 1 / YAWN_CHAIN_PLAYER_YAWN_DURATION;
+    if (yawnChainPlayerYawnProgress >= 1) {
+      yawnChainPlayerYawnProgress = 0;
+      yawnChainPhase = "pause";
+      yawnChainTimer = 0;
+    }
+  } else if (yawnChainPhase === "pause") {
+    if (yawnChainTimer >= YAWN_CHAIN_PAUSE_DURATION) {
+      const continueChance = YAWN_CHAIN_CONTINUE_CHANCE_BASE - (yawnChainCount - 1) * YAWN_CHAIN_CONTINUE_DECAY;
+      if (Math.random() < continueChance) {
+        yawnChainPhase = "pet_yawn";
+        yawnChainTimer = 0;
+        isYawning = true;
+        yawnProgress = 0;
+        yawnChainCount++;
+        if (Math.random() < 0.6) {
+          queueSpeechBubble(YAWN_CHAIN_CONTINUE_MESSAGES[Math.floor(Math.random() * YAWN_CHAIN_CONTINUE_MESSAGES.length)], 80, true);
+        }
+      } else {
+        endYawnChain();
+      }
+    }
+  } else if (yawnChainPhase === "pet_yawn") {
+    if (isYawning && yawnProgress >= 0.5) {
+      yawnChainPhase = "wait_click";
+      yawnChainTimer = 0;
+    }
+    if (!isYawning && yawnProgress === 0 && yawnChainTimer > 10) {
+      endYawnChain();
+    }
+  } else if (yawnChainPhase === "wait_click") {
+    if (!isYawning) {
+      endYawnChain();
+      return;
+    }
+    if (yawnChainTimer >= YAWN_CHAIN_CLICK_WINDOW) {
+      endYawnChain();
+    }
+  }
+}
+
+function tryYawnChainClick(): boolean {
+  if (!yawnChainActive || yawnChainPhase !== "wait_click") return false;
+  yawnChainPhase = "player_yawn";
+  yawnChainTimer = 0;
+  yawnChainPlayerYawnProgress = 0;
+  isYawning = false;
+  yawnProgress = 0;
+  yawnChainCount++;
+  playYawnChainCatchSound();
+  addFriendshipXP(1);
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  particles.push({
+    x: cx, y: cy - 20,
+    vx: (Math.random() - 0.5) * 2, vy: -1.5,
+    life: 30, maxLife: 30,
+    type: "sparkle", size: 3 + Math.random() * 2,
+  });
+  return true;
 }
 
 function isTeaTime(): boolean {
@@ -8519,6 +8702,11 @@ const achievements: Achievement[] = [
     icon: "🤧", unlockMessage: "Always prepared with a tissue~! My spring hero! 🤧🌸✨",
     condition: () => totalSneezesCured >= 15, unlocked: false,
   },
+  {
+    id: "yawn_chain_master", name: "Contagious Yawns", description: "Reach a 10-yawn chain",
+    icon: "🥱", unlockMessage: "The yawns just won't stop~! So contagious! 🥱✨",
+    condition: () => yawnChainBestLength >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -9246,6 +9434,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🤧 ${totalSneezesCured} cured`, panelX + panelW - 12, y);
 
+  // --- YAWN CHAINS section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#C8B0E0";
+  ctx.fillText("YAWN CHAINS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🥱 ${totalYawnChainsCaught} caught · best ${yawnChainBestLength}`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -9663,6 +9868,8 @@ interface SaveData {
   totalTeaParties: number;
   totalHiccupsCured: number;
   totalSneezesCured: number;
+  totalYawnChainsCaught: number;
+  bestYawnChain: number;
   version: number;
 }
 
@@ -9730,6 +9937,8 @@ function buildSaveData(): SaveData {
     totalTeaParties,
     totalHiccupsCured,
     totalSneezesCured,
+    totalYawnChainsCaught,
+    bestYawnChain: yawnChainBestLength,
     version: 1,
   };
 }
@@ -9986,6 +10195,12 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).totalSneezesCured === "number") {
     totalSneezesCured = (data as SaveData).totalSneezesCured;
   }
+  if (typeof (data as SaveData).totalYawnChainsCaught === "number") {
+    totalYawnChainsCaught = (data as SaveData).totalYawnChainsCaught;
+  }
+  if (typeof (data as SaveData).bestYawnChain === "number") {
+    yawnChainBestLength = (data as SaveData).bestYawnChain;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -10108,6 +10323,16 @@ function onPetClicked(): void {
   const now = Date.now();
   const timeSinceLastClick = now - lastClickTime;
   lastClickTime = now;
+
+  // Try to continue yawn chain
+  if (yawnChainActive && yawnChainPhase === "wait_click") {
+    if (tryYawnChainClick()) return;
+  }
+
+  // Try to start a yawn chain by clicking during a yawn
+  if (isYawning && !yawnChainActive) {
+    if (tryStartYawnChain()) return;
+  }
 
   // Try to offer tissue during sneeze buildup
   if (sneezeActive && sneezeBuildUp > 0) {
@@ -12368,6 +12593,9 @@ function update(): void {
   // Sneeze update (spring pollen)
   updateSneezes();
 
+  // Yawn chain update
+  updateYawnChain();
+
   // Afternoon clouds update
   updateClouds();
 
@@ -13751,6 +13979,46 @@ function draw(): void {
 
   // Combo counter (above pet, near speech bubble area)
   drawComboCounter(cx, cy - size * 0.55);
+
+  // Yawn chain indicator
+  if (yawnChainActive && yawnChainCount > 0) {
+    ctx.save();
+    const chainX = cx + size * 0.5;
+    const chainY = cy - size * 0.3;
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "center";
+    const pulse = 1 + Math.sin(frame * 0.1) * 0.1;
+    ctx.setTransform(pulse, 0, 0, pulse, chainX, chainY);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.fillText(`🥱 x${yawnChainCount}`, 1, 1);
+    ctx.fillStyle = "#E8D0F0";
+    ctx.fillText(`🥱 x${yawnChainCount}`, 0, 0);
+    if (yawnChainPhase === "wait_click") {
+      ctx.font = "7px monospace";
+      ctx.fillStyle = `rgba(255, 255, 200, ${0.5 + Math.sin(frame * 0.15) * 0.4})`;
+      ctx.fillText("click!", 0, 12);
+    }
+    ctx.restore();
+  }
+
+  // Player yawn visual — expanding ring from bottom of screen
+  if (yawnChainActive && yawnChainPhase === "player_yawn" && yawnChainPlayerYawnProgress > 0) {
+    ctx.save();
+    const ringProgress = Math.sin(yawnChainPlayerYawnProgress * Math.PI);
+    const ringRadius = 15 + ringProgress * 25;
+    const ringAlpha = ringProgress * 0.3;
+    ctx.beginPath();
+    ctx.arc(cx, canvas.height - 20, ringRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(200, 180, 230, ${ringAlpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, canvas.height - 20, ringRadius * 0.6, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(200, 180, 230, ${ringAlpha * 0.6})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Speech bubble (above everything)
   drawSpeechBubble(cx, cy - size * 0.4);

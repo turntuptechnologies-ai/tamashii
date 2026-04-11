@@ -3,26 +3,23 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.69.0 — Spring Pollen Sneezes (2026-04-11)
+## Last completed: v0.70.0 — Yawn Chain (2026-04-11)
 
 ### What was done
-- Added spring pollen sneeze mechanic: seasonal involuntary sneezing episodes during spring (March–May)
-- 2–5 sneezes per episode with buildup phase before each sneeze (nose twitches, wobble animation)
-- Timing-based tissue cure: click during buildup to offer a tissue and stop the episode
-- Different from hiccups: forward head-thrust animation instead of upward bounce, timing click instead of rapid click
-- Sneeze sound effects (ACHOO), buildup sounds, cure celebration sounds
-- Speech reactions for all phases: start, buildup, ACHOO, cure, and natural resolution
-- Sneeze particles burst out with each ACHOO
-- ~4 minute cooldown, sleep/event aware, spring season only
-- Stats: +2 happiness, +2 friendship XP per cure
-- Stats panel SNEEZES section showing total episodes cured
-- Achievement #46: "Allergy Season" (🤧) — cure 15 sneeze episodes
-- Diary entry for first cure each session
-- Added to SaveData: `totalSneezesCured`
-- Total achievements: 46
+- Added contagious yawn chain mechanic: click the pet during a yawn to catch it and start a back-and-forth chain
+- Player yawn visual (expanding purple rings from screen bottom) alternates with pet yawns
+- Decreasing continue chance per link (85% base, -6% per link) makes long chains exciting and rare
+- Chain rewards scale with length: happiness, friendship XP, and sparkle burst
+- "🥱 x{count}" counter with pulse animation and "click!" prompt during click window
+- Sound effects for catching yawns and chain completion
+- Speech reactions for catch, continue, and end phases
+- Stats: total chains caught + best chain length in YAWN CHAINS section
+- Achievement #47: "Contagious Yawns" (🥱) — reach a 10-yawn chain
+- Diary entry for first chain each session
+- Added to SaveData: `totalYawnChainsCaught`, `bestYawnChain`
+- Total achievements: 47
 
 ### Thoughts for next cycle
-- **Seasonal events expansion** — add events for other months (summer fireworks in July, autumn leaves in October, winter snowball fights in December)
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster
 - **Pet outfits** — full body cosmetic sets beyond single accessories
 - **Friendship milestones** — friendship levels unlock exclusive cosmetics or abilities
@@ -38,26 +35,25 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Story continuation** — bedtime stories that span multiple nights, with cliffhangers
 - **Guided stargazing** — pet points out specific stars and tells you their names during night
 - **Meditation streaks** — track consecutive days with meditation, unlock special rewards
-- **Petal crown cosmetic** — earn a flower crown accessory by catching enough cherry blossoms (spring exclusive)
 - **Summer cicadas** — ambient cicada sounds during summer months with a catch mechanic
 - **Tea party upgrades** — unlock new tea types, teacup designs, or snacks as you host more parties
-- **Yawn chain** — pet yawns and if you click during the yawn, you "catch" the yawn, starting a chain
-- **Sneeze + cherry blossom synergy** — increased sneeze chance when cherry blossoms are actively falling, or sneezing blows petals around
+- **Sneeze + cherry blossom synergy** — increased sneeze chance when cherry blossoms are actively falling
 - **Pet journal reflections** — pet writes its own diary entries about the day at bedtime
 - **Pollen count indicator** — subtle visual showing pollen levels affecting sneeze frequency
+- **Yawn chain leaderboard** — show personal best prominently, encourage beating it
+- **Sleep ritual** — a calming sequence when the pet falls asleep (yawn → stretch → curl up → zzz)
+- **Dream bubbles** — while sleeping, thought bubbles show what the pet is dreaming about
 
 ### Current architecture notes
-- Renderer is ~14,250+ lines
-- Sneeze system defined after hiccup system, before tea party section
-- `sneezeActive` boolean gates episode state, `sneezeBuildUp` counts down to sneeze trigger
-- `sneezeJolt` drives forward-thrust animation, `sneezeNoseTwitch` drives wobble
-- `startSneezeEpisode()` → `beginSneezeBuildUp()` → `triggerSneeze()` or `trySneezeCure()` via click during buildup
-- `updateSneezes()` called in main update loop after `updateHiccups()`
-- Sneeze cure check in `onPetClicked()` before hiccup cure check — checks `sneezeBuildUp > 0`
-- Sneeze jolt + nose twitch transforms in draw() after hiccup jolt, before spin
-- Spring-only: `getSeason() !== "spring"` guard prevents episodes outside March–May
-- SaveData: `totalSneezesCured` (number)
-- Stats panel SNEEZES section after HICCUPS section
-- Total achievements: 46
+- Renderer is ~14,500+ lines
+- Yawn chain system defined after sneeze system, before tea party section
+- `yawnChainActive` boolean gates chain state, `yawnChainPhase` cycles through: pet_yawn → wait_click → player_yawn → pause → pet_yawn...
+- `tryStartYawnChain()` initiates from click during regular yawn, `tryYawnChainClick()` continues during wait_click phase
+- `updateYawnChain()` called in main update loop after `updateSneezes()`
+- Yawn chain click checks in `onPetClicked()` BEFORE sneeze/hiccup cure checks
+- Visual: chain counter drawn near combo counter area, player yawn rings at screen bottom
+- SaveData: `totalYawnChainsCaught` (number), `bestYawnChain` (number)
+- Stats panel YAWN CHAINS section after SNEEZES section
+- Total achievements: 47
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

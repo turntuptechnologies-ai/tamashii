@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.70.0] — 2026-04-11 — Yawn Chain
+
+### Added
+- **Contagious yawn chain** — click the pet during a yawn to "catch" it, starting a back-and-forth yawn chain
+- **Chain mechanic** — the pet yawns, you click to catch it, a "player yawn" visual plays from the bottom of the screen, then the pet yawns again — keep clicking to extend the chain
+- **Decreasing continue chance** — each link in the chain has a slightly lower chance of the pet yawning again (starts at 85%, decays 6% per link), making long chains rare and exciting
+- **Chain rewards** — happiness and friendship XP scale with chain length, with sparkle burst on completion
+- **Click window** — you must click during the pet's yawn to continue the chain; miss it and the chain ends naturally
+- **Speech reactions** — 5 catch messages ("Ahaha~! You caught my yawn! 🥱"), 4 continue messages, and 5 end messages
+- **Sound effects** — soft catch sound on each yawn caught, celebratory melody when chain ends
+- **Visual indicator** — "🥱 x{count}" counter pulses near the pet during a chain, with "click!" prompt during the click window
+- **Player yawn visual** — expanding purple rings from the bottom of the screen during your yawn turn
+- **Stats panel section** — dedicated YAWN CHAINS section showing total chains caught and best chain length
+- **Contagious Yawns achievement** — reach a 10-yawn chain to unlock achievement #47 (🥱)
+- **Diary entry** — first yawn chain each session is logged to the pet diary
+- **Full persistence** — total yawn chains and best chain length saved across sessions
+- **Total achievements: 47**
+
+**Why this feature:** Tamashii already has yawning as a sleepy-time animation, but it was purely cosmetic — the player couldn't interact with it. Yawn chains turn this passive animation into a delightful interactive moment. Yawns are famously contagious, so clicking during a yawn to "catch" it feels natural and fun. The back-and-forth creates a cozy, intimate exchange between player and pet — you're literally sharing yawns. The decreasing probability makes each additional link in the chain feel like a lucky bonus, and long chains become memorable achievements. It's a simple mechanic that adds depth to nighttime/evening gameplay when the pet is sleepy.
+
 ## [v0.69.0] — 2026-04-11 — Spring Pollen Sneezes
 
 ### Added
