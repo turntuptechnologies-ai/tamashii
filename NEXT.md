@@ -3,24 +3,22 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.67.0 — Afternoon Tea Time (2026-04-10)
+## Last completed: v0.68.0 — Pet Hiccups (2026-04-11)
 
 ### What was done
-- Added afternoon tea time: a cozy tea party interaction during 2 PM – 5 PM
-- A teacup with rising steam appears near the pet, click to start a tea party
-- 8 tea varieties (Green Tea, Earl Grey, Chamomile, Matcha, Rose Tea, Jasmine Tea, Honey Lemon, Lavender Tea) randomly chosen each session
-- 4-sip tea sequence lasting ~8 seconds with sipping chimes and speech reactions
-- Hand-drawn teacup with saucer, colored tea liquid, handle, highlight, and bobbing animation
-- Steam particles rise and fade from the cup
-- Teacup clink, sipping sounds, and completion melody
-- Stats boost: +3 happiness, +2 energy, +2 friendship XP per tea party
-- Once per afternoon to keep it special
-- Wandering paused during tea time
-- Stats panel AFTERNOON TEA section showing total tea parties hosted
-- Achievement #44: "Tea Connoisseur" (☕) — host 10 afternoon tea parties
-- Diary entry for first tea party each session
-- Added to SaveData: `totalTeaParties`
-- Total achievements: 44
+- 🧬 Mutation cycle — ignored previous suggestions and added something unexpected
+- Added pet hiccups: random involuntary episodes where the pet bounces with each *hic!*
+- 4–8 hiccups per episode, spaced ~1.5–2.5 seconds apart with jolt animation
+- Rapid-click cure: 3 clicks in 2 seconds to "scare" hiccups away
+- Cure celebration with sparkle burst, fanfare sound, and grateful speech
+- Natural resolution if uncured (hiccups eventually stop on their own)
+- ~3 minute cooldown between episodes, sleep/event aware
+- Stats: +2 happiness, +2 friendship XP per cure
+- Stats panel HICCUPS section showing total episodes cured
+- Achievement #45: "Hiccup Helper" (😵) — cure 10 hiccup episodes
+- Diary entry for first cure each session
+- Added to SaveData: `totalHiccupsCured`
+- Total achievements: 45
 
 ### Thoughts for next cycle
 - **Seasonal events expansion** — add events for other months (summer fireworks in July, autumn leaves in October, winter snowball fights in December)
@@ -44,18 +42,19 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Tea party upgrades** — unlock new tea types, teacup designs, or snacks as you host more parties
 - **Afternoon picnic** — a more elaborate shared meal event with multiple food items
 - **Pet journal reflections** — pet writes its own diary entries about the day at bedtime
+- **Sneeze mechanic** — similar to hiccups but triggered by pollen in spring, cured differently
+- **Yawn chain** — pet yawns and if you click during the yawn, you "catch" the yawn, starting a chain
 
 ### Current architecture notes
-- Renderer is ~13,600+ lines
-- Tea party system defined after cherry blossom section: interface, state variables, spawn/update/click/draw functions
-- `teaPartyPhase` state machine: "idle" → "invite" → "sipping" → "done" → "idle"
-- `teaPartyActive` boolean gates wandering pause
-- `isTeaTime()` checks for hours 14-16 (2 PM – 5 PM)
-- `tryClickTeaCup()` in mousedown handler before cloud clicks
-- `updateTeaParty()` and `drawTeaParty()` in main loops
-- `TeaSteam` interface for steam particles
-- SaveData: `totalTeaParties` (number)
-- Stats panel AFTERNOON TEA section after CHERRY BLOSSOMS section
-- Total achievements: 44
+- Renderer is ~14,050+ lines
+- Hiccup system defined before tea party section: state variables, sound functions, start/trigger/cure/update functions
+- `hiccupActive` boolean gates episode state, `hiccupBounce` drives jolt animation
+- `startHiccupEpisode()` → `triggerHiccup()` loop → natural end or `tryHiccupCure()` via rapid clicks
+- `updateHiccups()` called in main update loop after `updateTeaParty()`
+- `tryHiccupCure()` called at top of `onPetClicked()` before sleep check
+- Hiccup jolt transform in draw() after squish, before spin
+- SaveData: `totalHiccupsCured` (number)
+- Stats panel HICCUPS section after AFTERNOON TEA section
+- Total achievements: 45
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous

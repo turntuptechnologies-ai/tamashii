@@ -3,6 +3,28 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.68.0] — 2026-04-11 — Pet Hiccups 🧬
+
+### Added
+- **Random hiccup episodes** — the pet occasionally gets a case of the hiccups, bouncing with each *hic!* and looking flustered
+- **Hiccup jolt animation** — each hiccup causes a quick upward bounce, making the pet visibly startled
+- **4–8 hiccups per episode** — each episode has a random number of hiccups spaced ~1.5–2.5 seconds apart
+- **Hiccup sound** — a short, sharp two-tone chirp accompanies each hiccup
+- **Speech reactions** — 5 start messages ("H-hic! Oh no... 😵"), 6 mid-hiccup reactions ("*hic!*", "Hic~!"), and natural resolution message
+- **Rapid-click cure** — click the pet 3 times within 2 seconds to "scare" the hiccups away
+- **Cure celebration** — 5 unique cure messages ("EEK! ...oh! They stopped~! 😄"), cure sound fanfare, and 6 sparkle particles burst outward
+- **Stats boost on cure** — curing hiccups gives +2 happiness and +2 friendship XP
+- **Natural resolution** — if not cured, hiccups eventually stop on their own after 4–8 hics with a relieved message
+- **~3 minute cooldown** — hiccup episodes are spaced out to avoid being annoying
+- **Sleep/event aware** — hiccups don't start during sleep, mini-games, meditation, stretches, or tea time
+- **Stats panel section** — dedicated HICCUPS section showing total episodes cured
+- **Hiccup Helper achievement** — cure 10 hiccup episodes to unlock achievement #45 (😵) with the message "The ultimate hiccup remedy~! You always know how to help! 😵✨"
+- **Diary entry** — first hiccup cure each session is logged to the pet diary
+- **Full persistence** — total hiccups cured saved across sessions
+- **Total achievements: 45**
+
+**Why this feature:** 🧬 **Mutation!** Instead of following the previous cycle's suggestions, this feature evolved spontaneously. Tamashii has lots of things you *choose* to do — clicking, feeding, playing games — but very few things that happen *to* the pet unexpectedly. Hiccups fill that gap with a charming, involuntary micro-event. Your pet suddenly starts bouncing with little *hic!* sounds, looking surprised and flustered. You can either wait for them to pass naturally, or — in a classic folk remedy — rapidly click the pet to "scare" the hiccups away. It's a tiny moment of care that reinforces the bond between player and pet: your pet has a problem, and you can help fix it. The rapid-click cure mechanic is satisfying and intuitive, and the pet's grateful reaction makes it feel worthwhile. Simple, surprising, and wholesome — a true evolutionary leap.
+
 ## [v0.67.0] — 2026-04-10 — Afternoon Tea Time
 
 ### Added

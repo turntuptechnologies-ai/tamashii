@@ -1044,6 +1044,151 @@ function playTeaPartyComplete(): void {
   setTimeout(() => playTone(1047, 0.25, "sine", 0.09), 360);
 }
 
+// --- Hiccup System ---
+let hiccupActive = false;
+let hiccupTimer = 0;
+let hiccupCount = 0;
+let hiccupTotalInEpisode = 0;
+let hiccupInterval = 0;
+let hiccupBounce = 0;
+let hiccupCureClicks: number[] = [];
+let totalHiccupsCured = 0;
+let hiccupCooldown = 0;
+let hiccupCuredThisSession = false;
+const HICCUP_CURE_CLICKS_NEEDED = 3;
+const HICCUP_CURE_WINDOW = 2000;
+const HICCUP_EPISODE_MIN = 4;
+const HICCUP_EPISODE_MAX = 8;
+const HICCUP_COOLDOWN = 60 * 60 * 3; // ~3 minutes between episodes at 60fps
+
+const HICCUP_START_MESSAGES = [
+  "H-hic! Oh no... 😵",
+  "*hic!* ...Uh oh~ 😳",
+  "Hic! Hic! Not again~! 😵‍💫",
+  "*hic!* Wh-what's happening?! 😳",
+  "Hic—! I got the hiccups~! 😵",
+];
+
+const HICCUP_MESSAGES = [
+  "*hic!*",
+  "Hic~!",
+  "*hic!* 😵",
+  "H-hic!",
+  "*hic* ...excuse me~",
+  "Hic! 😵‍💫",
+];
+
+const HICCUP_CURE_MESSAGES = [
+  "EEK! ...oh! They stopped~! 😄",
+  "AH—! W-wait... they're gone! ✨",
+  "You scared them away~! Thank you! 💕",
+  "*gasp!* ...hee hee, all better! 😊",
+  "Whoa! That worked~! No more hics! ✨",
+];
+
+function playHiccupSound(): void {
+  playTone(600, 0.04, "sine", 0.1);
+  setTimeout(() => playTone(900, 0.03, "sine", 0.08), 30);
+}
+
+function playHiccupCureSound(): void {
+  playTone(800, 0.08, "sine", 0.1);
+  setTimeout(() => playTone(1000, 0.08, "sine", 0.09), 80);
+  setTimeout(() => playTone(1200, 0.1, "sine", 0.08), 160);
+  setTimeout(() => playTone(1500, 0.15, "sine", 0.1), 240);
+}
+
+function startHiccupEpisode(): void {
+  if (hiccupActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive) return;
+  hiccupActive = true;
+  hiccupCount = 0;
+  hiccupTotalInEpisode = HICCUP_EPISODE_MIN + Math.floor(Math.random() * (HICCUP_EPISODE_MAX - HICCUP_EPISODE_MIN + 1));
+  hiccupInterval = 90 + Math.floor(Math.random() * 60); // frames between hiccups
+  hiccupTimer = 30; // first hiccup comes quickly
+  hiccupCureClicks = [];
+  queueSpeechBubble(HICCUP_START_MESSAGES[Math.floor(Math.random() * HICCUP_START_MESSAGES.length)], 120, true);
+}
+
+function triggerHiccup(): void {
+  hiccupBounce = 1.0;
+  hiccupCount++;
+  playHiccupSound();
+  if (Math.random() < 0.4) {
+    queueSpeechBubble(HICCUP_MESSAGES[Math.floor(Math.random() * HICCUP_MESSAGES.length)], 60, true);
+  }
+  spawnEmoteSet("surprised", 1);
+  if (hiccupCount >= hiccupTotalInEpisode) {
+    hiccupActive = false;
+    hiccupCooldown = HICCUP_COOLDOWN;
+    queueSpeechBubble("*hic*... finally stopped... 😮‍💨", 120, true);
+  }
+}
+
+function tryHiccupCure(): boolean {
+  if (!hiccupActive) return false;
+  const now = Date.now();
+  hiccupCureClicks.push(now);
+  hiccupCureClicks = hiccupCureClicks.filter(t => now - t < HICCUP_CURE_WINDOW);
+  if (hiccupCureClicks.length >= HICCUP_CURE_CLICKS_NEEDED) {
+    hiccupActive = false;
+    hiccupCooldown = HICCUP_COOLDOWN;
+    hiccupBounce = 0.8;
+    totalHiccupsCured++;
+    petHappiness = Math.min(100, petHappiness + 2);
+    addFriendshipXP(2);
+    playHiccupCureSound();
+    queueSpeechBubble(HICCUP_CURE_MESSAGES[Math.floor(Math.random() * HICCUP_CURE_MESSAGES.length)], 150, true);
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    for (let i = 0; i < 6; i++) {
+      particles.push({
+        x: cx + (Math.random() - 0.5) * 30,
+        y: cy + (Math.random() - 0.5) * 30,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -1 - Math.random() * 2,
+        life: 40 + Math.random() * 20,
+        maxLife: 60,
+        type: "sparkle",
+        size: 3 + Math.random() * 3,
+      });
+    }
+    if (!hiccupCuredThisSession) {
+      hiccupCuredThisSession = true;
+      addDiaryEntry("general", "😵", `Cured ${petName}'s hiccups with rapid clicking!`);
+    }
+    return true;
+  }
+  return false;
+}
+
+function updateHiccups(): void {
+  if (isSleeping || minigameActive || memoryGameActive) {
+    if (hiccupActive) {
+      hiccupActive = false;
+    }
+    return;
+  }
+  if (hiccupBounce > 0) {
+    hiccupBounce -= 0.08;
+    if (hiccupBounce < 0) hiccupBounce = 0;
+  }
+  if (hiccupActive) {
+    hiccupTimer--;
+    if (hiccupTimer <= 0) {
+      triggerHiccup();
+      hiccupTimer = hiccupInterval + Math.floor((Math.random() - 0.5) * 40);
+    }
+    return;
+  }
+  if (hiccupCooldown > 0) {
+    hiccupCooldown--;
+    return;
+  }
+  if (Math.random() < 0.00008) {
+    startHiccupEpisode();
+  }
+}
+
 function isTeaTime(): boolean {
   const hour = new Date().getHours();
   return hour >= 14 && hour < 17; // 2 PM – 5 PM
@@ -8176,6 +8321,11 @@ const achievements: Achievement[] = [
     icon: "☕", unlockMessage: "A true connoisseur of the afternoon tea~ ☕✨ How refined!",
     condition: () => totalTeaParties >= 10, unlocked: false,
   },
+  {
+    id: "hiccup_helper", name: "Hiccup Helper", description: "Cure 10 hiccup episodes",
+    icon: "😵", unlockMessage: "The ultimate hiccup remedy~! You always know how to help! 😵✨",
+    condition: () => totalHiccupsCured >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -8869,6 +9019,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`☕ ${totalTeaParties} tea parties`, panelX + panelW - 12, y);
 
+  // --- HICCUPS section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E8A0BF";
+  ctx.fillText("HICCUPS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`😵 ${totalHiccupsCured} cured`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -9284,6 +9451,7 @@ interface SaveData {
   totalMeditations: number;
   totalPetalsCaught: number;
   totalTeaParties: number;
+  totalHiccupsCured: number;
   version: number;
 }
 
@@ -9349,6 +9517,7 @@ function buildSaveData(): SaveData {
     totalMeditations,
     totalPetalsCaught,
     totalTeaParties,
+    totalHiccupsCured,
     version: 1,
   };
 }
@@ -9599,6 +9768,9 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).totalTeaParties === "number") {
     totalTeaParties = (data as SaveData).totalTeaParties;
   }
+  if (typeof (data as SaveData).totalHiccupsCured === "number") {
+    totalHiccupsCured = (data as SaveData).totalHiccupsCured;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -9721,6 +9893,11 @@ function onPetClicked(): void {
   const now = Date.now();
   const timeSinceLastClick = now - lastClickTime;
   lastClickTime = now;
+
+  // Try to cure hiccups with rapid clicks
+  if (hiccupActive) {
+    tryHiccupCure();
+  }
 
   // Gently wake the pet if sleeping
   if (isSleeping) {
@@ -11965,6 +12142,9 @@ function update(): void {
   // Afternoon tea time update
   updateTeaParty();
 
+  // Hiccup update
+  updateHiccups();
+
   // Afternoon clouds update
   updateClouds();
 
@@ -13083,6 +13263,11 @@ function draw(): void {
     ctx.translate(cx, feetY);
     ctx.scale(scaleX, scaleY);
     ctx.translate(-cx, -feetY);
+  }
+  // Hiccup jolt — quick upward bounce
+  if (hiccupBounce > 0 && !isSpinning) {
+    const jolt = Math.sin(hiccupBounce * Math.PI) * 6;
+    ctx.translate(0, -jolt);
   }
   // Spin trick — full 360° backflip rotation around center
   if (isSpinning) {
