@@ -3,6 +3,29 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.69.0] — 2026-04-11 — Spring Pollen Sneezes
+
+### Added
+- **Spring sneeze episodes** — during spring months (March–May), the pet occasionally gets tickled by pollen and starts sneezing
+- **Sneeze buildup phase** — before each sneeze, the pet's nose twitches with a visible side-to-side wobble and buildup sound
+- **Timing-based tissue cure** — click during the buildup phase to "offer a tissue" and stop the episode (different from hiccup's rapid-click)
+- **2–5 sneezes per episode** — each episode has a random number of sneezes spaced ~2–3 seconds apart
+- **Sneeze sound** — a sharp two-part ACHOO sound effect
+- **Forward head-thrust animation** — each sneeze jolts the pet forward (contrasting hiccup's upward bounce)
+- **Sneeze particles** — small sparkle particles burst out with each ACHOO
+- **Speech reactions** — 5 start messages ("My nose feels tickly... 🤧"), 4 buildup messages ("Ah... ahh..."), 5 ACHOO messages, and 5 cure messages
+- **Cure celebration** — offering a tissue at the right time gives +2 happiness, +2 friendship XP, 6 sparkle particles
+- **Natural resolution** — uncured sneezes play out naturally and the pet recovers on their own
+- **~4 minute cooldown** — episodes are spaced out, spring season only
+- **Sleep/event aware** — sneezes don't start during sleep, mini-games, meditation, stretches, tea time, or active hiccups
+- **Stats panel section** — dedicated SNEEZES section showing total episodes cured
+- **Allergy Season achievement** — cure 15 sneeze episodes to unlock achievement #46 (🤧)
+- **Diary entry** — first sneeze cure each session is logged to the pet diary
+- **Full persistence** — total sneezes cured saved across sessions
+- **Total achievements: 46**
+
+**Why this feature:** The previous cycle added hiccups — an involuntary event cured by rapid clicking. Sneezes are the perfect spring complement: triggered by pollen during cherry blossom season, they use a *timing-based* cure (click during the buildup to offer a tissue) rather than rapid clicking. The buildup phase creates a satisfying anticipation moment — you see the nose twitch, hear the buildup, and have a window to help. It ties beautifully into the existing cherry blossom festival, making spring feel more alive and immersive.
+
 ## [v0.68.0] — 2026-04-11 — Pet Hiccups 🧬
 
 ### Added

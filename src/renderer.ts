@@ -1189,6 +1189,194 @@ function updateHiccups(): void {
   }
 }
 
+// --- Sneeze System (Spring Pollen) ---
+let sneezeActive = false;
+let sneezeTimer = 0;
+let sneezeCount = 0;
+let sneezeTotalInEpisode = 0;
+let sneezeInterval = 0;
+let sneezeBuildUp = 0;
+let sneezeJolt = 0;
+let sneezeCooldown = 0;
+let totalSneezesCured = 0;
+let sneezeCuredThisSession = false;
+let sneezeNoseTwitch = 0;
+const SNEEZE_BUILDUP_FRAMES = 80;
+const SNEEZE_EPISODE_MIN = 2;
+const SNEEZE_EPISODE_MAX = 5;
+const SNEEZE_COOLDOWN = 60 * 60 * 4; // ~4 minutes between episodes at 60fps
+
+const SNEEZE_START_MESSAGES = [
+  "My nose feels tickly... 🤧",
+  "Ah... is that pollen~? 😣",
+  "*sniff sniff* ...s-something's tickling... 🌸",
+  "The flowers are so pretty but— ah... 😣",
+  "Spring allergies... n-not again~! 🤧",
+];
+
+const SNEEZE_BUILDUP_MESSAGES = [
+  "Ah... ahh...",
+  "A-ahh... it's coming...",
+  "Hh... hahh...",
+  "N-nose... tickles... 😣",
+];
+
+const SNEEZE_ACHOO_MESSAGES = [
+  "ACHOO!! 🤧",
+  "HACHOO~!! 💨",
+  "A-A-ACHOO!! 🤧",
+  "ATCHOO!! 💨",
+  "ACHOO! ...excuse me~ 🤧",
+];
+
+const SNEEZE_CURE_MESSAGES = [
+  "Oh! A tissue! Thank you~! 💕",
+  "*sniff* ...that's so much better! 😊✨",
+  "You saved me from a big sneeze~! 🥰",
+  "Ahh... the tickle stopped! Thanks~! 💕",
+  "How thoughtful~! Tissue just in time! ✨",
+];
+
+function playSneezeSound(): void {
+  playTone(200, 0.06, "sawtooth", 0.08);
+  setTimeout(() => {
+    playTone(1400, 0.08, "sine", 0.12);
+    playTone(800, 0.1, "triangle", 0.06);
+  }, 40);
+  setTimeout(() => playTone(400, 0.15, "sine", 0.05), 100);
+}
+
+function playSneezeCureSound(): void {
+  playTone(600, 0.06, "sine", 0.06);
+  setTimeout(() => playTone(800, 0.08, "sine", 0.07), 60);
+  setTimeout(() => playTone(1000, 0.1, "sine", 0.08), 120);
+  setTimeout(() => playTone(1300, 0.15, "sine", 0.09), 200);
+}
+
+function playSneezeBuildup(): void {
+  playTone(350, 0.08, "sine", 0.04);
+  setTimeout(() => playTone(400, 0.06, "sine", 0.03), 60);
+}
+
+function startSneezeEpisode(): void {
+  if (sneezeActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive || hiccupActive) return;
+  if (getSeason() !== "spring") return;
+  sneezeActive = true;
+  sneezeCount = 0;
+  sneezeTotalInEpisode = SNEEZE_EPISODE_MIN + Math.floor(Math.random() * (SNEEZE_EPISODE_MAX - SNEEZE_EPISODE_MIN + 1));
+  sneezeInterval = 120 + Math.floor(Math.random() * 80);
+  sneezeTimer = 40;
+  sneezeBuildUp = 0;
+  queueSpeechBubble(SNEEZE_START_MESSAGES[Math.floor(Math.random() * SNEEZE_START_MESSAGES.length)], 120, true);
+}
+
+function beginSneezeBuildUp(): void {
+  sneezeBuildUp = SNEEZE_BUILDUP_FRAMES;
+  sneezeNoseTwitch = 0;
+  playSneezeBuildup();
+  if (Math.random() < 0.5) {
+    queueSpeechBubble(SNEEZE_BUILDUP_MESSAGES[Math.floor(Math.random() * SNEEZE_BUILDUP_MESSAGES.length)], 50, true);
+  }
+}
+
+function triggerSneeze(): void {
+  sneezeBuildUp = 0;
+  sneezeJolt = 1.0;
+  sneezeCount++;
+  playSneezeSound();
+  queueSpeechBubble(SNEEZE_ACHOO_MESSAGES[Math.floor(Math.random() * SNEEZE_ACHOO_MESSAGES.length)], 80, true);
+  spawnEmoteSet("surprised", 1);
+  for (let i = 0; i < 3; i++) {
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2 - 15;
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 10,
+      y: cy,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -1.5 - Math.random() * 2,
+      life: 25 + Math.random() * 15,
+      maxLife: 40,
+      type: "sparkle",
+      size: 2 + Math.random() * 2,
+    });
+  }
+  if (sneezeCount >= sneezeTotalInEpisode) {
+    sneezeActive = false;
+    sneezeCooldown = SNEEZE_COOLDOWN;
+    queueSpeechBubble("*sniff*... I think that's all~ 😮‍💨🌸", 120, true);
+  }
+}
+
+function trySneezeCure(): boolean {
+  if (!sneezeActive || sneezeBuildUp <= 0) return false;
+  sneezeActive = false;
+  sneezeBuildUp = 0;
+  sneezeCooldown = SNEEZE_COOLDOWN;
+  totalSneezesCured++;
+  petHappiness = Math.min(100, petHappiness + 2);
+  addFriendshipXP(2);
+  playSneezeCureSound();
+  queueSpeechBubble(SNEEZE_CURE_MESSAGES[Math.floor(Math.random() * SNEEZE_CURE_MESSAGES.length)], 150, true);
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      x: cx + (Math.random() - 0.5) * 30,
+      y: cy + (Math.random() - 0.5) * 30,
+      vx: (Math.random() - 0.5) * 3,
+      vy: -1 - Math.random() * 2,
+      life: 40 + Math.random() * 20,
+      maxLife: 60,
+      type: "sparkle",
+      size: 3 + Math.random() * 3,
+    });
+  }
+  if (!sneezeCuredThisSession) {
+    sneezeCuredThisSession = true;
+    addDiaryEntry("general", "🤧", `Offered ${petName} a tissue during sneeze season!`);
+  }
+  return true;
+}
+
+function updateSneezes(): void {
+  if (isSleeping || minigameActive || memoryGameActive) {
+    if (sneezeActive) {
+      sneezeActive = false;
+      sneezeBuildUp = 0;
+    }
+    return;
+  }
+  if (sneezeJolt > 0) {
+    sneezeJolt -= 0.06;
+    if (sneezeJolt < 0) sneezeJolt = 0;
+  }
+  if (sneezeBuildUp > 0) {
+    sneezeBuildUp--;
+    sneezeNoseTwitch += 0.3;
+    if (sneezeBuildUp <= 0) {
+      triggerSneeze();
+    }
+    return;
+  }
+  if (sneezeActive) {
+    sneezeTimer--;
+    if (sneezeTimer <= 0) {
+      beginSneezeBuildUp();
+      sneezeTimer = sneezeInterval + Math.floor((Math.random() - 0.5) * 50);
+    }
+    return;
+  }
+  if (sneezeCooldown > 0) {
+    sneezeCooldown--;
+    return;
+  }
+  if (getSeason() !== "spring") return;
+  const pollenBoost = (currentSeason === "spring") ? 0.00012 : 0;
+  if (Math.random() < pollenBoost) {
+    startSneezeEpisode();
+  }
+}
+
 function isTeaTime(): boolean {
   const hour = new Date().getHours();
   return hour >= 14 && hour < 17; // 2 PM – 5 PM
@@ -8326,6 +8514,11 @@ const achievements: Achievement[] = [
     icon: "😵", unlockMessage: "The ultimate hiccup remedy~! You always know how to help! 😵✨",
     condition: () => totalHiccupsCured >= 10, unlocked: false,
   },
+  {
+    id: "allergy_season", name: "Allergy Season", description: "Cure 15 spring sneeze episodes with tissues",
+    icon: "🤧", unlockMessage: "Always prepared with a tissue~! My spring hero! 🤧🌸✨",
+    condition: () => totalSneezesCured >= 15, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -9036,6 +9229,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`😵 ${totalHiccupsCured} cured`, panelX + panelW - 12, y);
 
+  // --- SNEEZES section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  y += 12;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#F0C0D0";
+  ctx.fillText("SNEEZES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🤧 ${totalSneezesCured} cured`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -9452,6 +9662,7 @@ interface SaveData {
   totalPetalsCaught: number;
   totalTeaParties: number;
   totalHiccupsCured: number;
+  totalSneezesCured: number;
   version: number;
 }
 
@@ -9518,6 +9729,7 @@ function buildSaveData(): SaveData {
     totalPetalsCaught,
     totalTeaParties,
     totalHiccupsCured,
+    totalSneezesCured,
     version: 1,
   };
 }
@@ -9771,6 +9983,9 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).totalHiccupsCured === "number") {
     totalHiccupsCured = (data as SaveData).totalHiccupsCured;
   }
+  if (typeof (data as SaveData).totalSneezesCured === "number") {
+    totalSneezesCured = (data as SaveData).totalSneezesCured;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -9893,6 +10108,11 @@ function onPetClicked(): void {
   const now = Date.now();
   const timeSinceLastClick = now - lastClickTime;
   lastClickTime = now;
+
+  // Try to offer tissue during sneeze buildup
+  if (sneezeActive && sneezeBuildUp > 0) {
+    if (trySneezeCure()) return;
+  }
 
   // Try to cure hiccups with rapid clicks
   if (hiccupActive) {
@@ -12145,6 +12365,9 @@ function update(): void {
   // Hiccup update
   updateHiccups();
 
+  // Sneeze update (spring pollen)
+  updateSneezes();
+
   // Afternoon clouds update
   updateClouds();
 
@@ -13268,6 +13491,16 @@ function draw(): void {
   if (hiccupBounce > 0 && !isSpinning) {
     const jolt = Math.sin(hiccupBounce * Math.PI) * 6;
     ctx.translate(0, -jolt);
+  }
+  // Sneeze jolt — forward head thrust
+  if (sneezeJolt > 0 && !isSpinning) {
+    const thrust = Math.sin(sneezeJolt * Math.PI) * 8;
+    ctx.translate(0, thrust);
+  }
+  // Sneeze buildup nose twitch — subtle side-to-side wobble
+  if (sneezeBuildUp > 0 && !isSpinning) {
+    const wobble = Math.sin(sneezeNoseTwitch * Math.PI * 2) * 1.5 * (1 - sneezeBuildUp / SNEEZE_BUILDUP_FRAMES);
+    ctx.translate(wobble, 0);
   }
   // Spin trick — full 360° backflip rotation around center
   if (isSpinning) {
