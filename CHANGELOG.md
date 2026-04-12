@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.75.0] — 2026-04-12 — Puddle Splashing
+
+### Added
+- **Puddles after rain** — 2–4 water puddles appear on the ground whenever weather transitions away from rainy or stormy conditions
+- **Ripple animation** — each puddle has gentle concentric ripple rings and a shimmer highlight that undulate over time
+- **Gradual evaporation** — puddles slowly fade out and disappear after ~2–3 minutes, with a smooth opacity fade in the last few seconds
+- **Click to splash** — click any puddle to trigger a delightful splash burst, sending water droplets arcing upward
+- **Splash particles** — 8 raindrop particles burst from the splash point in an upward fan pattern
+- **Descending splash sound** — a quick three-tone descending cascade (800→600→400 Hz) plays on each splash
+- **Speech reactions** — 5 playful messages when splashing ("Splash splash~! 💦😆", "Hehe, puddle jumping~! 💧✨")
+- **Diary entry** — first puddle splash each session is recorded in the pet diary
+- **Stats panel section** — dedicated PUDDLES section showing total splashes
+- **Puddle Jumper achievement** — splash in 20 puddles to unlock achievement #50 (💦)
+- **Care points** — each splash awards 2 care points
+- **Full persistence** — total puddle splashes saved across sessions
+- **Total achievements: 50**
+
+**Why this feature:** The rainbow after rain made weather transitions feel magical, but once the rain stopped, the world immediately felt dry. Real rain leaves puddles — shimmering little mirrors on the ground that beg to be jumped in. Puddle splashing adds a tactile, interactive follow-up to rain events: the pet gets to play in the aftermath. It rewards players who notice the puddles before they evaporate, creating a brief window of playful interaction tied to weather. The splash particles and sounds make each click satisfying, and the evaporation timer ensures puddles feel transient and special rather than permanent fixtures.
+
 ## [v0.74.0] — 2026-04-12 — Rainbow After Rain
 
 ### Added

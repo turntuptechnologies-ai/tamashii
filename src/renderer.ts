@@ -5393,6 +5393,158 @@ function drawRainbow(): void {
   ctx.restore();
 }
 
+// --- Puddles After Rain ---
+interface Puddle {
+  x: number;
+  y: number;
+  radiusX: number;
+  radiusY: number;
+  life: number;
+  maxLife: number;
+  ripplePhase: number;
+  splashed: boolean;
+}
+
+const puddles: Puddle[] = [];
+let totalPuddleSplashes = 0;
+let puddleFirstSplash = false;
+const PUDDLE_EVAPORATE_MIN = 7200;   // ~2 minutes
+const PUDDLE_EVAPORATE_MAX = 10800;  // ~3 minutes
+
+function spawnPuddles(): void {
+  const count = 2 + Math.floor(Math.random() * 3); // 2-4 puddles
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundArea = h / 2 + 45; // near pet's feet
+
+  for (let i = 0; i < count; i++) {
+    const px = 20 + Math.random() * (w - 40);
+    const py = groundArea + Math.random() * 30;
+    puddles.push({
+      x: px,
+      y: py,
+      radiusX: 12 + Math.random() * 10,
+      radiusY: 4 + Math.random() * 3,
+      life: PUDDLE_EVAPORATE_MIN + Math.floor(Math.random() * (PUDDLE_EVAPORATE_MAX - PUDDLE_EVAPORATE_MIN)),
+      maxLife: PUDDLE_EVAPORATE_MIN + Math.floor(Math.random() * (PUDDLE_EVAPORATE_MAX - PUDDLE_EVAPORATE_MIN)),
+      ripplePhase: Math.random() * Math.PI * 2,
+      splashed: false,
+    });
+  }
+
+  queueSpeechBubble("Ooh, puddles from the rain~! 💧", 180);
+}
+
+function updatePuddles(): void {
+  for (let i = puddles.length - 1; i >= 0; i--) {
+    const p = puddles[i];
+    p.ripplePhase += 0.04;
+    p.life--;
+    if (p.life <= 0) {
+      puddles.splice(i, 1);
+    }
+  }
+}
+
+function drawPuddles(): void {
+  if (puddles.length === 0) return;
+  ctx.save();
+
+  for (const p of puddles) {
+    const fadeRatio = Math.min(1, p.life / 300); // fade out in last ~5 seconds
+    const alpha = 0.35 * fadeRatio;
+
+    // Water surface
+    const ripple = Math.sin(p.ripplePhase) * 1.5;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.radiusX + ripple, p.radiusY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(100, 160, 220, ${alpha})`;
+    ctx.fill();
+
+    // Shimmer highlight
+    const shimmer = Math.sin(p.ripplePhase * 1.3 + 1) * 0.5 + 0.5;
+    ctx.beginPath();
+    ctx.ellipse(p.x - p.radiusX * 0.3, p.y - p.radiusY * 0.2, p.radiusX * 0.35, p.radiusY * 0.5, -0.3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.4 * shimmer})`;
+    ctx.fill();
+
+    // Concentric ripple rings (gentle expanding)
+    const ringPhase = (p.ripplePhase * 0.5) % (Math.PI * 2);
+    const ringScale = ringPhase / (Math.PI * 2);
+    const ringAlpha = (1 - ringScale) * alpha * 0.3;
+    if (ringAlpha > 0.01) {
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, (p.radiusX * 0.3 + p.radiusX * 0.7 * ringScale), (p.radiusY * 0.3 + p.radiusY * 0.7 * ringScale), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(180, 210, 240, ${ringAlpha})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function tryClickPuddle(clickX: number, clickY: number): boolean {
+  for (const p of puddles) {
+    const dx = (clickX - p.x) / (p.radiusX + 8);
+    const dy = (clickY - p.y) / (p.radiusY + 8);
+    if (dx * dx + dy * dy <= 1) {
+      splashPuddle(p);
+      return true;
+    }
+  }
+  return false;
+}
+
+function splashPuddle(p: Puddle): void {
+  p.splashed = true;
+  totalPuddleSplashes++;
+
+  // Splash particles burst upward
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI * 0.2) + Math.random() * (Math.PI * 0.6); // upward arc
+    const speed = 1.5 + Math.random() * 2;
+    particles.push({
+      x: p.x + (Math.random() - 0.5) * p.radiusX,
+      y: p.y,
+      vx: Math.cos(angle) * speed * (Math.random() < 0.5 ? -1 : 1),
+      vy: -Math.sin(angle) * speed,
+      life: 25 + Math.random() * 15,
+      maxLife: 25 + Math.random() * 15,
+      size: 2 + Math.random() * 2,
+      type: "raindrop",
+    });
+  }
+
+  // Expand puddle ripple briefly
+  p.ripplePhase = 0;
+
+  // Splash sound
+  if (soundEnabled) {
+    playTone(800, 0.08, "sine", 0.06);
+    setTimeout(() => playTone(600, 0.1, "sine", 0.04), 30);
+    setTimeout(() => playTone(400, 0.12, "sine", 0.03), 60);
+  }
+
+  // Pet reactions
+  const reactions = [
+    "Splash splash~! 💦😆",
+    "Hehe, puddle jumping~! 💧✨",
+    "Wheee! Splashy splashy~! 💦",
+    "The water is so cool~! 💧😊",
+    "Jump jump splash~!! 💦💖",
+  ];
+  queueSpeechBubble(reactions[Math.floor(Math.random() * reactions.length)], 180);
+  spawnEmoteSet("happy", 2);
+  addCarePoints(2);
+
+  // Diary entry on first splash this session
+  if (!puddleFirstSplash) {
+    puddleFirstSplash = true;
+    addDiaryEntry("general", "💦", "Splashed in a puddle after the rain! So fun~!");
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -5465,6 +5617,11 @@ function updateWeather(): void {
       const isClearNow = currentWeather === "sunny" || currentWeather === "cloudy";
       if (wasRainy && isClearNow && !rainbowActive) {
         spawnRainbow();
+      }
+
+      // Puddles after rain: spawn when transitioning away from rainy/stormy
+      if (wasRainy && puddles.length === 0) {
+        spawnPuddles();
       }
 
       // Pet reacts to new weather
@@ -7680,6 +7837,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Collected a dew drop, don't start drag
     }
   }
+  // Check for puddle splashes
+  if (puddles.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickPuddle(clickX, clickY)) {
+      return; // Splashed a puddle, don't start drag
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -9323,6 +9489,11 @@ const achievements: Achievement[] = [
     icon: "🌈", unlockMessage: "I've chased so many rainbows~! Each one is magic! 🌈✨💖",
     condition: () => totalRainbowsSeen >= 10, unlocked: false,
   },
+  {
+    id: "puddle_jumper", name: "Puddle Jumper", description: "Splash in 20 puddles",
+    icon: "💦", unlockMessage: "Splash splash splash~! I'm the puddle champion! 💦👑✨",
+    condition: () => totalPuddleSplashes >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10100,6 +10271,16 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🌈 ${totalRainbowsSeen} seen`, panelX + panelW - 12, y);
 
+  y += 14;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#87CEEB";
+  ctx.fillText("PUDDLES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`💦 ${totalPuddleSplashes} splashed`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -10521,6 +10702,7 @@ interface SaveData {
   bestYawnChain: number;
   totalAurorasWitnessed: number;
   totalRainbowsSeen: number;
+  totalPuddleSplashes: number;
   version: number;
 }
 
@@ -10592,6 +10774,7 @@ function buildSaveData(): SaveData {
     bestYawnChain: yawnChainBestLength,
     totalAurorasWitnessed,
     totalRainbowsSeen,
+    totalPuddleSplashes,
     version: 1,
   };
 }
@@ -10863,6 +11046,11 @@ function applySaveData(data: SaveData): void {
   // Restore rainbows seen
   if (typeof (data as SaveData).totalRainbowsSeen === "number") {
     totalRainbowsSeen = (data as SaveData).totalRainbowsSeen;
+  }
+
+  // Restore puddle splashes
+  if (typeof (data as SaveData).totalPuddleSplashes === "number") {
+    totalPuddleSplashes = (data as SaveData).totalPuddleSplashes;
   }
 
   // Restore diary
@@ -13280,6 +13468,9 @@ function update(): void {
   // Rainbow after rain update
   updateRainbow();
 
+  // Puddles after rain update
+  updatePuddles();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -14368,6 +14559,9 @@ function draw(): void {
 
   // Footprints (on the ground, behind everything else)
   drawFootprints();
+
+  // Puddles after rain (on the ground, behind pet)
+  drawPuddles();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);

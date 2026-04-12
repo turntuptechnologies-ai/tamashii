@@ -3,19 +3,19 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.74.0 — Rainbow After Rain (2026-04-12)
+## Last completed: v0.75.0 — Puddle Splashing (2026-04-12)
 
 ### What was done
-- Added rainbow after rain: a 7-band ROYGBIV rainbow arc appears when weather transitions from rainy/stormy to sunny/cloudy
-- Each color band has oscillating opacity and gentle radius shimmer for a breathing glow effect
-- Soft radial glow backdrop behind the arc for ethereal atmosphere
-- Smooth fade in/out over ~45-90 second duration
-- Previous weather tracking added to detect rain→clear transitions
-- Pet reacts with 5 wonder speech bubbles, ascending 7-note arpeggio sound plays
-- First rainbow each session triggers diary entry
-- Stats tracking: total rainbows seen (persisted)
-- Rainbow Chaser achievement (#49): see 10 rainbows
-- Total achievements: 49
+- Added puddle splashing: 2-4 water puddles appear on the ground after rain/storm weather ends
+- Each puddle has ripple animation, shimmer highlights, and concentric expanding ring effects
+- Puddles evaporate over ~2-3 minutes with smooth fade-out
+- Click a puddle to splash: 8 raindrop particles burst upward, descending splash sound plays
+- Pet reacts with 5 playful speech bubbles and happy emotes
+- Each splash awards 2 care points
+- First splash per session triggers diary entry
+- Stats tracking: total puddle splashes (persisted)
+- Puddle Jumper achievement (#50): splash in 20 puddles
+- Total achievements: 50
 
 ### Thoughts for next cycle
 - **Afternoon ambient sounds** — complete the full day cycle with afternoon atmosphere (distant lawn mower, wind chimes, buzzing bees)
@@ -42,19 +42,20 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Sound volume control** — a slider or levels for ambient sound volume
 - **Meteor shower event** — rare night event with many shooting stars at once
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head
-- **Puddle splashing** — after rain, small puddles appear that the pet can splash in
+- **Snowman building** — during snowy weather, click to help pet build a snowman step by step
 
 ### Current architecture notes
-- Renderer is ~15,250+ lines
-- Rainbow system defined after weather state variables, before `pickWeather()`
-- `RAINBOW_COLORS` array: 7 ROYGBIV color strings with ALPHA placeholder replaced at draw time
-- `spawnRainbow()` creates the event, increments counter, triggers speech/sound/diary
-- `updateRainbow()` handles fade in/out timing, called in main update loop after `updateAurora()`
-- `drawRainbow()` renders 7 arc bands with shimmer + glow, called in draw() after weather overlay, before aurora
-- Rainbow triggered in `updateWeather()` when `wasRainy && isClearNow && !rainbowActive`
-- `previousWeather` variable tracks the weather before each transition
-- State variables: rainbowActive, rainbowFade, rainbowDuration, rainbowPhase, rainbowFirstSeen, totalRainbowsSeen
-- Save data: totalRainbowsSeen persisted
+- Renderer is ~15,400+ lines
+- Puddle system defined after rainbow section, before `pickWeather()`
+- `Puddle` interface: x, y, radiusX, radiusY, life, maxLife, ripplePhase, splashed
+- `spawnPuddles()` creates 2-4 puddles near ground level, triggers speech
+- `updatePuddles()` handles ripple animation and evaporation, called after `updateRainbow()`
+- `drawPuddles()` renders water ellipse + shimmer + concentric ripple rings, drawn after footprints before toy
+- `tryClickPuddle()` checks click against puddle ellipse bounds
+- `splashPuddle()` creates burst particles, plays sound, triggers speech/diary/stats
+- Puddles triggered in `updateWeather()` when `wasRainy && puddles.length === 0`
+- State variables: puddles array, totalPuddleSplashes, puddleFirstSplash
+- Save data: totalPuddleSplashes persisted
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 49
+- Total achievements: 50
