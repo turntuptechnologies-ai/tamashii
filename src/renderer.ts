@@ -5264,6 +5264,7 @@ const SEASON_WEATHER_WEIGHTS: Record<Season, Record<WeatherType, number>> = {
 };
 
 let currentWeather: WeatherType = "sunny";
+let previousWeather: WeatherType = "sunny"; // track previous weather for rainbow detection
 let weatherTimer = 0;             // frames until next weather change
 let weatherTransitionAlpha = 0;   // 0-1 fade for weather transition
 let weatherTransitioning = false;
@@ -5272,6 +5273,125 @@ let weatherParticleTimer = 0;     // spawn timer for weather-specific particles
 let weatherWidgetPulse = 0;       // animation phase for widget
 let weatherTypesSeen: Set<string> = new Set();
 let weatherReactionCooldown = 0;  // prevent spam reactions
+
+// --- Rainbow After Rain ---
+let rainbowActive = false;
+let rainbowFade = 0;             // 0-1 opacity for smooth fade in/out
+let rainbowDuration = 0;         // frames remaining
+let rainbowPhase = 0;            // animation phase for shimmer
+let rainbowFirstSeen = false;    // diary entry flag per session
+let totalRainbowsSeen = 0;       // persisted stat
+
+const RAINBOW_DURATION_MIN = 2700;  // ~45 seconds
+const RAINBOW_DURATION_MAX = 5400;  // ~90 seconds
+const RAINBOW_FADE_SPEED = 0.006;   // smooth fade in/out (~2.8 seconds)
+
+const RAINBOW_COLORS = [
+  "rgba(255, 0, 0, ALPHA)",       // red
+  "rgba(255, 127, 0, ALPHA)",     // orange
+  "rgba(255, 255, 0, ALPHA)",     // yellow
+  "rgba(0, 200, 0, ALPHA)",       // green
+  "rgba(0, 100, 255, ALPHA)",     // blue
+  "rgba(75, 0, 130, ALPHA)",      // indigo
+  "rgba(148, 0, 211, ALPHA)",     // violet
+];
+
+function spawnRainbow(): void {
+  rainbowActive = true;
+  rainbowFade = 0;
+  rainbowDuration = RAINBOW_DURATION_MIN + Math.floor(Math.random() * (RAINBOW_DURATION_MAX - RAINBOW_DURATION_MIN));
+  rainbowPhase = 0;
+  totalRainbowsSeen++;
+
+  // Pet reacts with wonder
+  const reactions = [
+    "A rainbow~!! How beautiful! 🌈",
+    "Look look! A rainbow appeared! 🌈✨",
+    "The rain left us a gift~ 🌈",
+    "So many colors in the sky~! 🌈",
+    "Wow~! A real rainbow! I'm so lucky! 🌈💖",
+  ];
+  queueSpeechBubble(reactions[Math.floor(Math.random() * reactions.length)], 240);
+
+  // Sound: ascending arpeggio with shimmering tones
+  if (soundEnabled) {
+    const notes = [523, 587, 659, 698, 784, 880, 988]; // C5 to B5
+    notes.forEach((freq, i) => {
+      setTimeout(() => {
+        playTone(freq, 0.4, "sine", 0.04);
+        playTone(freq * 1.5, 0.3, "sine", 0.02); // fifth overtone for shimmer
+      }, i * 120);
+    });
+  }
+
+  // Diary entry on first rainbow this session
+  if (!rainbowFirstSeen) {
+    rainbowFirstSeen = true;
+    addDiaryEntry("general", "🌈", "A rainbow appeared after the rain! So beautiful~!");
+  }
+}
+
+function updateRainbow(): void {
+  if (!rainbowActive) return;
+
+  rainbowPhase += 0.02;
+  rainbowDuration--;
+
+  // Fade in
+  if (rainbowDuration > 120 && rainbowFade < 1) {
+    rainbowFade = Math.min(1, rainbowFade + RAINBOW_FADE_SPEED);
+  }
+
+  // Fade out in last ~2 seconds (120 frames)
+  if (rainbowDuration <= 120) {
+    rainbowFade = Math.max(0, rainbowFade - RAINBOW_FADE_SPEED);
+  }
+
+  if (rainbowDuration <= 0 && rainbowFade <= 0) {
+    rainbowActive = false;
+  }
+}
+
+function drawRainbow(): void {
+  if (!rainbowActive && rainbowFade <= 0) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.save();
+
+  // Rainbow arc: a large semicircle anchored at the bottom-right area
+  const centerX = w * 0.65;
+  const centerY = h * 0.95;
+  const baseRadius = Math.min(w, h) * 0.7;
+  const bandWidth = Math.min(w, h) * 0.025; // width of each color band
+
+  // Subtle shimmer: slight radius oscillation
+  const shimmer = Math.sin(rainbowPhase) * 1.5;
+
+  for (let i = 0; i < RAINBOW_COLORS.length; i++) {
+    const radius = baseRadius - i * (bandWidth + 1) + shimmer;
+    const alpha = rainbowFade * (0.18 + 0.04 * Math.sin(rainbowPhase + i * 0.5));
+    const color = RAINBOW_COLORS[i].replace("ALPHA", alpha.toFixed(3));
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, Math.PI, Math.PI * 1.75); // arc from left to top-right
+    ctx.lineWidth = bandWidth;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+
+  // Soft glow behind the rainbow
+  const glowGrad = ctx.createRadialGradient(centerX, centerY, baseRadius * 0.5, centerX, centerY, baseRadius * 1.1);
+  glowGrad.addColorStop(0, `rgba(255, 255, 255, ${rainbowFade * 0.03})`);
+  glowGrad.addColorStop(0.5, `rgba(255, 200, 100, ${rainbowFade * 0.02})`);
+  glowGrad.addColorStop(1, "rgba(255, 200, 100, 0)");
+  ctx.fillStyle = glowGrad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, baseRadius * 1.1, Math.PI, Math.PI * 1.75);
+  ctx.fill();
+
+  ctx.restore();
+}
 
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
@@ -5336,8 +5456,16 @@ function updateWeather(): void {
     if (weatherTransitionAlpha >= 1) {
       weatherTransitioning = false;
       weatherTransitionAlpha = 0;
+      const wasRainy = currentWeather === "rainy" || currentWeather === "stormy";
+      previousWeather = currentWeather;
       currentWeather = weatherNextType;
       weatherTypesSeen.add(currentWeather);
+
+      // Rainbow after rain: spawn when transitioning from rainy/stormy to sunny/cloudy
+      const isClearNow = currentWeather === "sunny" || currentWeather === "cloudy";
+      if (wasRainy && isClearNow && !rainbowActive) {
+        spawnRainbow();
+      }
 
       // Pet reacts to new weather
       if (weatherReactionCooldown <= 0) {
@@ -9190,6 +9318,11 @@ const achievements: Achievement[] = [
     icon: "🌌", unlockMessage: "The northern lights dance just for me~! 🌌💚✨",
     condition: () => totalAurorasWitnessed >= 5, unlocked: false,
   },
+  {
+    id: "rainbow_chaser", name: "Rainbow Chaser", description: "See 10 rainbows after rain",
+    icon: "🌈", unlockMessage: "I've chased so many rainbows~! Each one is magic! 🌈✨💖",
+    condition: () => totalRainbowsSeen >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -9950,6 +10083,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🌌 ${totalAurorasWitnessed} witnessed`, panelX + panelW - 12, y);
 
+  // Rainbow section
+  y += 6;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.stroke();
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFB347";
+  ctx.fillText("RAINBOWS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌈 ${totalRainbowsSeen} seen`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -10370,6 +10520,7 @@ interface SaveData {
   totalYawnChainsCaught: number;
   bestYawnChain: number;
   totalAurorasWitnessed: number;
+  totalRainbowsSeen: number;
   version: number;
 }
 
@@ -10440,6 +10591,7 @@ function buildSaveData(): SaveData {
     totalYawnChainsCaught,
     bestYawnChain: yawnChainBestLength,
     totalAurorasWitnessed,
+    totalRainbowsSeen,
     version: 1,
   };
 }
@@ -10706,6 +10858,11 @@ function applySaveData(data: SaveData): void {
   // Restore auroras witnessed
   if (typeof (data as SaveData).totalAurorasWitnessed === "number") {
     totalAurorasWitnessed = (data as SaveData).totalAurorasWitnessed;
+  }
+
+  // Restore rainbows seen
+  if (typeof (data as SaveData).totalRainbowsSeen === "number") {
+    totalRainbowsSeen = (data as SaveData).totalRainbowsSeen;
   }
 
   // Restore diary
@@ -13120,6 +13277,9 @@ function update(): void {
   // Aurora borealis update
   updateAurora();
 
+  // Rainbow after rain update
+  updateRainbow();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -14190,6 +14350,9 @@ function draw(): void {
 
   // Weather overlay (atmosphere effects — behind pet)
   drawWeatherOverlay();
+
+  // Rainbow after rain (sky layer, behind pet)
+  drawRainbow();
 
   // Aurora borealis (sky layer, behind pet)
   drawAurora();

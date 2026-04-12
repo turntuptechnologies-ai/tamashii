@@ -3,19 +3,19 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.73.0 — 🧬 Aurora Borealis (2026-04-12)
+## Last completed: v0.74.0 — Rainbow After Rain (2026-04-12)
 
 ### What was done
-- Added aurora borealis as a rare nighttime visual event (🧬 Mutation — unrelated to previous cycle's suggestions)
-- 3-5 flowing curtain bands rendered with layered sine-wave displacement for organic undulation
-- Colors span green, teal, cyan, purple, and magenta hues with randomized variation
-- Shimmer effect via varying opacity across band width, plus vertical gradient falloff
-- Smooth fade in/out over ~45-90 second duration, 4% chance per ~60s check during nighttime
-- Pet reacts with wonder speech bubbles, ethereal pad sound plays on appearance
-- First sighting each session triggers diary entry
-- Stats tracking: total auroras witnessed (persisted)
-- Aurora Witness achievement (#48): witness 5 aurora events
-- Total achievements: 48
+- Added rainbow after rain: a 7-band ROYGBIV rainbow arc appears when weather transitions from rainy/stormy to sunny/cloudy
+- Each color band has oscillating opacity and gentle radius shimmer for a breathing glow effect
+- Soft radial glow backdrop behind the arc for ethereal atmosphere
+- Smooth fade in/out over ~45-90 second duration
+- Previous weather tracking added to detect rain→clear transitions
+- Pet reacts with 5 wonder speech bubbles, ascending 7-note arpeggio sound plays
+- First rainbow each session triggers diary entry
+- Stats tracking: total rainbows seen (persisted)
+- Rainbow Chaser achievement (#49): see 10 rainbows
+- Total achievements: 49
 
 ### Thoughts for next cycle
 - **Afternoon ambient sounds** — complete the full day cycle with afternoon atmosphere (distant lawn mower, wind chimes, buzzing bees)
@@ -41,21 +41,20 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Guided stargazing** — pet points out specific stars and tells you their names during night
 - **Sound volume control** — a slider or levels for ambient sound volume
 - **Meteor shower event** — rare night event with many shooting stars at once
-- **Rainbow after rain** — a rainbow arc appears when weather transitions from rain to clear
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head
+- **Puddle splashing** — after rain, small puddles appear that the pet can splash in
 
 ### Current architecture notes
-- Renderer is ~15,100+ lines
-- Aurora system defined after `updateAmbientMorningSounds()`, before `logDailyActivity()`
-- `AuroraBand` interface: phase, speed, amplitude, yBase, hue, opacity, width
-- `auroraActive` boolean gates the event, `auroraFade` controls smooth 0-1 transitions
-- `spawnAurora()` creates 3-5 bands with varied sine-wave properties and color hues
-- `updateAurora()` called in main update loop after `updateShootingStars()`
-- `drawAurora()` called in draw() after weather overlay, before cherry blossoms (sky layer)
-- Each band rendered as vertical strips with 3-layer sine displacement for organic motion
-- Aurora check happens every AURORA_CHECK_INTERVAL (3600 frames, ~60s) with AURORA_CHANCE (4%)
-- State variables: auroraActive, auroraFade, auroraDuration, auroraCheckTimer, auroraBands, auroraFirstSeen, totalAurorasWitnessed
-- Save data: totalAurorasWitnessed persisted
+- Renderer is ~15,250+ lines
+- Rainbow system defined after weather state variables, before `pickWeather()`
+- `RAINBOW_COLORS` array: 7 ROYGBIV color strings with ALPHA placeholder replaced at draw time
+- `spawnRainbow()` creates the event, increments counter, triggers speech/sound/diary
+- `updateRainbow()` handles fade in/out timing, called in main update loop after `updateAurora()`
+- `drawRainbow()` renders 7 arc bands with shimmer + glow, called in draw() after weather overlay, before aurora
+- Rainbow triggered in `updateWeather()` when `wasRainy && isClearNow && !rainbowActive`
+- `previousWeather` variable tracks the weather before each transition
+- State variables: rainbowActive, rainbowFade, rainbowDuration, rainbowPhase, rainbowFirstSeen, totalRainbowsSeen
+- Save data: totalRainbowsSeen persisted
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 48
+- Total achievements: 49

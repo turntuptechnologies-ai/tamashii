@@ -3,6 +3,24 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.74.0] — 2026-04-12 — Rainbow After Rain
+
+### Added
+- **Rainbow arc** — a beautiful seven-band rainbow arc appears in the sky when weather transitions from rainy or stormy to sunny or cloudy, featuring all classic ROYGBIV colors rendered as smooth curved bands
+- **Shimmer animation** — each color band has a subtle oscillating opacity and gentle radius shimmer, making the rainbow appear to glow and breathe
+- **Soft glow backdrop** — a warm radial gradient glows behind the rainbow arc for an ethereal, atmospheric look
+- **Smooth fade in/out** — rainbow gracefully fades in when it appears and fades out after ~45–90 seconds, never popping in or out abruptly
+- **Previous weather tracking** — the weather system now tracks the previous weather type to detect rain-to-clear transitions
+- **Speech reactions** — 5 delighted messages when the rainbow appears ("A rainbow~!! How beautiful! 🌈")
+- **Ascending arpeggio sound** — a shimmering seven-note ascending scale (C5 to B5) with fifth overtones plays when the rainbow spawns
+- **Diary entry** — first rainbow sighting each session is logged to the pet diary
+- **Stats panel section** — dedicated RAINBOWS section showing total rainbows seen
+- **Rainbow Chaser achievement** — see 10 rainbows after rain to unlock achievement #49 (🌈)
+- **Full persistence** — total rainbows seen saved across sessions
+- **Total achievements: 49**
+
+**Why this feature:** Tamashii's weather system already creates immersive atmospheric variety — rain patters, storms flash, snow drifts — but weather transitions were abrupt and unremarkable. A rainbow appearing after rain is one of nature's most universally beloved moments: that instant when the clouds part and color arcs across the sky. It rewards players who weather the storm with a fleeting, beautiful surprise. The ~45–90 second duration makes each rainbow a moment to pause and appreciate, and the ascending arpeggio sound creates an unmistakable "something magical just happened" feeling. Combined with the pet's excited reactions, it transforms a simple weather change into a shared experience.
+
 ## [v0.73.0] — 2026-04-12 — 🧬 Aurora Borealis
 
 ### Added
