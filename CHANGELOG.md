@@ -3,6 +3,27 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.73.0] — 2026-04-12 — 🧬 Aurora Borealis
+
+### Added
+- **Aurora borealis event** — rare, breathtaking northern lights appear during nighttime as flowing curtains of green, teal, cyan, purple, and magenta light undulating across the sky
+- **Flowing curtain rendering** — 3–5 semi-transparent bands with layered sine-wave displacement create organic, rippling motion that looks like real aurora curtains
+- **Shimmer effect** — each curtain band has varying opacity across its width, creating a dynamic sparkle-shimmer as the waves flow
+- **Vertical gradient falloff** — bands glow brightest at their crests and fade downward, mimicking the way real aurora light diffuses
+- **Smooth fade in/out** — aurora events gracefully fade in when they begin and fade out when they end, lasting ~45–90 seconds each
+- **Rare spawn chance** — 4% chance every ~60 seconds during nighttime, making each sighting feel special and unexpected
+- **Speech reactions** — 5 wonder-filled messages when the aurora appears ("The northern lights~!! I can't believe it! 🤩")
+- **Ethereal pad sound** — a soft layered chord of sine tones (220–554Hz) fades in when the aurora begins
+- **Diary entry** — first aurora sighting each session is logged to the pet diary
+- **Stats panel section** — dedicated AURORA BOREALIS section showing total auroras witnessed
+- **Aurora Witness achievement** — witness the aurora borealis 5 times to unlock achievement #48 (🌌)
+- **Full persistence** — total auroras witnessed saved across sessions
+- **Total achievements: 48**
+
+🧬 **Mutation!** This feature has nothing to do with the previous cycle's ambient sound suggestions — it's an unexpected evolutionary leap! Instead of more audio, Tamashii got a stunning visual spectacle.
+
+**Why this feature:** Three consecutive cycles focused on ambient audio (night sounds, morning birdsong). This mutation breaks the pattern with a purely visual atmospheric event. The aurora borealis is one of nature's most awe-inspiring phenomena — rare, beautiful, and worth staying up for. In Tamashii, it transforms an ordinary night into something magical: flowing curtains of color that make you stop and watch. The rarity (4% chance per minute of nighttime) means each sighting is genuinely special, and the pet's delighted reactions make it feel like a shared experience.
+
 ## [v0.72.0] — 2026-04-12 — Ambient Morning Birdsong
 
 ### Added

@@ -3,26 +3,26 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.72.0 — Ambient Morning Birdsong (2026-04-12)
+## Last completed: v0.73.0 — 🧬 Aurora Borealis (2026-04-12)
 
 ### What was done
-- Added ambient morning birdsong system with three synthesized bird types: robin chirps, warbler trills, and cuckoo calls
-- Robin chirps use multi-note phrases with randomized pitch (2000-2600Hz), note count (2-4), and gentle frequency slides
-- Warbler trills use rapid alternating high-low tone oscillation (3000-3800Hz) with variable speed for shimmering effect
-- Cuckoo calls use a two-note descending pattern (high→low at 0.75× ratio) with smooth envelope shaping
-- All sounds have randomized intervals (robins ~2-6s, warblers ~4-10s, cuckoos ~20-40s)
-- Pet reacts to robin chirps (15% chance) and cuckoo calls (25% chance) with speech bubbles
-- First morning birdsong session triggers a diary entry
-- All sounds respect the soundEnabled toggle
-- Complements the night sound system — Tamashii now has full day-night ambient audio
-- Total achievements: 47
+- Added aurora borealis as a rare nighttime visual event (🧬 Mutation — unrelated to previous cycle's suggestions)
+- 3-5 flowing curtain bands rendered with layered sine-wave displacement for organic undulation
+- Colors span green, teal, cyan, purple, and magenta hues with randomized variation
+- Shimmer effect via varying opacity across band width, plus vertical gradient falloff
+- Smooth fade in/out over ~45-90 second duration, 4% chance per ~60s check during nighttime
+- Pet reacts with wonder speech bubbles, ethereal pad sound plays on appearance
+- First sighting each session triggers diary entry
+- Stats tracking: total auroras witnessed (persisted)
+- Aurora Witness achievement (#48): witness 5 aurora events
+- Total achievements: 48
 
 ### Thoughts for next cycle
-- **Afternoon ambient sounds** — complete the day cycle with afternoon sounds (distant lawn mower? church bells? children playing?)
+- **Afternoon ambient sounds** — complete the full day cycle with afternoon atmosphere (distant lawn mower, wind chimes, buzzing bees)
 - **Rain sounds** — ambient rain during weather events, complementing the existing weather system
-- **Frog chorus** — spring evening ambient sound of distant frogs, bridging the gap between day and night sounds
+- **Frog chorus** — spring evening ambient sound of distant frogs, bridging afternoon and night
 - **Summer cicadas** — ambient cicada sounds during summer months as a seasonal variant
-- **Sleep ritual** — a calming multi-phase sequence when the pet falls asleep (yawn → stretch → curl up → zzz)
+- **Sleep ritual** — a calming multi-phase sequence when the pet falls asleep (yawn -> stretch -> curl up -> zzz)
 - **Dream bubbles enhancement** — while sleeping, show actual thought bubble clouds with dream text/scenes
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster
 - **Pet outfits** — full body cosmetic sets beyond single accessories
@@ -40,19 +40,22 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Pet journal reflections** — pet writes its own diary entries about the day at bedtime
 - **Guided stargazing** — pet points out specific stars and tells you their names during night
 - **Sound volume control** — a slider or levels for ambient sound volume
+- **Meteor shower event** — rare night event with many shooting stars at once
+- **Rainbow after rain** — a rainbow arc appears when weather transitions from rain to clear
+- **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head
 
 ### Current architecture notes
-- Renderer is ~14,900+ lines
-- Ambient morning birdsong system defined after `updateAmbientNightSounds()`, before `logDailyActivity()`
-- `ambientMorningActive` boolean gates the system, toggled by time-of-day checks in `updateAmbientMorningSounds()`
-- Three independent sound functions: `playRobinChirp()`, `playWarblerTrill()`, `playCuckooCall()`
-- Robin chirps use direct AudioContext oscillator scheduling with multi-note phrases
-- Warbler trills use a masterGain node with multiple oscillators for rapid alternation
-- Cuckoo calls use two oscillators scheduled sequentially for the classic two-note pattern
-- `updateAmbientMorningSounds()` called in main update loop right after `updateAmbientNightSounds()`
-- State variables: `ambientMorningActive`, `nextRobinTime`, `nextWarblerTime`, `nextCuckooTime`, `ambientMorningFirstSession`
-- Day-night ambient audio cycle is now complete: morning birdsong (6am-12pm), night sounds (evening+night)
-- No save data additions — ambient sounds are session-only atmospheric effects
+- Renderer is ~15,100+ lines
+- Aurora system defined after `updateAmbientMorningSounds()`, before `logDailyActivity()`
+- `AuroraBand` interface: phase, speed, amplitude, yBase, hue, opacity, width
+- `auroraActive` boolean gates the event, `auroraFade` controls smooth 0-1 transitions
+- `spawnAurora()` creates 3-5 bands with varied sine-wave properties and color hues
+- `updateAurora()` called in main update loop after `updateShootingStars()`
+- `drawAurora()` called in draw() after weather overlay, before cherry blossoms (sky layer)
+- Each band rendered as vertical strips with 3-layer sine displacement for organic motion
+- Aurora check happens every AURORA_CHECK_INTERVAL (3600 frames, ~60s) with AURORA_CHANCE (4%)
+- State variables: auroraActive, auroraFade, auroraDuration, auroraCheckTimer, auroraBands, auroraFirstSeen, totalAurorasWitnessed
+- Save data: totalAurorasWitnessed persisted
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 47
+- Total achievements: 48

@@ -2122,6 +2122,183 @@ function updateAmbientMorningSounds(): void {
   }
 }
 
+// --- Aurora Borealis ---
+// Rare nighttime visual event: flowing curtains of green/purple/blue light across the sky
+interface AuroraBand {
+  phase: number;       // sine wave phase offset
+  speed: number;       // wave animation speed
+  amplitude: number;   // wave height
+  yBase: number;       // vertical base position (0-1 of canvas height)
+  hue: number;         // color hue
+  opacity: number;     // base opacity
+  width: number;       // band thickness
+}
+
+let auroraActive = false;
+let auroraFade = 0;          // 0-1 fade in/out
+let auroraDuration = 0;      // frames remaining
+let auroraCheckTimer = 0;    // timer between spawn checks
+let auroraBands: AuroraBand[] = [];
+let auroraFirstSeen = false; // diary entry flag (session)
+let totalAurorasWitnessed = 0;
+const AURORA_CHECK_INTERVAL = 3600;  // check every ~60 seconds
+const AURORA_CHANCE = 0.04;          // 4% chance per check during nighttime
+const AURORA_MIN_DURATION = 2700;    // ~45 seconds
+const AURORA_MAX_DURATION = 5400;    // ~90 seconds
+const AURORA_FADE_SPEED = 0.008;     // smooth fade in/out
+
+const AURORA_SPEECHES = [
+  "Whoa...! The sky is glowing~! 🌌",
+  "So beautiful... like magic curtains in the sky~! ✨",
+  "The northern lights~!! I can't believe it! 🤩",
+  "Look at all those colors dancing up there~! 💚💜",
+  "The sky is alive with light... so breathtaking~ 🌠",
+];
+
+function spawnAurora(): void {
+  auroraActive = true;
+  auroraDuration = AURORA_MIN_DURATION + Math.floor(Math.random() * (AURORA_MAX_DURATION - AURORA_MIN_DURATION));
+  auroraFade = 0;
+  auroraBands = [];
+
+  // Create 3-5 flowing curtain bands with varied properties
+  const bandCount = 3 + Math.floor(Math.random() * 3);
+  const hues = [120, 150, 180, 270, 300]; // green, teal, cyan, purple, magenta
+  for (let i = 0; i < bandCount; i++) {
+    auroraBands.push({
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.003 + Math.random() * 0.004,
+      amplitude: 8 + Math.random() * 15,
+      yBase: 0.08 + (i / bandCount) * 0.25 + (Math.random() - 0.5) * 0.06,
+      hue: hues[Math.floor(Math.random() * hues.length)] + (Math.random() - 0.5) * 20,
+      opacity: 0.12 + Math.random() * 0.1,
+      width: 18 + Math.random() * 20,
+    });
+  }
+
+  totalAurorasWitnessed++;
+
+  // Speech reaction
+  if (!isSleeping && !speechBubble) {
+    queueSpeechBubble(AURORA_SPEECHES[Math.floor(Math.random() * AURORA_SPEECHES.length)], 200, true);
+  }
+
+  // Diary entry on first sighting this session
+  if (!auroraFirstSeen) {
+    auroraFirstSeen = true;
+    addDiaryEntry("general", "🌌", "Witnessed the aurora borealis~! The sky danced with magical light!");
+  }
+
+  // Ethereal shimmer sound
+  playAuroraSound();
+}
+
+function playAuroraSound(): void {
+  if (!soundEnabled) return;
+  // Ethereal pad — layered soft tones fading in
+  const freqs = [220, 330, 440, 554];
+  for (let i = 0; i < freqs.length; i++) {
+    setTimeout(() => {
+      playTone(freqs[i], 2.0, "sine", 0.02);
+    }, i * 300);
+  }
+}
+
+function updateAurora(): void {
+  const isNight = currentTimeOfDay === "night";
+
+  // Only spawn during nighttime
+  if (isNight && !auroraActive) {
+    auroraCheckTimer++;
+    if (auroraCheckTimer >= AURORA_CHECK_INTERVAL) {
+      auroraCheckTimer = 0;
+      if (Math.random() < AURORA_CHANCE) {
+        spawnAurora();
+      }
+    }
+  } else if (!isNight && !auroraActive) {
+    auroraCheckTimer = 0;
+  }
+
+  if (!auroraActive) {
+    if (auroraFade > 0) {
+      auroraFade = Math.max(0, auroraFade - AURORA_FADE_SPEED);
+    }
+    return;
+  }
+
+  // Fade in
+  if (auroraFade < 1) {
+    auroraFade = Math.min(1, auroraFade + AURORA_FADE_SPEED);
+  }
+
+  // Count down duration
+  auroraDuration--;
+
+  // Animate band phases
+  for (const band of auroraBands) {
+    band.phase += band.speed;
+  }
+
+  // End aurora
+  if (auroraDuration <= 0) {
+    auroraActive = false;
+    // auroraFade will decay in the next frames
+  }
+
+  // If time of day changes away from night, end aurora
+  if (!isNight) {
+    auroraActive = false;
+  }
+}
+
+function drawAurora(): void {
+  if (auroraFade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = auroraFade * 0.7;
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  for (const band of auroraBands) {
+    const y0 = h * band.yBase;
+
+    // Draw the curtain as a series of vertical strips with sine-wave displacement
+    const sliceWidth = 2;
+    const sliceCount = Math.ceil(w / sliceWidth);
+
+    for (let s = 0; s < sliceCount; s++) {
+      const x = s * sliceWidth;
+      const t = band.phase;
+
+      // Layered sine waves for organic undulation
+      const wave1 = Math.sin((x / w) * Math.PI * 3 + t) * band.amplitude;
+      const wave2 = Math.sin((x / w) * Math.PI * 5 + t * 1.7) * band.amplitude * 0.5;
+      const wave3 = Math.sin((x / w) * Math.PI * 1.5 + t * 0.6) * band.amplitude * 0.3;
+      const yOffset = wave1 + wave2 + wave3;
+
+      // Varying opacity across the curtain for shimmer effect
+      const shimmer = 0.5 + 0.5 * Math.sin((x / w) * Math.PI * 4 + t * 2.3);
+      const edgeFade = Math.sin((x / w) * Math.PI); // fade at edges
+
+      const localOpacity = band.opacity * shimmer * edgeFade;
+
+      // Vertical gradient for each strip — bright at wave crest, fading downward
+      const grad = ctx.createLinearGradient(x, y0 + yOffset - band.width * 0.5, x, y0 + yOffset + band.width * 1.5);
+      grad.addColorStop(0, `hsla(${band.hue}, 80%, 65%, 0)`);
+      grad.addColorStop(0.3, `hsla(${band.hue}, 80%, 65%, ${localOpacity})`);
+      grad.addColorStop(0.5, `hsla(${band.hue}, 70%, 55%, ${localOpacity * 0.7})`);
+      grad.addColorStop(1, `hsla(${band.hue}, 60%, 45%, 0)`);
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y0 + yOffset - band.width * 0.5, sliceWidth + 1, band.width * 2);
+    }
+  }
+
+  ctx.restore();
+}
+
 function logDailyActivity(activity: string): void {
   if (!dailyActivityLog.includes(activity)) {
     dailyActivityLog.push(activity);
@@ -9008,6 +9185,11 @@ const achievements: Achievement[] = [
     icon: "🥱", unlockMessage: "The yawns just won't stop~! So contagious! 🥱✨",
     condition: () => yawnChainBestLength >= 10, unlocked: false,
   },
+  {
+    id: "aurora_witness", name: "Aurora Witness", description: "Witness the aurora borealis 5 times",
+    icon: "🌌", unlockMessage: "The northern lights dance just for me~! 🌌💚✨",
+    condition: () => totalAurorasWitnessed >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -9752,6 +9934,22 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🥱 ${totalYawnChainsCaught} caught · best ${yawnChainBestLength}`, panelX + panelW - 12, y);
 
+  // --- AURORA section ---
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.stroke();
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#80E8A0";
+  ctx.fillText("AURORA BOREALIS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌌 ${totalAurorasWitnessed} witnessed`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -10171,6 +10369,7 @@ interface SaveData {
   totalSneezesCured: number;
   totalYawnChainsCaught: number;
   bestYawnChain: number;
+  totalAurorasWitnessed: number;
   version: number;
 }
 
@@ -10240,6 +10439,7 @@ function buildSaveData(): SaveData {
     totalSneezesCured,
     totalYawnChainsCaught,
     bestYawnChain: yawnChainBestLength,
+    totalAurorasWitnessed,
     version: 1,
   };
 }
@@ -10501,6 +10701,11 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).bestYawnChain === "number") {
     yawnChainBestLength = (data as SaveData).bestYawnChain;
+  }
+
+  // Restore auroras witnessed
+  if (typeof (data as SaveData).totalAurorasWitnessed === "number") {
+    totalAurorasWitnessed = (data as SaveData).totalAurorasWitnessed;
   }
 
   // Restore diary
@@ -12912,6 +13117,9 @@ function update(): void {
   // Shooting star update
   updateShootingStars();
 
+  // Aurora borealis update
+  updateAurora();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -13982,6 +14190,9 @@ function draw(): void {
 
   // Weather overlay (atmosphere effects — behind pet)
   drawWeatherOverlay();
+
+  // Aurora borealis (sky layer, behind pet)
+  drawAurora();
 
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
