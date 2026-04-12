@@ -377,6 +377,19 @@ const OWL_MAX_INTERVAL = 3600;
 const WIND_MIN_INTERVAL = 900;
 const WIND_MAX_INTERVAL = 1800;
 
+// --- Ambient Morning Birdsong ---
+let ambientMorningActive = false;
+let nextRobinTime = 0;
+let nextWarblerTime = 0;
+let nextCuckooTime = 0;
+let ambientMorningFirstSession = false;
+const ROBIN_MIN_INTERVAL = 120;
+const ROBIN_MAX_INTERVAL = 360;
+const WARBLER_MIN_INTERVAL = 240;
+const WARBLER_MAX_INTERVAL = 600;
+const CUCKOO_MIN_INTERVAL = 1200;
+const CUCKOO_MAX_INTERVAL = 2400;
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -1968,6 +1981,144 @@ function updateAmbientNightSounds(): void {
   if (frame >= nextWindTime) {
     playWindGust();
     nextWindTime = frame + WIND_MIN_INTERVAL + Math.floor(Math.random() * (WIND_MAX_INTERVAL - WIND_MIN_INTERVAL));
+  }
+}
+
+// --- Ambient Morning Birdsong Functions ---
+
+function playRobinChirp(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const noteCount = 2 + Math.floor(Math.random() * 3);
+  const baseFreq = 2000 + Math.random() * 600;
+  for (let i = 0; i < noteCount; i++) {
+    const noteStart = t + i * (0.12 + Math.random() * 0.06);
+    const freq = baseFreq + (Math.random() - 0.5) * 400;
+    const dur = 0.08 + Math.random() * 0.06;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, noteStart);
+    osc.frequency.exponentialRampToValueAtTime(freq * (0.9 + Math.random() * 0.2), noteStart + dur);
+    gain.gain.setValueAtTime(0, noteStart);
+    gain.gain.linearRampToValueAtTime(0.02 + Math.random() * 0.01, noteStart + 0.01);
+    gain.gain.setValueAtTime(0.02, noteStart + dur * 0.6);
+    gain.gain.exponentialRampToValueAtTime(0.001, noteStart + dur);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(noteStart);
+    osc.stop(noteStart + dur + 0.01);
+  }
+}
+
+function playWarblerTrill(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const trillCount = 6 + Math.floor(Math.random() * 6);
+  const baseFreq = 3000 + Math.random() * 800;
+  const trillSpeed = 0.04 + Math.random() * 0.02;
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0, t);
+  masterGain.gain.linearRampToValueAtTime(0.018, t + 0.05);
+  masterGain.gain.setValueAtTime(0.018, t + trillCount * trillSpeed * 0.7);
+  masterGain.gain.exponentialRampToValueAtTime(0.001, t + trillCount * trillSpeed + 0.1);
+  masterGain.connect(audioCtx.destination);
+  for (let i = 0; i < trillCount; i++) {
+    const noteStart = t + i * trillSpeed;
+    const high = baseFreq + 200;
+    const low = baseFreq - 200;
+    const freq = i % 2 === 0 ? high : low;
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, noteStart);
+    osc.connect(masterGain);
+    osc.start(noteStart);
+    osc.stop(noteStart + trillSpeed * 0.9);
+  }
+}
+
+function playCuckooCall(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const highNote = 1200 + Math.random() * 100;
+  const lowNote = highNote * 0.75;
+  const osc1 = audioCtx.createOscillator();
+  const gain1 = audioCtx.createGain();
+  osc1.type = "sine";
+  osc1.frequency.setValueAtTime(highNote, t);
+  osc1.frequency.exponentialRampToValueAtTime(highNote * 0.95, t + 0.2);
+  gain1.gain.setValueAtTime(0, t);
+  gain1.gain.linearRampToValueAtTime(0.025, t + 0.02);
+  gain1.gain.setValueAtTime(0.025, t + 0.12);
+  gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  osc1.connect(gain1);
+  gain1.connect(audioCtx.destination);
+  osc1.start(t);
+  osc1.stop(t + 0.3);
+
+  const osc2 = audioCtx.createOscillator();
+  const gain2 = audioCtx.createGain();
+  osc2.type = "sine";
+  osc2.frequency.setValueAtTime(lowNote, t + 0.35);
+  osc2.frequency.exponentialRampToValueAtTime(lowNote * 0.92, t + 0.65);
+  gain2.gain.setValueAtTime(0, t + 0.35);
+  gain2.gain.linearRampToValueAtTime(0.03, t + 0.37);
+  gain2.gain.setValueAtTime(0.03, t + 0.5);
+  gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  osc2.connect(gain2);
+  gain2.connect(audioCtx.destination);
+  osc2.start(t + 0.35);
+  osc2.stop(t + 0.75);
+}
+
+const BIRDSONG_REACTIONS = [
+  "The birds are singing~! What a lovely morning! 🐦",
+  "Tweet tweet~! Good morning, birdies! 🎶",
+  "I love waking up to birdsong~ 🌅",
+  "Such pretty songs! The birds are happy today! 🐤",
+  "Chirp chirp~! Nature's alarm clock! ☀️",
+];
+
+function updateAmbientMorningSounds(): void {
+  const isMorning = currentTimeOfDay === "morning";
+
+  if (isMorning && !ambientMorningActive) {
+    ambientMorningActive = true;
+    nextRobinTime = frame + 60 + Math.floor(Math.random() * 120);
+    nextWarblerTime = frame + WARBLER_MIN_INTERVAL + Math.floor(Math.random() * (WARBLER_MAX_INTERVAL - WARBLER_MIN_INTERVAL));
+    nextCuckooTime = frame + CUCKOO_MIN_INTERVAL + Math.floor(Math.random() * (CUCKOO_MAX_INTERVAL - CUCKOO_MIN_INTERVAL));
+    if (!ambientMorningFirstSession) {
+      ambientMorningFirstSession = true;
+      addDiaryEntry("general", "🐦", "Morning birdsong began~ The birds are greeting the new day!");
+    }
+  } else if (!isMorning && ambientMorningActive) {
+    ambientMorningActive = false;
+  }
+
+  if (!ambientMorningActive) return;
+
+  if (frame >= nextRobinTime) {
+    playRobinChirp();
+    nextRobinTime = frame + ROBIN_MIN_INTERVAL + Math.floor(Math.random() * (ROBIN_MAX_INTERVAL - ROBIN_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.15) {
+      queueSpeechBubble(BIRDSONG_REACTIONS[Math.floor(Math.random() * BIRDSONG_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (frame >= nextWarblerTime) {
+    playWarblerTrill();
+    nextWarblerTime = frame + WARBLER_MIN_INTERVAL + Math.floor(Math.random() * (WARBLER_MAX_INTERVAL - WARBLER_MIN_INTERVAL));
+  }
+
+  if (frame >= nextCuckooTime) {
+    playCuckooCall();
+    nextCuckooTime = frame + CUCKOO_MIN_INTERVAL + Math.floor(Math.random() * (CUCKOO_MAX_INTERVAL - CUCKOO_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.25) {
+      queueSpeechBubble("Cu-ckoo~! Cu-ckoo~! 🐦", 120, true);
+    }
   }
 }
 
@@ -13130,6 +13281,9 @@ function update(): void {
 
   // --- Ambient Night Sounds ---
   updateAmbientNightSounds();
+
+  // --- Ambient Morning Birdsong ---
+  updateAmbientMorningSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;

@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.72.0] — 2026-04-12 — Ambient Morning Birdsong
+
+### Added
+- **Robin chirps** — cheerful multi-note songbird phrases with randomized pitch (2000–2600Hz), note count, and gentle frequency slides for natural melodic variation
+- **Warbler trills** — rapid alternating high-low tone trills (3000–3800Hz) that shimmer like a real warbler's song, with variable speed and length
+- **Cuckoo calls** — a distinctive two-note "cu-ckoo" call with descending pitch, playing less frequently for a rare atmospheric treat
+- **Randomized timing** — robins every ~2–6 seconds, warblers every ~4–10 seconds, cuckoos every ~20–40 seconds, all with randomized intervals
+- **Speech reactions** — 15% chance of reacting to robin chirps with one of 5 charming messages ("The birds are singing~! What a lovely morning! 🐦"), 25% chance of reacting to cuckoo calls
+- **Automatic activation** — birdsong begins at morning (6am) and fades when afternoon arrives (12pm)
+- **Diary entry** — first morning birdsong session each run is logged to the pet diary
+- **Sound-aware** — all birdsong respects the global sound toggle
+- **Complements night sounds** — morning birdsong naturally bookends the existing cricket/owl/wind ambient night soundscape
+- **Total achievements: 47** (unchanged)
+
+**Why this feature:** Tamashii's nights are now richly atmospheric with crickets, owls, and wind gusts, but mornings were silent. Birdsong is the quintessential morning sound — waking up to robins, warblers, and the occasional cuckoo transforms the morning experience from merely bright to truly alive. The three bird types create a layered soundscape: robins provide frequent cheerful phrases, warblers add shimmering trills, and the rare cuckoo call becomes a delightful surprise that makes the pet react with wonder. Together with the night sounds, Tamashii now has a complete day-night audio cycle.
+
 ## [v0.71.0] — 2026-04-11 — Ambient Night Sounds
 
 ### Added
