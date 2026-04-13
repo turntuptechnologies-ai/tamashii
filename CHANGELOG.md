@@ -3,6 +3,26 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.76.0] — 2026-04-13 — Meteor Shower
+
+### Added
+- **Meteor shower event** — a rare, spectacular nighttime event where 15–25 shooting stars burst outward from a single radiant point in rapid succession, filling the sky with streaking light
+- **Radiant glow** — a soft blue-white glow marks the radiant point where meteors originate, fading in as the shower begins and lingering as it ends
+- **Radiant-based trajectories** — meteors emanate outward from the radiant point in all directions with varied speeds and spread, creating a realistic radiating pattern
+- **Rapid-fire spawning** — one new meteor every ~0.25 seconds with slight randomization, creating a steady cascade rather than a single burst
+- **Periodic shimmer sounds** — every 5th meteor triggers a soft randomized tone, adding atmospheric audio without overwhelming
+- **Cascading announcement sound** — a six-note ascending shimmer (1200–2200 Hz with overtones) plays when the shower begins
+- **Aurora exclusion** — meteor showers don't spawn while the aurora borealis is active, preventing visual clutter
+- **Raised star limit** — during a shower, up to 10 shooting stars can exist simultaneously (vs. the normal limit of 2)
+- **Speech reactions** — 5 awestruck messages when the shower begins ("A meteor shower~!! The sky is raining stars! 🌠✨")
+- **Diary entry** — first meteor shower each session is logged to the pet diary
+- **Stats panel section** — dedicated METEOR SHOWERS section showing total showers witnessed
+- **Starfall Watcher achievement** — witness 5 meteor showers to unlock achievement #51 (🌠)
+- **Full persistence** — total meteor showers witnessed saved across sessions
+- **Total achievements: 51**
+
+**Why this feature:** Tamashii's night sky already has individual shooting stars, constellations, and the rare aurora borealis, but nothing that creates an overwhelming sense of cosmic spectacle. A meteor shower — dozens of stars streaking outward from a single radiant point — transforms an ordinary night into an event. The 3% chance per ~90-second check makes each shower genuinely rare and exciting, while the radiant-point geometry (all meteors emanating from one spot) gives it scientific authenticity. Combined with the cascading sound and the pet's awestruck reactions, it creates a "stop everything and watch" moment that rewards staying up late with your pet.
+
 ## [v0.75.0] — 2026-04-12 — Puddle Splashing
 
 ### Added

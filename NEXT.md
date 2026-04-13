@@ -3,23 +3,23 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.75.0 — Puddle Splashing (2026-04-12)
+## Last completed: v0.76.0 — Meteor Shower (2026-04-13)
 
 ### What was done
-- Added puddle splashing: 2-4 water puddles appear on the ground after rain/storm weather ends
-- Each puddle has ripple animation, shimmer highlights, and concentric expanding ring effects
-- Puddles evaporate over ~2-3 minutes with smooth fade-out
-- Click a puddle to splash: 8 raindrop particles burst upward, descending splash sound plays
-- Pet reacts with 5 playful speech bubbles and happy emotes
-- Each splash awards 2 care points
-- First splash per session triggers diary entry
-- Stats tracking: total puddle splashes (persisted)
-- Puddle Jumper achievement (#50): splash in 20 puddles
-- Total achievements: 50
+- Added meteor shower event: rare nighttime spectacle with 15-25 shooting stars radiating from a single point
+- Radiant glow marks the origin point, meteors spread outward in all directions
+- Rapid-fire spawning (~0.25s intervals) creates a steady cascade effect
+- 3% chance per ~90s during nighttime, doesn't conflict with aurora borealis
+- Cascading announcement sound (ascending shimmer) and periodic meteor tones
+- Pet reacts with 5 awestruck speech bubbles
+- First shower per session triggers diary entry
+- Stats tracking: total meteor showers witnessed (persisted)
+- Starfall Watcher achievement (#51): witness 5 meteor showers
+- Total achievements: 51
 
 ### Thoughts for next cycle
 - **Afternoon ambient sounds** — complete the full day cycle with afternoon atmosphere (distant lawn mower, wind chimes, buzzing bees)
-- **Rain sounds** — ambient rain during weather events, complementing the existing weather system
+- **Rain sounds** — ambient rain patter during weather events, complementing the existing visual weather system
 - **Frog chorus** — spring evening ambient sound of distant frogs, bridging afternoon and night
 - **Summer cicadas** — ambient cicada sounds during summer months as a seasonal variant
 - **Sleep ritual** — a calming multi-phase sequence when the pet falls asleep (yawn -> stretch -> curl up -> zzz)
@@ -40,22 +40,20 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Pet journal reflections** — pet writes its own diary entries about the day at bedtime
 - **Guided stargazing** — pet points out specific stars and tells you their names during night
 - **Sound volume control** — a slider or levels for ambient sound volume
-- **Meteor shower event** — rare night event with many shooting stars at once
+- **Comet event** — a slow-moving comet that drifts across the sky over several minutes, rarer than meteor showers
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head
 - **Snowman building** — during snowy weather, click to help pet build a snowman step by step
 
 ### Current architecture notes
-- Renderer is ~15,400+ lines
-- Puddle system defined after rainbow section, before `pickWeather()`
-- `Puddle` interface: x, y, radiusX, radiusY, life, maxLife, ripplePhase, splashed
-- `spawnPuddles()` creates 2-4 puddles near ground level, triggers speech
-- `updatePuddles()` handles ripple animation and evaporation, called after `updateRainbow()`
-- `drawPuddles()` renders water ellipse + shimmer + concentric ripple rings, drawn after footprints before toy
-- `tryClickPuddle()` checks click against puddle ellipse bounds
-- `splashPuddle()` creates burst particles, plays sound, triggers speech/diary/stats
-- Puddles triggered in `updateWeather()` when `wasRainy && puddles.length === 0`
-- State variables: puddles array, totalPuddleSplashes, puddleFirstSplash
-- Save data: totalPuddleSplashes persisted
+- Renderer is ~15,600+ lines
+- Meteor shower system defined after shooting star wish system, before `updateShootingStars()`
+- State variables: meteorShowerActive, meteorShowerStarsRemaining, meteorShowerRadiantX/Y, meteorShowerGlowAlpha, totalMeteorShowersWitnessed, meteorShowerFirstSeen
+- `spawnMeteorShower()` sets radiant point, star count, triggers speech/diary/sound
+- `spawnMeteorFromRadiant()` creates individual meteors emanating from radiant, plays periodic tones
+- `updateMeteorShower()` handles spawn checks (avoids aurora overlap), timer-based spawning, event completion
+- `drawMeteorShowerGlow()` renders radiant point glow, drawn before shooting stars
+- Shooting stars reused as meteor particles — `spawnShootingStar()` cap raised to 10 during shower
+- `updateMeteorShower()` called after `updateShootingStars()` in update loop
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 50
+- Total achievements: 51

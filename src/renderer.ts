@@ -3552,7 +3552,7 @@ function playWishSound(): void {
 function spawnShootingStar(): void {
   if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
   if (isSleeping) return;
-  if (shootingStars.length >= 2) return; // max 2 at once
+  if (shootingStars.length >= (meteorShowerActive ? 10 : 2)) return;
 
   const w = canvas.width;
   const h = canvas.height;
@@ -3673,6 +3673,159 @@ function makeWish(x: number, y: number): void {
 
   saveGame();
   checkAchievements();
+}
+
+// --- Meteor Shower ---
+// Rare nighttime event: a burst of 15-25 shooting stars radiating from a single point
+
+const METEOR_SHOWER_SPEECHES = [
+  "A meteor shower~!! The sky is raining stars! 🌠✨",
+  "So many shooting stars~! I can't count them all! 💫😍",
+  "The whole sky is sparkling~!! This is incredible! ✨🤩",
+  "Woooah~! Stars are falling everywhere~! 🌟💖",
+  "It's like the sky is celebrating~! So beautiful! 🎆✨",
+];
+
+let meteorShowerActive = false;
+let meteorShowerStarsRemaining = 0;
+let meteorShowerSpawnTimer = 0;
+let meteorShowerSpawnInterval = 0;
+let meteorShowerRadiantX = 0;
+let meteorShowerRadiantY = 0;
+let meteorShowerGlowAlpha = 0;
+let meteorShowerCheckTimer = 0;
+let meteorShowerFirstSeen = false;
+let totalMeteorShowersWitnessed = 0;
+const METEOR_SHOWER_CHECK_INTERVAL = 5400;  // check every ~90 seconds
+const METEOR_SHOWER_CHANCE = 0.03;          // 3% chance per check during nighttime
+const METEOR_SHOWER_MIN_STARS = 15;
+const METEOR_SHOWER_MAX_STARS = 25;
+const METEOR_SHOWER_SPAWN_RATE = 15;        // frames between each meteor (~0.25s)
+
+function spawnMeteorShower(): void {
+  meteorShowerActive = true;
+  meteorShowerStarsRemaining = METEOR_SHOWER_MIN_STARS + Math.floor(Math.random() * (METEOR_SHOWER_MAX_STARS - METEOR_SHOWER_MIN_STARS + 1));
+  meteorShowerSpawnTimer = 0;
+  meteorShowerSpawnInterval = METEOR_SHOWER_SPAWN_RATE;
+  meteorShowerGlowAlpha = 0;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  meteorShowerRadiantX = w * 0.2 + Math.random() * w * 0.6;
+  meteorShowerRadiantY = h * 0.05 + Math.random() * h * 0.15;
+
+  totalMeteorShowersWitnessed++;
+
+  if (!isSleeping && !speechBubble) {
+    queueSpeechBubble(METEOR_SHOWER_SPEECHES[Math.floor(Math.random() * METEOR_SHOWER_SPEECHES.length)], 200, true);
+  }
+
+  if (!meteorShowerFirstSeen) {
+    meteorShowerFirstSeen = true;
+    addDiaryEntry("general", "🌠", "Witnessed a meteor shower~! Stars rained down from the sky like magic!");
+  }
+
+  playMeteorShowerSound();
+}
+
+function playMeteorShowerSound(): void {
+  if (!soundEnabled) return;
+  const notes = [1200, 1400, 1600, 1800, 2000, 2200];
+  for (let i = 0; i < notes.length; i++) {
+    setTimeout(() => {
+      playTone(notes[i], 0.4, "sine", 0.03);
+      playTone(notes[i] * 1.5, 0.3, "sine", 0.015, 7);
+    }, i * 120);
+  }
+}
+
+function spawnMeteorFromRadiant(): void {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const angle = Math.random() * Math.PI * 2;
+  const spread = 0.3 + Math.random() * 0.7;
+  const vx = Math.cos(angle) * (3 + Math.random() * 4) * spread;
+  const vy = Math.abs(Math.sin(angle) * (2 + Math.random() * 3)) + 1;
+
+  const maxLife = 40 + Math.floor(Math.random() * 50);
+
+  shootingStars.push({
+    x: meteorShowerRadiantX + (Math.random() - 0.5) * 20,
+    y: meteorShowerRadiantY + (Math.random() - 0.5) * 10,
+    vx,
+    vy,
+    length: 15 + Math.random() * 20,
+    life: maxLife,
+    maxLife,
+    brightness: 0.5 + Math.random() * 0.5,
+    clicked: false,
+    trail: [],
+  });
+
+  sessionShootingStarsSeen++;
+
+  if (meteorShowerStarsRemaining % 5 === 0 && soundEnabled) {
+    playTone(800 + Math.random() * 1200, 0.2, "sine", 0.025);
+  }
+}
+
+function updateMeteorShower(): void {
+  const isNight = currentTimeOfDay === "night";
+
+  if (isNight && !meteorShowerActive && !auroraActive) {
+    meteorShowerCheckTimer++;
+    if (meteorShowerCheckTimer >= METEOR_SHOWER_CHECK_INTERVAL) {
+      meteorShowerCheckTimer = 0;
+      if (Math.random() < METEOR_SHOWER_CHANCE) {
+        spawnMeteorShower();
+      }
+    }
+  } else if (!isNight && !meteorShowerActive) {
+    meteorShowerCheckTimer = 0;
+  }
+
+  if (!meteorShowerActive) {
+    if (meteorShowerGlowAlpha > 0) {
+      meteorShowerGlowAlpha = Math.max(0, meteorShowerGlowAlpha - 0.005);
+    }
+    return;
+  }
+
+  if (meteorShowerGlowAlpha < 1) {
+    meteorShowerGlowAlpha = Math.min(1, meteorShowerGlowAlpha + 0.02);
+  }
+
+  meteorShowerSpawnTimer++;
+  if (meteorShowerSpawnTimer >= meteorShowerSpawnInterval && meteorShowerStarsRemaining > 0) {
+    spawnMeteorFromRadiant();
+    meteorShowerStarsRemaining--;
+    meteorShowerSpawnTimer = 0;
+    meteorShowerSpawnInterval = METEOR_SHOWER_SPAWN_RATE + Math.floor(Math.random() * 10) - 5;
+  }
+
+  if (meteorShowerStarsRemaining <= 0 && shootingStars.length === 0) {
+    meteorShowerActive = false;
+  }
+}
+
+function drawMeteorShowerGlow(): void {
+  if (meteorShowerGlowAlpha <= 0) return;
+  if (currentTimeOfDay !== "night" && currentTimeOfDay !== "evening") return;
+
+  ctx.save();
+  const glow = ctx.createRadialGradient(
+    meteorShowerRadiantX, meteorShowerRadiantY, 0,
+    meteorShowerRadiantX, meteorShowerRadiantY, 80
+  );
+  glow.addColorStop(0, `rgba(200, 220, 255, ${0.15 * meteorShowerGlowAlpha})`);
+  glow.addColorStop(0.4, `rgba(180, 200, 255, ${0.06 * meteorShowerGlowAlpha})`);
+  glow.addColorStop(1, `rgba(150, 170, 255, 0)`);
+  ctx.beginPath();
+  ctx.arc(meteorShowerRadiantX, meteorShowerRadiantY, 80, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+  ctx.restore();
 }
 
 function updateShootingStars(): void {
@@ -9494,6 +9647,11 @@ const achievements: Achievement[] = [
     icon: "💦", unlockMessage: "Splash splash splash~! I'm the puddle champion! 💦👑✨",
     condition: () => totalPuddleSplashes >= 20, unlocked: false,
   },
+  {
+    id: "starfall_watcher", name: "Starfall Watcher", description: "Witness 5 meteor showers",
+    icon: "🌠", unlockMessage: "I've seen so many stars fall from the sky~! The universe is amazing! 🌠💫✨",
+    condition: () => totalMeteorShowersWitnessed >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10281,6 +10439,23 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`💦 ${totalPuddleSplashes} splashed`, panelX + panelW - 12, y);
 
+  // Meteor showers section
+  y += 6;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 20, y + 6);
+  ctx.lineTo(panelX + panelW - 20, y + 6);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.stroke();
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#C8DCFF";
+  ctx.fillText("METEOR SHOWERS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌠 ${totalMeteorShowersWitnessed} witnessed`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -10703,6 +10878,7 @@ interface SaveData {
   totalAurorasWitnessed: number;
   totalRainbowsSeen: number;
   totalPuddleSplashes: number;
+  totalMeteorShowersWitnessed: number;
   version: number;
 }
 
@@ -10775,6 +10951,7 @@ function buildSaveData(): SaveData {
     totalAurorasWitnessed,
     totalRainbowsSeen,
     totalPuddleSplashes,
+    totalMeteorShowersWitnessed,
     version: 1,
   };
 }
@@ -11051,6 +11228,11 @@ function applySaveData(data: SaveData): void {
   // Restore puddle splashes
   if (typeof (data as SaveData).totalPuddleSplashes === "number") {
     totalPuddleSplashes = (data as SaveData).totalPuddleSplashes;
+  }
+
+  // Restore meteor showers witnessed
+  if (typeof (data as SaveData).totalMeteorShowersWitnessed === "number") {
+    totalMeteorShowersWitnessed = (data as SaveData).totalMeteorShowersWitnessed;
   }
 
   // Restore diary
@@ -13462,6 +13644,9 @@ function update(): void {
   // Shooting star update
   updateShootingStars();
 
+  // Meteor shower update
+  updateMeteorShower();
+
   // Aurora borealis update
   updateAurora();
 
@@ -14791,6 +14976,9 @@ function draw(): void {
   for (const b of bubbles) {
     drawBubble(b);
   }
+
+  // Meteor shower radiant glow (behind shooting stars)
+  drawMeteorShowerGlow();
 
   // Shooting stars (sky background layer)
   drawShootingStars();
