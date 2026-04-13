@@ -390,6 +390,20 @@ const WARBLER_MAX_INTERVAL = 600;
 const CUCKOO_MIN_INTERVAL = 1200;
 const CUCKOO_MAX_INTERVAL = 2400;
 
+// --- Ambient Afternoon Sounds ---
+let ambientAfternoonActive = false;
+let nextWindChimeTime = 0;
+let nextBeeTime = 0;
+let nextLawnMowerTime = 0;
+let ambientAfternoonFirstSession = false;
+let totalAfternoonSoundsSessions = 0;
+const WIND_CHIME_MIN_INTERVAL = 180;
+const WIND_CHIME_MAX_INTERVAL = 480;
+const BEE_MIN_INTERVAL = 240;
+const BEE_MAX_INTERVAL = 600;
+const LAWN_MOWER_MIN_INTERVAL = 1800;
+const LAWN_MOWER_MAX_INTERVAL = 3600;
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -2120,6 +2134,171 @@ function updateAmbientMorningSounds(): void {
       queueSpeechBubble("Cu-ckoo~! Cu-ckoo~! 🐦", 120, true);
     }
   }
+}
+
+// --- Ambient Afternoon Sound Functions ---
+
+function playWindChime(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const noteCount = 3 + Math.floor(Math.random() * 4);
+  const chimeFreqs = [523, 587, 659, 784, 880, 988, 1047, 1175];
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0.012, t);
+  masterGain.connect(audioCtx.destination);
+  for (let i = 0; i < noteCount; i++) {
+    const noteStart = t + i * (0.15 + Math.random() * 0.2);
+    const freq = chimeFreqs[Math.floor(Math.random() * chimeFreqs.length)];
+    const dur = 0.8 + Math.random() * 1.2;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, noteStart);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.998, noteStart + dur);
+    gain.gain.setValueAtTime(0, noteStart);
+    gain.gain.linearRampToValueAtTime(0.6 + Math.random() * 0.4, noteStart + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, noteStart + dur);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(noteStart);
+    osc.stop(noteStart + dur + 0.02);
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(freq * 2.01, noteStart);
+    gain2.gain.setValueAtTime(0, noteStart);
+    gain2.gain.linearRampToValueAtTime(0.2, noteStart + 0.01);
+    gain2.gain.exponentialRampToValueAtTime(0.001, noteStart + dur * 0.6);
+    osc2.connect(gain2);
+    gain2.connect(masterGain);
+    osc2.start(noteStart);
+    osc2.stop(noteStart + dur * 0.6 + 0.02);
+  }
+}
+
+function playBuzzingBee(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 1.5 + Math.random() * 2.0;
+  const baseFreq = 180 + Math.random() * 60;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(baseFreq * 0.8, t);
+  osc.frequency.linearRampToValueAtTime(baseFreq, t + dur * 0.3);
+  osc.frequency.linearRampToValueAtTime(baseFreq * 1.1, t + dur * 0.6);
+  osc.frequency.linearRampToValueAtTime(baseFreq * 0.7, t + dur);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.008, t + dur * 0.2);
+  gain.gain.setValueAtTime(0.01, t + dur * 0.5);
+  gain.gain.linearRampToValueAtTime(0.006, t + dur * 0.7);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.type = "sine";
+  lfo.frequency.setValueAtTime(12 + Math.random() * 8, t);
+  lfoGain.gain.setValueAtTime(15, t);
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+  lfo.start(t);
+  lfo.stop(t + dur + 0.1);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + dur + 0.05);
+}
+
+function playDistantLawnMower(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 4 + Math.random() * 3;
+  const baseFreq = 80 + Math.random() * 20;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(baseFreq, t);
+  osc.frequency.linearRampToValueAtTime(baseFreq * (1 + Math.random() * 0.05), t + dur * 0.5);
+  osc.frequency.linearRampToValueAtTime(baseFreq * 0.98, t + dur);
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(300, t);
+  filter.Q.setValueAtTime(1, t);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.006, t + dur * 0.15);
+  gain.gain.setValueAtTime(0.007, t + dur * 0.5);
+  gain.gain.linearRampToValueAtTime(0.005, t + dur * 0.8);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.type = "sine";
+  lfo.frequency.setValueAtTime(2 + Math.random() * 2, t);
+  lfoGain.gain.setValueAtTime(5, t);
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+  lfo.start(t);
+  lfo.stop(t + dur + 0.1);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + dur + 0.05);
+}
+
+const AFTERNOON_REACTIONS = [
+  "Wind chimes~ Such a peaceful afternoon! 🎐",
+  "Bzzzz~ A little bee friend flew by! 🐝",
+  "I love lazy afternoons like this~ 🌤️",
+  "The breeze feels so nice right now~ 🍃",
+  "What a lovely afternoon~ I could nap here! 😌",
+];
+
+function updateAmbientAfternoonSounds(): void {
+  const isAfternoon = currentTimeOfDay === "afternoon";
+
+  if (isAfternoon && !ambientAfternoonActive) {
+    ambientAfternoonActive = true;
+    totalAfternoonSoundsSessions++;
+    nextWindChimeTime = frame + 120 + Math.floor(Math.random() * 180);
+    nextBeeTime = frame + BEE_MIN_INTERVAL + Math.floor(Math.random() * (BEE_MAX_INTERVAL - BEE_MIN_INTERVAL));
+    nextLawnMowerTime = frame + LAWN_MOWER_MIN_INTERVAL + Math.floor(Math.random() * (LAWN_MOWER_MAX_INTERVAL - LAWN_MOWER_MIN_INTERVAL));
+    if (!ambientAfternoonFirstSession) {
+      ambientAfternoonFirstSession = true;
+      addDiaryEntry("general", "🎐", "Afternoon sounds began~ Wind chimes and buzzing bees, so peaceful!");
+    }
+  } else if (!isAfternoon && ambientAfternoonActive) {
+    ambientAfternoonActive = false;
+  }
+
+  if (!ambientAfternoonActive) return;
+
+  if (frame >= nextWindChimeTime) {
+    playWindChime();
+    nextWindChimeTime = frame + WIND_CHIME_MIN_INTERVAL + Math.floor(Math.random() * (WIND_CHIME_MAX_INTERVAL - WIND_CHIME_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.15) {
+      queueSpeechBubble(AFTERNOON_REACTIONS[Math.floor(Math.random() * AFTERNOON_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (frame >= nextBeeTime) {
+    playBuzzingBee();
+    nextBeeTime = frame + BEE_MIN_INTERVAL + Math.floor(Math.random() * (BEE_MAX_INTERVAL - BEE_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.1) {
+      queueSpeechBubble("Bzzzz~ A bee! Don't worry, it's friendly! 🐝", 120, true);
+    }
+  }
+
+  if (frame >= nextLawnMowerTime) {
+    playDistantLawnMower();
+    nextLawnMowerTime = frame + LAWN_MOWER_MIN_INTERVAL + Math.floor(Math.random() * (LAWN_MOWER_MAX_INTERVAL - LAWN_MOWER_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.2) {
+      queueSpeechBubble("Someone's mowing their lawn~ The smell of fresh grass! 🌿", 150, true);
+    }
+  }
+
+  checkAchievements();
 }
 
 // --- Aurora Borealis ---
@@ -9652,6 +9831,11 @@ const achievements: Achievement[] = [
     icon: "🌠", unlockMessage: "I've seen so many stars fall from the sky~! The universe is amazing! 🌠💫✨",
     condition: () => totalMeteorShowersWitnessed >= 5, unlocked: false,
   },
+  {
+    id: "afternoon_dreamer", name: "Afternoon Dreamer", description: "Enjoy 10 afternoon ambient sessions",
+    icon: "🎐", unlockMessage: "Wind chimes, bees, and summer breezes~ Afternoons are magical! 🎐🐝🌤️",
+    condition: () => totalAfternoonSoundsSessions >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10456,6 +10640,16 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🌠 ${totalMeteorShowersWitnessed} witnessed`, panelX + panelW - 12, y);
 
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#F0C060";
+  ctx.fillText("AFTERNOON AMBIENCE", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🎐 ${totalAfternoonSoundsSessions} sessions`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -10879,6 +11073,7 @@ interface SaveData {
   totalRainbowsSeen: number;
   totalPuddleSplashes: number;
   totalMeteorShowersWitnessed: number;
+  totalAfternoonSoundsSessions: number;
   version: number;
 }
 
@@ -10952,6 +11147,7 @@ function buildSaveData(): SaveData {
     totalRainbowsSeen,
     totalPuddleSplashes,
     totalMeteorShowersWitnessed,
+    totalAfternoonSoundsSessions,
     version: 1,
   };
 }
@@ -11233,6 +11429,11 @@ function applySaveData(data: SaveData): void {
   // Restore meteor showers witnessed
   if (typeof (data as SaveData).totalMeteorShowersWitnessed === "number") {
     totalMeteorShowersWitnessed = (data as SaveData).totalMeteorShowersWitnessed;
+  }
+
+  // Restore afternoon sound sessions
+  if (typeof (data as SaveData).totalAfternoonSoundsSessions === "number") {
+    totalAfternoonSoundsSessions = (data as SaveData).totalAfternoonSoundsSessions;
   }
 
   // Restore diary
@@ -14028,6 +14229,9 @@ function update(): void {
 
   // --- Ambient Morning Birdsong ---
   updateAmbientMorningSounds();
+
+  // --- Ambient Afternoon Sounds ---
+  updateAmbientAfternoonSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;

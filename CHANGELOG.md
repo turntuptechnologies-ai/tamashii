@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.77.0] — 2026-04-13 — Afternoon Ambient Sounds
+
+### Added
+- **Ambient afternoon soundscape** — a warm, atmospheric audio layer that plays during the afternoon time period, completing the full day-night ambient audio cycle (night crickets → morning birdsong → afternoon ambience → evening/night)
+- **Wind chimes** — gentle, randomized metallic tinkling with harmonic overtones (C5–D6 pentatonic range), creating that classic lazy-afternoon porch feeling
+- **Buzzing bees** — soft sawtooth-based buzz with LFO-modulated pitch that rises and falls as a bee "flies by," creating a Doppler-like effect
+- **Distant lawn mower** — low-frequency filtered drone that fades in and out over 4–7 seconds, evoking a suburban summer afternoon
+- **Randomized intervals** — wind chimes every ~3–8 min, bees every ~4–10 min, lawn mower every ~30–60 min, keeping the soundscape varied and unpredictable
+- **Speech reactions** — 5 relaxed afternoon messages ("Wind chimes~ Such a peaceful afternoon! 🎐", "Bzzzz~ A little bee friend flew by! 🐝") plus specific bee and lawn mower reactions
+- **Diary entry** — first afternoon ambient session each run is logged to the pet diary
+- **Stats panel section** — dedicated AFTERNOON AMBIENCE section showing total sessions
+- **Afternoon Dreamer achievement** — enjoy 10 afternoon ambient sessions to unlock achievement #52 (🎐)
+- **Full persistence** — total afternoon sound sessions saved across sessions
+- **Total achievements: 52**
+
+**Why this feature:** Tamashii already has night crickets/owls/wind and morning birdsong/robin/warbler/cuckoo, but afternoons were silent — a conspicuous gap in an otherwise rich ambient audio tapestry. Wind chimes, buzzing bees, and a distant lawn mower are universally recognizable afternoon sounds that evoke warmth, laziness, and suburban comfort. Together they transform the afternoon from a quiet interlude into its own distinct atmospheric experience, completing the full 24-hour ambient cycle.
+
 ## [v0.76.0] — 2026-04-13 — Meteor Shower
 
 ### Added
