@@ -404,6 +404,28 @@ const BEE_MAX_INTERVAL = 600;
 const LAWN_MOWER_MIN_INTERVAL = 1800;
 const LAWN_MOWER_MAX_INTERVAL = 3600;
 
+// --- Ambient Evening Frog Chorus ---
+let ambientEveningActive = false;
+let nextFrogCroakTime = 0;
+let nextSpringPeeperTime = 0;
+let nextKatydidTime = 0;
+let ambientEveningFirstSession = false;
+let totalEveningChorusSessions = 0;
+const FROG_CROAK_MIN_INTERVAL = 180;
+const FROG_CROAK_MAX_INTERVAL = 420;
+const SPRING_PEEPER_MIN_INTERVAL = 90;
+const SPRING_PEEPER_MAX_INTERVAL = 240;
+const KATYDID_MIN_INTERVAL = 300;
+const KATYDID_MAX_INTERVAL = 720;
+
+const EVENING_CHORUS_REACTIONS = [
+  "The frogs are singing tonight~ Ribbit ribbit! 🐸",
+  "Listen... a chorus of little voices in the twilight~ 🌆🐸",
+  "Spring peepers~! Their chirps are so cheerful! 🎶",
+  "The evening is alive with tiny songs~ 🐸✨",
+  "Twilight symphony~ Frogs and katydids together! 🌅🎵",
+];
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -2295,6 +2317,143 @@ function updateAmbientAfternoonSounds(): void {
     nextLawnMowerTime = frame + LAWN_MOWER_MIN_INTERVAL + Math.floor(Math.random() * (LAWN_MOWER_MAX_INTERVAL - LAWN_MOWER_MIN_INTERVAL));
     if (!isSleeping && !speechBubble && Math.random() < 0.2) {
       queueSpeechBubble("Someone's mowing their lawn~ The smell of fresh grass! 🌿", 150, true);
+    }
+  }
+
+  checkAchievements();
+}
+
+// --- Ambient Evening Frog Chorus ---
+
+function playFrogCroak(): void {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc.type = "sawtooth";
+    const baseFreq = 120 + Math.random() * 60;
+    osc.frequency.setValueAtTime(baseFreq * 1.3, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.05);
+    osc.frequency.setValueAtTime(baseFreq, now + 0.15);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.25, now + 0.2);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.8, now + 0.35);
+    filter.type = "lowpass";
+    filter.frequency.value = 600;
+    filter.Q.value = 3;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.06 + Math.random() * 0.03, now + 0.02);
+    gain.gain.setValueAtTime(0.05, now + 0.15);
+    gain.gain.linearRampToValueAtTime(0.07, now + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.45);
+    setTimeout(() => ctx.close(), 600);
+  } catch {}
+}
+
+function playSpringPeeper(): void {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    const peepCount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < peepCount; i++) {
+      const t = now + i * 0.12;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      const freq = 2800 + Math.random() * 600;
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.15, t + 0.04);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.9, t + 0.08);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.03 + Math.random() * 0.015, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    }
+    setTimeout(() => ctx.close(), 800);
+  } catch {}
+}
+
+function playKatydid(): void {
+  if (!soundEnabled) return;
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    const burstCount = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < burstCount; i++) {
+      const t = now + i * 0.2;
+      const noise = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      noise.type = "square";
+      noise.frequency.setValueAtTime(4200 + Math.random() * 800, t);
+      filter.type = "bandpass";
+      filter.frequency.value = 5000 + Math.random() * 1000;
+      filter.Q.value = 8;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.02 + Math.random() * 0.01, t + 0.01);
+      gain.gain.setValueAtTime(0.025, t + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(t);
+      noise.stop(t + 0.15);
+    }
+    setTimeout(() => ctx.close(), 1500);
+  } catch {}
+}
+
+function updateAmbientEveningSounds(): void {
+  const isEvening = currentTimeOfDay === "evening";
+
+  if (isEvening && !ambientEveningActive) {
+    ambientEveningActive = true;
+    totalEveningChorusSessions++;
+    nextFrogCroakTime = frame + 90 + Math.floor(Math.random() * 120);
+    nextSpringPeeperTime = frame + 60 + Math.floor(Math.random() * 90);
+    nextKatydidTime = frame + 180 + Math.floor(Math.random() * 240);
+    if (!ambientEveningFirstSession) {
+      ambientEveningFirstSession = true;
+      addDiaryEntry("general", "🐸", "The evening frog chorus began~ Ribbits and peeps filling the twilight!");
+    }
+  } else if (!isEvening && ambientEveningActive) {
+    ambientEveningActive = false;
+  }
+
+  if (!ambientEveningActive) return;
+
+  if (frame >= nextFrogCroakTime) {
+    playFrogCroak();
+    nextFrogCroakTime = frame + FROG_CROAK_MIN_INTERVAL + Math.floor(Math.random() * (FROG_CROAK_MAX_INTERVAL - FROG_CROAK_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.12) {
+      queueSpeechBubble(EVENING_CHORUS_REACTIONS[Math.floor(Math.random() * EVENING_CHORUS_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (frame >= nextSpringPeeperTime) {
+    playSpringPeeper();
+    nextSpringPeeperTime = frame + SPRING_PEEPER_MIN_INTERVAL + Math.floor(Math.random() * (SPRING_PEEPER_MAX_INTERVAL - SPRING_PEEPER_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.08) {
+      queueSpeechBubble("Peep peep peep~! The little tree frogs are chatting! 🌿🐸", 120, true);
+    }
+  }
+
+  if (frame >= nextKatydidTime) {
+    playKatydid();
+    nextKatydidTime = frame + KATYDID_MIN_INTERVAL + Math.floor(Math.random() * (KATYDID_MAX_INTERVAL - KATYDID_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.1) {
+      queueSpeechBubble("Ka-ty-did! Ka-ty-didn't~! The katydids are arguing! 🦗😄", 150, true);
     }
   }
 
@@ -9836,6 +9995,11 @@ const achievements: Achievement[] = [
     icon: "🎐", unlockMessage: "Wind chimes, bees, and summer breezes~ Afternoons are magical! 🎐🐝🌤️",
     condition: () => totalAfternoonSoundsSessions >= 10, unlocked: false,
   },
+  {
+    id: "twilight_listener", name: "Twilight Listener", description: "Enjoy 10 evening frog chorus sessions",
+    icon: "🐸", unlockMessage: "The twilight chorus knows your name~ Ribbit ribbit! 🐸🌆🎶",
+    condition: () => totalEveningChorusSessions >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10650,6 +10814,16 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🎐 ${totalAfternoonSoundsSessions} sessions`, panelX + panelW - 12, y);
 
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#6B8E6B";
+  ctx.fillText("EVENING CHORUS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🐸 ${totalEveningChorusSessions} sessions`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -11074,6 +11248,7 @@ interface SaveData {
   totalPuddleSplashes: number;
   totalMeteorShowersWitnessed: number;
   totalAfternoonSoundsSessions: number;
+  totalEveningChorusSessions: number;
   version: number;
 }
 
@@ -11148,6 +11323,7 @@ function buildSaveData(): SaveData {
     totalPuddleSplashes,
     totalMeteorShowersWitnessed,
     totalAfternoonSoundsSessions,
+    totalEveningChorusSessions,
     version: 1,
   };
 }
@@ -11434,6 +11610,11 @@ function applySaveData(data: SaveData): void {
   // Restore afternoon sound sessions
   if (typeof (data as SaveData).totalAfternoonSoundsSessions === "number") {
     totalAfternoonSoundsSessions = (data as SaveData).totalAfternoonSoundsSessions;
+  }
+
+  // Restore evening chorus sessions
+  if (typeof (data as SaveData).totalEveningChorusSessions === "number") {
+    totalEveningChorusSessions = (data as SaveData).totalEveningChorusSessions;
   }
 
   // Restore diary
@@ -14232,6 +14413,9 @@ function update(): void {
 
   // --- Ambient Afternoon Sounds ---
   updateAmbientAfternoonSounds();
+
+  // --- Ambient Evening Frog Chorus ---
+  updateAmbientEveningSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;

@@ -3,6 +3,23 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.78.0] — 2026-04-13 — Evening Frog Chorus
+
+### Added
+- **Ambient evening frog chorus** — a rich, organic soundscape that plays during the evening time period, layering alongside existing night crickets to create a distinct twilight atmosphere
+- **Frog croaks** — deep, resonant "ribbit" sounds using sawtooth oscillator with low-pass filter, featuring the characteristic two-pulse croak pattern (pitch rises then falls) at randomized base frequencies (120–180 Hz)
+- **Spring peepers** — rapid high-pitched chirps (2800–3400 Hz) in bursts of 2–4 peeps, mimicking the iconic chorus of tiny tree frogs that fills spring and summer evenings
+- **Katydids** — rhythmic buzzing bursts using bandpass-filtered square waves at ~4200–5000 Hz, replicating the staccato "ka-ty-did" call pattern in groups of 3–5 chirps
+- **Randomized intervals** — frog croaks every ~3–7 min, spring peepers every ~1.5–4 min, katydids every ~5–12 min, creating an ever-shifting natural soundscape
+- **Speech reactions** — 5 delighted twilight messages ("The frogs are singing tonight~ Ribbit ribbit! 🐸") plus specific peeper and katydid reactions
+- **Diary entry** — first evening frog chorus session each run is logged to the pet diary
+- **Stats panel section** — dedicated EVENING CHORUS section showing total sessions
+- **Twilight Listener achievement** — enjoy 10 evening frog chorus sessions to unlock achievement #53 (🐸)
+- **Full persistence** — total evening chorus sessions saved across sessions
+- **Total achievements: 53**
+
+**Why this feature:** Tamashii's ambient audio cycle covered night (crickets/owls/wind), morning (birdsong), and afternoon (wind chimes/bees/lawn mower), but evening — that magical twilight hour — had no distinct voice of its own, sharing only the night's crickets. In reality, dusk is when nature's chorus peaks: frogs emerge from ponds, spring peepers trill from the treetops, and katydids begin their rhythmic debates. Adding this evening-specific soundscape transforms twilight from a quiet transition into its own rich atmospheric moment, completing the full 24-hour ambient cycle with four distinct sound palettes.
+
 ## [v0.77.0] — 2026-04-13 — Afternoon Ambient Sounds
 
 ### Added
