@@ -3,18 +3,18 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.78.0 — Evening Frog Chorus (2026-04-13)
+## Last completed: v0.79.0 — Snowman Building (2026-04-13)
 
 ### What was done
-- Added ambient evening frog chorus: frog croaks, spring peepers, and katydids
-- Frog croaks use sawtooth oscillator with low-pass filter for deep resonant "ribbit" sounds
-- Spring peepers use high-frequency sine chirps in rapid bursts (2-4 peeps)
-- Katydids use bandpass-filtered square waves for rhythmic staccato buzzing
-- Activates during "evening" time period, layering alongside existing night crickets
-- Full ambient cycle now has 4 distinct palettes: morning → afternoon → evening → night
-- Speech reactions, diary entry, stats tracking, persistence
-- Twilight Listener achievement (#53): enjoy 10 evening frog chorus sessions
-- Total achievements: 53
+- Added interactive snowman building during snowy weather
+- 5-stage click-to-build process: base → body → head → face → accessories (scarf, hat, stick arms)
+- Randomized cosmetics: 6 scarf colors, 3 hat styles (top hat, bucket hat, beanie)
+- Snow particle bursts, ascending pitch sounds, wobble animation per stage
+- Gradual melting over ~5 minutes when weather changes from snowy
+- Pulsing build hint text above incomplete snowman
+- Speech reactions per stage, care points, diary entries
+- Snow Sculptor achievement (#54): build 5 snowmen
+- Total achievements: 54
 
 ### Thoughts for next cycle
 - **Rain sounds** — ambient rain patter during weather events, complementing the existing visual weather system
@@ -36,22 +36,23 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Sound volume control** — a slider or levels for ambient sound volume
 - **Comet event** — a slow-moving comet that drifts across the sky over several minutes, rarer than meteor showers
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head
-- **Snowman building** — during snowy weather, click to help pet build a snowman step by step
 - **Seasonal ambient variants** — different ambient sounds per season (cicadas in summer, rustling leaves in autumn)
 - **Ambient sound mixer** — let the player adjust relative volume of different ambient layers
 - **Frog chorus visual** — tiny frog silhouettes visible at the bottom of the screen during evening chorus
+- **Snow fort building** — an extension of snowman building where the pet can construct a snow fort
+- **Ice skating** — pet slides around on frozen puddles during cold weather
+- **Snowball fight** — pet throws snowballs at the screen for a playful winter interaction
 
 ### Current architecture notes
-- Renderer is ~16,000+ lines
-- Evening frog chorus follows same pattern as other ambient systems: state vars, sound functions, update function
-- State variables: ambientEveningActive, nextFrogCroakTime, nextSpringPeeperTime, nextKatydidTime, totalEveningChorusSessions, ambientEveningFirstSession
-- `playFrogCroak()` — sawtooth with low-pass filter, two-pulse pitch envelope
-- `playSpringPeeper()` — rapid high-freq sine chirps in 2-4 bursts
-- `playKatydid()` — bandpass-filtered square wave, 3-5 staccato bursts
-- `updateAmbientEveningSounds()` — manages activation/deactivation, timer-based sound scheduling
-- Called after `updateAmbientAfternoonSounds()` in update loop
-- Full ambient cycle: night (crickets/owls/wind) → morning (robin/warbler/cuckoo) → afternoon (chimes/bees/mower) → evening (frogs/peepers/katydids)
-- Evening shares night crickets (night system uses evening+night), so evening gets both frog chorus AND crickets — realistic layering
+- Renderer is ~16,300+ lines
+- Snowman system follows the puddle pattern: weather-triggered spawn, click interaction, gradual removal
+- State variables: activeSnowman (object with stage/position/cosmetics), snowmanBuildPromptTimer, snowmanBuildPromptShown, totalSnowmenBuilt, snowmanFirstBuild
+- `startSnowmanBuild()` — initializes snowman at random position near pet's feet
+- `advanceSnowmanStage()` — increments stage, spawns particles/sounds/reactions
+- `tryClickSnowman()` — hit detection for build clicks
+- `updateSnowman()` — handles prompt timing, melt timer, wobble decay
+- `drawSnowman()` — renders multi-stage snowman with canvas 2D (circles, carrot nose, hat, scarf, arms)
+- Snowman spawns after ~10s of snowy weather, melts over ~5min after snow stops
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 53
+- Total achievements: 54

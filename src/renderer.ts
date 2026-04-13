@@ -6036,6 +6036,335 @@ function splashPuddle(p: Puddle): void {
   }
 }
 
+// --- Snowman Building ---
+type SnowmanStage = 0 | 1 | 2 | 3 | 4 | 5; // 0=none, 1=base, 2=body, 3=head, 4=face, 5=complete
+interface Snowman {
+  x: number;
+  y: number;
+  stage: SnowmanStage;
+  buildProgress: number;
+  meltTimer: number;
+  wobble: number;
+  scarf: string;
+  hatStyle: number;
+}
+
+let activeSnowman: Snowman | null = null;
+let snowmanBuildPromptTimer = 0;
+let snowmanBuildPromptShown = false;
+let totalSnowmenBuilt = 0;
+let snowmanFirstBuild = false;
+const SNOWMAN_PROMPT_DELAY = 600; // ~10s of snowy weather before prompt
+const SNOWMAN_MELT_TIME = 18000; // ~5 minutes to fully melt after snow stops
+
+const SCARF_COLORS = ["#E74C3C", "#3498DB", "#2ECC71", "#F39C12", "#9B59B6", "#E91E63"];
+
+function startSnowmanBuild(): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 50;
+  const sx = w * 0.2 + Math.random() * w * 0.15;
+  activeSnowman = {
+    x: sx,
+    y: groundY,
+    stage: 1 as SnowmanStage,
+    buildProgress: 0,
+    meltTimer: 0,
+    wobble: 0,
+    scarf: SCARF_COLORS[Math.floor(Math.random() * SCARF_COLORS.length)],
+    hatStyle: Math.floor(Math.random() * 3),
+  };
+  snowmanBuildPromptShown = true;
+
+  if (soundEnabled) {
+    playTone(300, 0.15, "sine", 0.08);
+    setTimeout(() => playTone(400, 0.12, "sine", 0.06), 80);
+  }
+
+  queueSpeechBubble("Let's build a snowman~! ⛄❄️ Click it to add parts!", 240);
+  addDiaryEntry("general", "⛄", "Started building a snowman in the snow!");
+}
+
+function advanceSnowmanStage(): void {
+  if (!activeSnowman || activeSnowman.stage >= 5) return;
+
+  activeSnowman.stage = (activeSnowman.stage + 1) as SnowmanStage;
+  activeSnowman.buildProgress = 0;
+  activeSnowman.wobble = 0.3;
+
+  if (soundEnabled) {
+    const pitches = [350, 440, 520, 600, 700];
+    const idx = activeSnowman.stage - 1;
+    playTone(pitches[idx], 0.12, "sine", 0.08);
+    setTimeout(() => playTone(pitches[idx] * 1.25, 0.1, "sine", 0.06), 60);
+  }
+
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    particles.push({
+      x: activeSnowman.x + Math.cos(angle) * 8,
+      y: activeSnowman.y - 20 - activeSnowman.stage * 10,
+      vx: Math.cos(angle) * (1 + Math.random()),
+      vy: -Math.random() * 1.5,
+      life: 30 + Math.random() * 20,
+      maxLife: 30 + Math.random() * 20,
+      size: 2 + Math.random() * 2,
+      type: "snowflake",
+    });
+  }
+
+  const stageReactions: Record<number, string[]> = {
+    2: ["Nice base~! Now the body! ⛄", "Rolling rolling~! 🌀❄️", "The bottom is done~! ⛄✨"],
+    3: ["Body done~! Now the head! ⛄", "It's taking shape~! ❄️😊", "Almost there~! Keep going! ⛄"],
+    4: ["Head's on~! Let's add a face! 👀", "Three snowballs stacked~! ⛄✨", "Looking like a real snowman~! ❄️"],
+    5: ["Our snowman is complete~!! ⛄🎉", "Ta-da~! What a beauty! ⛄💖", "We built it together~! ⛄✨🥰"],
+  };
+
+  const reactions = stageReactions[activeSnowman.stage] || ["Building..."];
+  queueSpeechBubble(reactions[Math.floor(Math.random() * reactions.length)], 200);
+
+  if (activeSnowman.stage === 5) {
+    totalSnowmenBuilt++;
+    spawnEmoteSet("love", 3);
+    addCarePoints(10);
+    isHappy = true;
+    happyTimer = 120;
+    addDiaryEntry("milestone", "⛄", `Built snowman #${totalSnowmenBuilt}! A winter masterpiece!`);
+    checkAchievements();
+  } else {
+    addCarePoints(2);
+    spawnEmoteSet("happy", 1);
+  }
+}
+
+function tryClickSnowman(clickX: number, clickY: number): boolean {
+  if (!activeSnowman || activeSnowman.stage >= 5) return false;
+
+  const sm = activeSnowman;
+  const hitCenterY = sm.y - 15 - sm.stage * 8;
+  const hitRadius = 25 + sm.stage * 5;
+  const dx = clickX - sm.x;
+  const dy = clickY - hitCenterY;
+
+  if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+    advanceSnowmanStage();
+    return true;
+  }
+  return false;
+}
+
+function updateSnowman(): void {
+  if (currentWeather === "snowy" && !activeSnowman && !snowmanBuildPromptShown) {
+    snowmanBuildPromptTimer++;
+    if (snowmanBuildPromptTimer >= SNOWMAN_PROMPT_DELAY) {
+      startSnowmanBuild();
+    }
+  }
+
+  if (activeSnowman) {
+    activeSnowman.buildProgress += 0.02;
+    if (activeSnowman.wobble > 0) {
+      activeSnowman.wobble *= 0.92;
+      if (activeSnowman.wobble < 0.005) activeSnowman.wobble = 0;
+    }
+
+    if (currentWeather !== "snowy" && activeSnowman.stage >= 1) {
+      activeSnowman.meltTimer++;
+      if (activeSnowman.meltTimer >= SNOWMAN_MELT_TIME) {
+        if (!snowmanFirstBuild && totalSnowmenBuilt > 0) {
+          queueSpeechBubble("The snowman melted away... 😢💧 We'll build another!", 200);
+          snowmanFirstBuild = true;
+        }
+        activeSnowman = null;
+        snowmanBuildPromptShown = false;
+        snowmanBuildPromptTimer = 0;
+      }
+    }
+
+    if (currentWeather === "snowy" && activeSnowman) {
+      activeSnowman.meltTimer = 0;
+    }
+  }
+
+  if (currentWeather !== "snowy") {
+    snowmanBuildPromptTimer = 0;
+    if (!activeSnowman) {
+      snowmanBuildPromptShown = false;
+    }
+  }
+}
+
+function drawSnowman(): void {
+  if (!activeSnowman) return;
+  const sm = activeSnowman;
+  const meltFade = sm.meltTimer > 0 ? Math.max(0, 1 - sm.meltTimer / SNOWMAN_MELT_TIME) : 1;
+  const meltShrink = 1 - (1 - meltFade) * 0.3;
+
+  ctx.save();
+  ctx.globalAlpha = meltFade;
+
+  const wobbleAngle = Math.sin(frame * 0.15) * sm.wobble;
+  ctx.translate(sm.x, sm.y);
+  ctx.rotate(wobbleAngle);
+
+  const baseR = 18 * meltShrink;
+  const bodyR = 13 * meltShrink;
+  const headR = 9 * meltShrink;
+
+  // Stage 1+: Base snowball
+  if (sm.stage >= 1) {
+    ctx.beginPath();
+    ctx.arc(0, -baseR, baseR, 0, Math.PI * 2);
+    ctx.fillStyle = "#F0F4F8";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180, 200, 220, 0.4)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // Snow texture dots
+    ctx.fillStyle = "rgba(200, 215, 230, 0.3)";
+    ctx.beginPath(); ctx.arc(-5, -baseR + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, -baseR - 4, 1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Stage 2+: Body snowball
+  if (sm.stage >= 2) {
+    const bodyY = -baseR * 2 - bodyR + 4;
+    ctx.beginPath();
+    ctx.arc(0, bodyY, bodyR, 0, Math.PI * 2);
+    ctx.fillStyle = "#F5F8FC";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180, 200, 220, 0.4)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Buttons (coal dots)
+    ctx.fillStyle = "#2C3E50";
+    ctx.beginPath(); ctx.arc(0, bodyY - 4, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, bodyY + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Stage 3+: Head snowball
+  if (sm.stage >= 3) {
+    const bodyY = -baseR * 2 - bodyR + 4;
+    const headY = bodyY - bodyR - headR + 3;
+    ctx.beginPath();
+    ctx.arc(0, headY, headR, 0, Math.PI * 2);
+    ctx.fillStyle = "#FAFCFF";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(180, 200, 220, 0.4)";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // Stage 4+: Face (eyes, carrot nose)
+  if (sm.stage >= 4) {
+    const bodyY = -baseR * 2 - bodyR + 4;
+    const headY = bodyY - bodyR - headR + 3;
+
+    // Eyes
+    ctx.fillStyle = "#2C3E50";
+    ctx.beginPath(); ctx.arc(-3, headY - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, headY - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+
+    // Carrot nose
+    ctx.fillStyle = "#E67E22";
+    ctx.beginPath();
+    ctx.moveTo(0, headY);
+    ctx.lineTo(7, headY + 1);
+    ctx.lineTo(0, headY + 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Smile (dots)
+    ctx.fillStyle = "#2C3E50";
+    for (let i = 0; i < 5; i++) {
+      const angle = Math.PI * 0.15 + (i / 4) * Math.PI * 0.7;
+      const sx2 = Math.cos(angle) * 5;
+      const sy2 = Math.sin(angle) * 3 + headY + 3;
+      ctx.beginPath(); ctx.arc(sx2, sy2, 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // Stage 5: Scarf + hat + stick arms
+  if (sm.stage >= 5) {
+    const bodyY = -baseR * 2 - bodyR + 4;
+    const headY = bodyY - bodyR - headR + 3;
+
+    // Scarf
+    ctx.strokeStyle = sm.scarf;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, bodyY - bodyR + 2, bodyR * 0.85, Math.PI * 0.9, Math.PI * 2.1);
+    ctx.stroke();
+    // Scarf tail
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(bodyR * 0.6, bodyY - bodyR + 5);
+    ctx.quadraticCurveTo(bodyR * 0.8, bodyY - bodyR + 12, bodyR * 0.5, bodyY - bodyR + 16);
+    ctx.stroke();
+
+    // Hat
+    ctx.fillStyle = "#2C3E50";
+    if (sm.hatStyle === 0) {
+      // Top hat
+      ctx.fillRect(-6, headY - headR - 10, 12, 10);
+      ctx.fillRect(-8, headY - headR - 1, 16, 3);
+    } else if (sm.hatStyle === 1) {
+      // Bucket hat
+      ctx.beginPath();
+      ctx.ellipse(0, headY - headR + 1, headR + 3, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-headR + 1, headY - headR + 1);
+      ctx.lineTo(-headR + 3, headY - headR - 7);
+      ctx.lineTo(headR - 3, headY - headR - 7);
+      ctx.lineTo(headR - 1, headY - headR + 1);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Beanie
+      ctx.beginPath();
+      ctx.arc(0, headY - headR + 2, headR, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = sm.scarf;
+      ctx.beginPath();
+      ctx.arc(0, headY - headR * 2 + 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Stick arms
+    ctx.strokeStyle = "#8B6914";
+    ctx.lineWidth = 1.5;
+    // Left arm
+    ctx.beginPath();
+    ctx.moveTo(-bodyR, bodyY);
+    ctx.lineTo(-bodyR - 14, bodyY - 8);
+    ctx.moveTo(-bodyR - 10, bodyY - 6);
+    ctx.lineTo(-bodyR - 14, bodyY - 12);
+    ctx.stroke();
+    // Right arm
+    ctx.beginPath();
+    ctx.moveTo(bodyR, bodyY);
+    ctx.lineTo(bodyR + 14, bodyY - 8);
+    ctx.moveTo(bodyR + 10, bodyY - 6);
+    ctx.lineTo(bodyR + 14, bodyY - 12);
+    ctx.stroke();
+  }
+
+  // Build prompt hint (pulsing glow when incomplete)
+  if (sm.stage < 5) {
+    const pulseAlpha = 0.15 + 0.1 * Math.sin(frame * 0.08);
+    const hintY = -baseR * 2 - (sm.stage >= 2 ? bodyR * 2 : 0) - (sm.stage >= 3 ? headR * 2 : 0) - 15;
+    ctx.fillStyle = `rgba(255, 255, 255, ${pulseAlpha})`;
+    ctx.font = "bold 8px monospace";
+    ctx.textAlign = "center";
+    const stageHints = ["", "Click to add body!", "Click to add head!", "Click to add face!", "Click to finish!"];
+    ctx.fillText(stageHints[sm.stage], 0, hintY);
+  }
+
+  ctx.restore();
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -8337,6 +8666,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Splashed a puddle, don't start drag
     }
   }
+  // Check for snowman building clicks
+  if (activeSnowman && activeSnowman.stage < 5) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickSnowman(clickX, clickY)) {
+      return; // Advanced snowman build, don't start drag
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -10000,6 +10338,11 @@ const achievements: Achievement[] = [
     icon: "🐸", unlockMessage: "The twilight chorus knows your name~ Ribbit ribbit! 🐸🌆🎶",
     condition: () => totalEveningChorusSessions >= 10, unlocked: false,
   },
+  {
+    id: "snow_sculptor", name: "Snow Sculptor", description: "Build 5 snowmen",
+    icon: "⛄", unlockMessage: "A master snow sculptor~! Every snowman is a work of art! ⛄❄️🎨",
+    condition: () => totalSnowmenBuilt >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10824,6 +11167,16 @@ function drawStatsPanel(): void {
   ctx.fillStyle = "#fff";
   ctx.fillText(`🐸 ${totalEveningChorusSessions} sessions`, panelX + panelW - 12, y);
 
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#B0C4DE";
+  ctx.fillText("SNOWMEN BUILT", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`⛄ ${totalSnowmenBuilt} snowmen`, panelX + panelW - 12, y);
+
   // Close hint
   ctx.textAlign = "center";
   ctx.font = "7px monospace";
@@ -11249,6 +11602,7 @@ interface SaveData {
   totalMeteorShowersWitnessed: number;
   totalAfternoonSoundsSessions: number;
   totalEveningChorusSessions: number;
+  totalSnowmenBuilt: number;
   version: number;
 }
 
@@ -11324,6 +11678,7 @@ function buildSaveData(): SaveData {
     totalMeteorShowersWitnessed,
     totalAfternoonSoundsSessions,
     totalEveningChorusSessions,
+    totalSnowmenBuilt,
     version: 1,
   };
 }
@@ -11615,6 +11970,11 @@ function applySaveData(data: SaveData): void {
   // Restore evening chorus sessions
   if (typeof (data as SaveData).totalEveningChorusSessions === "number") {
     totalEveningChorusSessions = (data as SaveData).totalEveningChorusSessions;
+  }
+
+  // Restore snowmen built
+  if (typeof (data as SaveData).totalSnowmenBuilt === "number") {
+    totalSnowmenBuilt = (data as SaveData).totalSnowmenBuilt;
   }
 
   // Restore diary
@@ -14038,6 +14398,9 @@ function update(): void {
   // Puddles after rain update
   updatePuddles();
 
+  // Snowman building update
+  updateSnowman();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -15135,6 +15498,9 @@ function draw(): void {
 
   // Puddles after rain (on the ground, behind pet)
   drawPuddles();
+
+  // Snowman (on the ground, behind pet)
+  drawSnowman();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);

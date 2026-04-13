@@ -3,6 +3,27 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.79.0] — 2026-04-13 — Snowman Building
+
+### Added
+- **Interactive snowman building** — during snowy weather, a snowman building activity starts automatically after ~10 seconds, inviting the player to build a snowman step by step
+- **5-stage build process** — click the snowman to progress through stages: base snowball → body → head → face (eyes, carrot nose, coal smile) → accessories (scarf, hat, stick arms)
+- **Randomized cosmetics** — each snowman gets a random scarf color (6 options: red, blue, green, orange, purple, pink) and hat style (top hat, bucket hat, or beanie)
+- **Snow particle bursts** — each build stage spawns a burst of 6 snowflake particles
+- **Ascending build sounds** — each stage plays progressively higher-pitched tones (350→700 Hz)
+- **Wobble animation** — snowman wobbles briefly after each stage is added, with smooth dampening
+- **Gradual melting** — when weather changes from snowy, the snowman slowly melts over ~5 minutes (fading opacity + shrinking)
+- **Build prompt hints** — pulsing text hints above the snowman showing what to add next
+- **Speech reactions** — unique reaction messages per stage (15 total), with excited celebration on completion
+- **Care points** — 2 points per build stage, 10 bonus points for completion
+- **Diary entries** — diary logs for starting and completing each snowman build
+- **Stats panel section** — dedicated SNOWMEN BUILT section showing total count
+- **Snow Sculptor achievement** — build 5 snowmen to unlock achievement #54 (⛄)
+- **Full persistence** — total snowmen built saved across sessions
+- **Total achievements: 54**
+
+**Why this feature:** Snowy weather in Tamashii has always been purely visual — falling snowflakes with no interactivity. Building a snowman is the quintessential snow activity, and it transforms passive weather observation into an engaging multi-step creative collaboration between the player and pet. The step-by-step build mechanic (base → body → head → face → accessories) gives each click a tangible, visible reward, and the randomized hats and scarves make every snowman unique.
+
 ## [v0.78.0] — 2026-04-13 — Evening Frog Chorus
 
 ### Added
