@@ -372,6 +372,91 @@ let sleepRitualProgress = 0;
 let totalSleepRituals = 0;
 let sleepRitualFirstTime = true;
 
+// --- Sleep Talking ---
+let sleepTalkTimer = 0;
+let totalSleepTalks = 0;
+let sleepTalkFirstTime = true;
+const SLEEP_TALK_MIN_INTERVAL = 900;   // ~15 seconds minimum between mumbles
+const SLEEP_TALK_MAX_INTERVAL = 2400;  // ~40 seconds maximum
+
+const SLEEP_TALK_GENERIC = [
+  "*mumble*... five more minutes...",
+  "Zzz... no no... that's my cookie...",
+  "*snore*... hehe... tickles...",
+  "Mmm... warm... so warm...",
+  "*mumble*... don't go...",
+  "Zzz... flying... wheee...",
+  "*snore*... bigger... need bigger pillow...",
+  "Mmm... stars... pretty stars...",
+  "*mumble*... best day ever...",
+  "Zzz... cloud bed... so soft...",
+  "*snore*... carry me...",
+  "Mmm... gonna catch it...",
+];
+
+const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
+  fed: [
+    "*mumble*... more snacks... yum...",
+    "Zzz... cake mountain... so big...",
+    "*snore*... eating clouds... tasty...",
+  ],
+  played: [
+    "*mumble*... throw it again...",
+    "Zzz... faster... wheee...",
+    "*snore*... best game... ever...",
+  ],
+  trick: [
+    "*mumble*... backflip... nailed it...",
+    "Zzz... standing ovation... encore...",
+    "*snore*... ta-da... *mumble*...",
+  ],
+  petted: [
+    "*mumble*... more head pats...",
+    "Zzz... so cozy... love you...",
+    "*snore*... purrrr... don't stop...",
+  ],
+  music: [
+    "*mumble*... la la la...",
+    "Zzz... that melody... again...",
+    "*snore*... concert... front row...",
+  ],
+  photo: [
+    "*mumble*... say cheese...",
+    "Zzz... strike a pose... click...",
+    "*snore*... famous... on magazine...",
+  ],
+  fireflies: [
+    "*mumble*... glowing... everywhere...",
+    "Zzz... firefly friends... sparkle...",
+    "*snore*... jar of light... pretty...",
+  ],
+  story: [
+    "*mumble*... and then... the dragon...",
+    "Zzz... happily ever... after...",
+    "*snore*... read it again... please...",
+  ],
+  meditation: [
+    "*mumble*... om... peace...",
+    "Zzz... floating... serenity...",
+    "*snore*... breathe in... out...",
+  ],
+  tea: [
+    "*mumble*... another cup... please...",
+    "Zzz... tea party... fancy...",
+    "*snore*... pinky up... sip...",
+  ],
+  constellations: [
+    "*mumble*... connect the dots... stars...",
+    "Zzz... big dipper... little dipper...",
+    "*snore*... sky map... beautiful...",
+  ],
+  snowman: [
+    "*mumble*... needs a hat... bigger...",
+    "Zzz... snow angel... whooosh...",
+    "*snore*... frosty... my friend...",
+  ],
+};
+
 const SLEEP_RITUAL_PHASES: SleepRitualPhase[] = ["yawn", "stretch", "curl_up", "nuzzle", "drift_off"];
 const SLEEP_RITUAL_DURATIONS: Record<SleepRitualPhase, number> = {
   none: 0,
@@ -864,6 +949,7 @@ function startMeditation(): void {
 function completeMeditation(): void {
   meditationActive = false;
   totalMeditations++;
+  logDailyActivity("meditation");
 
   playMeditationCompleteSound();
   const msg = meditationSpeechEnd[Math.floor(Math.random() * meditationSpeechEnd.length)];
@@ -1879,6 +1965,7 @@ function updateTeaParty(): void {
         teaPartyDoneToday = true;
         totalTeaParties++;
         teaPartiesThisSession++;
+        logDailyActivity("tea");
 
         // Stats boost
         petHappiness = Math.min(100, petHappiness + 3);
@@ -2836,6 +2923,60 @@ function getContextualDreamIcons(): string[] {
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
   const allIcons = [...contextIcons, ...baseline];
   return allIcons;
+}
+
+function playSleepMumbleSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(180 + Math.random() * 40, audioCtx.currentTime);
+  osc.frequency.linearRampToValueAtTime(140 + Math.random() * 30, audioCtx.currentTime + 0.3);
+  gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.4);
+  setTimeout(() => {
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.value = 150 + Math.random() * 30;
+    gain2.gain.setValueAtTime(0.025, audioCtx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start();
+    osc2.stop(audioCtx.currentTime + 0.25);
+  }, 200);
+}
+
+function getSleepTalkMessage(): string {
+  const contextMessages: string[] = [];
+  for (const activity of dailyActivityLog) {
+    const msgs = SLEEP_TALK_CONTEXTUAL[activity];
+    if (msgs) contextMessages.push(...msgs);
+  }
+  if (contextMessages.length > 0 && Math.random() < 0.65) {
+    return contextMessages[Math.floor(Math.random() * contextMessages.length)];
+  }
+  return SLEEP_TALK_GENERIC[Math.floor(Math.random() * SLEEP_TALK_GENERIC.length)];
+}
+
+function triggerSleepTalk(): void {
+  if (!isSleeping || sleepTransitionType) return;
+  const message = getSleepTalkMessage();
+  queueSpeechBubble(message, 150, true);
+  playSleepMumbleSound();
+  totalSleepTalks++;
+  if (sleepTalkFirstTime) {
+    sleepTalkFirstTime = false;
+    addDiaryEntry("general", "💤", `${petName} talked in their sleep for the first time~! "${message}"`);
+  }
+  saveGame();
 }
 
 function startFallingAsleep(): void {
@@ -6293,6 +6434,7 @@ function advanceSnowmanStage(): void {
 
   if (activeSnowman.stage === 5) {
     totalSnowmenBuilt++;
+    logDailyActivity("snowman");
     spawnEmoteSet("love", 3);
     addCarePoints(10);
     isHappy = true;
@@ -10516,6 +10658,11 @@ const achievements: Achievement[] = [
     icon: "😴", unlockMessage: "The sweetest dreamer of all~ Every night is a peaceful journey to dreamland! 😴💫🌙",
     condition: () => totalSleepRituals >= 20, unlocked: false,
   },
+  {
+    id: "sleep_talker", name: "Sleep Talker", description: "Hear 30 sleep talk mumbles",
+    icon: "💤", unlockMessage: "Such a chatty sleeper~! The dreams must be vivid tonight! 💤🗨️✨",
+    condition: () => totalSleepTalks >= 30, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10954,6 +11101,8 @@ function drawStatsPanel(): void {
   ctx.fillText(`${totalNightsSlept} nights slept`, w / 2, y);
   y += 10;
   ctx.fillText(`😴 ${totalSleepRituals} bedtime rituals`, w / 2, y);
+  y += 10;
+  ctx.fillText(`💤 ${totalSleepTalks} sleep talks`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -11780,6 +11929,8 @@ interface SaveData {
   totalSnowmenBuilt: number;
   totalSleepRituals: number;
   sleepRitualFirstTime: boolean;
+  totalSleepTalks: number;
+  sleepTalkFirstTime: boolean;
   version: number;
 }
 
@@ -11858,6 +12009,8 @@ function buildSaveData(): SaveData {
     totalSnowmenBuilt,
     totalSleepRituals,
     sleepRitualFirstTime,
+    totalSleepTalks,
+    sleepTalkFirstTime,
     version: 1,
   };
 }
@@ -12160,6 +12313,12 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).sleepRitualFirstTime === "boolean") {
     sleepRitualFirstTime = (data as SaveData).sleepRitualFirstTime;
+  }
+  if (typeof (data as SaveData).totalSleepTalks === "number") {
+    totalSleepTalks = (data as SaveData).totalSleepTalks;
+  }
+  if (typeof (data as SaveData).sleepTalkFirstTime === "boolean") {
+    sleepTalkFirstTime = (data as SaveData).sleepTalkFirstTime;
   }
 
   // Restore diary
@@ -15015,6 +15174,16 @@ function update(): void {
     sleepBreathProgress += 0.025; // slow, gentle breathing cycle
     if (sleepBreathProgress > Math.PI * 2) sleepBreathProgress -= Math.PI * 2;
     sleepNightcapBob += 0.015;
+
+    // Sleep talking — occasional mumbled speech during sleep
+    sleepTalkTimer++;
+    const nextTalkAt = SLEEP_TALK_MIN_INTERVAL + Math.floor(Math.random() * (SLEEP_TALK_MAX_INTERVAL - SLEEP_TALK_MIN_INTERVAL));
+    if (sleepTalkTimer >= nextTalkAt && !speechBubble) {
+      sleepTalkTimer = 0;
+      triggerSleepTalk();
+    }
+  } else {
+    sleepTalkTimer = 0;
   }
 
   // --- Ambient Night Sounds ---

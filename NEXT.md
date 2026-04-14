@@ -3,22 +3,22 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.80.0 — Bedtime Ritual (2026-04-14)
+## Last completed: v0.81.0 — Sleep Talking (2026-04-14)
 
 ### What was done
-- Added multi-phase bedtime ritual sequence before falling asleep
-- 5 phases: yawn → stretch → curl up → nuzzle → drift off
-- Progressive drowsiness with heavy-lidded eyes and sleepy blush
-- Dynamic eyelid drawn in pet's body color, yawn phase with open-mouth animation
-- Phase-specific sounds (descending lullabies) and speech bubbles (16 messages)
-- Sleepy sparkle particles on completion, interaction blocking during ritual
-- Sweet Dreamer achievement (#55): complete 20 bedtime rituals
-- Total achievements: 55
+- Added contextual sleep talking during sleep
+- 12 generic mumble messages + 36 activity-specific mumbles across 12 activity types
+- Smart context weighting: 65% chance to reference day's activities, 35% generic
+- Gentle two-tone mumble sound effect (~150-200 Hz descending hum)
+- Randomized intervals between ~15-40 seconds
+- Added logDailyActivity calls for meditation, tea parties, and snowman building
+- Sleep Talker achievement (#56): hear 30 sleep talk mumbles
+- Total achievements: 56
 
 ### Thoughts for next cycle
 - **Rain sounds** — ambient rain patter during weather events, complementing the existing visual weather system
 - **Summer cicadas** — ambient cicada sounds during summer months as a seasonal variant
-- **Dream bubbles enhancement** — while sleeping, show actual thought bubble clouds with dream text/scenes from the day's activities
+- **Dream bubbles enhancement** — while sleeping, show actual thought bubble clouds with dream text/scenes from the day's activities (would pair beautifully with sleep talking)
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster (skip ritual phases)
 - **Pet outfits** — full body cosmetic sets beyond single accessories
 - **Friendship milestones** — friendship levels unlock exclusive cosmetics or abilities
@@ -39,20 +39,18 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Snow fort building** — an extension of snowman building where the pet can construct a snow fort
 - **Ice skating** — pet slides around on frozen puddles during cold weather
 - **Snowball fight** — pet throws snowballs at the screen for a playful winter interaction
-- **Sleep talking** — random mumbled speech bubbles during sleep based on the day's activities
 - **Nightlight** — a soft glow that appears near the sleeping pet, click to toggle on/off
+- **Sleep talk journal** — a dedicated log of all sleep talk messages with timestamps
+- **Dream theater** — an elaborate dream sequence with mini-scenes that play during sleep
 
 ### Current architecture notes
-- Renderer is ~16,550+ lines
-- Sleep ritual system mirrors the morning stretch pattern: phase array, duration map, start/advance/complete/update/getTransform functions
-- State variables: sleepRitualActive, sleepRitualPhase, sleepRitualProgress, totalSleepRituals, sleepRitualFirstTime
-- `startSleepRitual()` — begins the yawn phase with sounds and speech
-- `advanceSleepRitual()` — moves to next phase with phase-specific sounds/speech
-- `completeSleepRitual()` — ends ritual, spawns particles, then calls `startFallingAsleep()`
-- `updateSleepRitual()` — progresses current phase, called in main loop
-- `getSleepRitualTransform()` — returns body transform per phase (rotation, scale, offset)
-- Face drawing: custom drowsy face with progressive eye drooping, dynamic eyelid, yawn mouth
-- `startFallingAsleep()` was simplified to just set transition state + play lullaby (speech/emotes moved to ritual)
+- Renderer is ~16,650+ lines
+- Sleep talking uses `sleepTalkTimer` in the main loop's isSleeping block, right after breathing animation
+- `triggerSleepTalk()` — picks a contextual or generic message, shows speech bubble, plays mumble sound
+- `getSleepTalkMessage()` — selects from SLEEP_TALK_CONTEXTUAL based on dailyActivityLog, 65% contextual bias
+- `playSleepMumbleSound()` — two-stage sine tone (~180Hz → ~150Hz) with gentle fade
+- State variables: sleepTalkTimer, totalSleepTalks, sleepTalkFirstTime
+- dailyActivityLog now tracks: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 55
+- Total achievements: 56

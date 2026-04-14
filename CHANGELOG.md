@@ -3,6 +3,24 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.81.0] — 2026-04-14 — Sleep Talking
+
+### Added
+- **Contextual sleep talking** — while sleeping, the pet occasionally mumbles speech bubbles based on the day's activities, revealing what it's dreaming about
+- **12 generic mumbles** — universal sleep talk messages like "*mumble*... five more minutes..." and "Zzz... no no... that's my cookie..."
+- **36 activity-specific mumbles** — contextual dream speech for 12 different activities (feeding, playing, tricks, petting, music, photos, fireflies, stories, meditation, tea parties, constellations, snowman building), each with 3 unique mumble variants
+- **Smart context weighting** — 65% chance to reference a day's activity when one exists, otherwise falls back to generic mumbles
+- **Gentle mumble sound** — soft two-tone descending hum (~150-200 Hz) that sounds like sleepy murmuring, quiet enough not to disturb the peaceful sleeping atmosphere
+- **Randomized intervals** — sleep talks occur every ~15-40 seconds, keeping each night unique and unpredictable
+- **Daily activity logging** — added activity tracking for meditation, tea parties, and snowman building to expand contextual dream content
+- **Diary entry** — first sleep talk each session is logged with the actual mumbled message
+- **Stats panel section** — sleep talk count displayed in the sleep stats area
+- **Sleep Talker achievement** — hear 30 sleep talk mumbles to unlock achievement #56 (💤)
+- **Full persistence** — total sleep talks and first-time flag saved across sessions
+- **Total achievements: 56**
+
+**Why this feature:** The bedtime ritual just added in v0.80.0 made falling asleep into a beautiful ceremony, but once the pet was asleep, the only visual feedback was breathing animation and dream icon bubbles. Sleep talking adds personality and narrative to the sleeping state — the pet's mumbles reveal what made an impression during the day, creating a delightful feedback loop where players recognize their activities reflected in the pet's dreams. Hearing "*mumble*... more head pats..." after a petting session, or "Zzz... happily ever... after..." after reading a bedtime story, makes the relationship feel alive even while the pet sleeps.
+
 ## [v0.80.0] — 2026-04-14 — Bedtime Ritual
 
 ### Added
