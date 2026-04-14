@@ -3,23 +3,21 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.82.0 — Nightlight (2026-04-14)
+## Last completed: v0.83.0 — Rain Sounds (2026-04-14)
 
 ### What was done
-- Added a cozy nightlight that appears beside the sleeping pet
-- Small lamp with dome shade, wooden base, and flickering flame
-- Warm pulsing radial glow (layered gradients) when lit
-- Click to toggle on/off during sleep — first interactive sleep element
-- Ascending/descending toggle sound effects
-- 8 "on" speech messages + 4 "off" speech messages with randomized triggers
-- Auto-on when falling asleep, auto-off when waking
-- Diary entry on first discovery
-- Nightlight Keeper achievement (#57): toggle 20 times
-- Total achievements: 57
+- Added ambient rain sounds that play during rainy and stormy weather
+- Three sound layers: gentle rain patter (high-pass filtered noise bursts), heavy drops (bandpass filtered impacts), thunder rumbles (low-pass filtered with rolling envelope)
+- Weather-aware intensity: storms have double the frequency of rain patter and heavy drops
+- Thunder only plays during stormy weather, with scared/brave pet reactions
+- 6 cozy rain speech reactions + 4 thunder reactions
+- Diary entry on first rain sound session
+- Rain Listener achievement (#58): listen to rain 10 times
+- Stats panel entry for rain sound sessions
+- Total achievements: 58
 
 ### Thoughts for next cycle
-- **Rain sounds** — ambient rain patter during rainy weather events, complementing the existing visual rain system
-- **Summer cicadas** — ambient cicada sounds during summer months as a seasonal variant
+- **Summer cicadas** — ambient cicada sounds during summer months as a seasonal variant (summer has fewer ambient sounds)
 - **Dream bubbles enhancement** — while sleeping, show actual thought bubble clouds with dream text/scenes from the day's activities (would pair beautifully with sleep talking and nightlight)
 - **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster (skip ritual phases)
 - **Pet outfits** — full body cosmetic sets beyond single accessories
@@ -45,19 +43,19 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Dream theater** — elaborate dream sequences with mini-scenes during sleep
 - **Bedtime reading lamp** — the nightlight changes to a reading lamp when a bedtime story is active
 - **Nightlight color customization** — unlock different nightlight colors/styles
+- **Wind chimes** — gentle chime sounds during windy weather to complete the weather-sound palette
+- **Thunderstorm light flashes** — brief screen-wide flash during thunder for visual drama
 
 ### Current architecture notes
-- Renderer is ~16,950+ lines
-- Nightlight uses `nightlightOn`, `nightlightGlowPhase`, `nightlightFirstTime`, `totalNightlightToggles`
-- `drawNightlight()` — renders lamp at offset (65, 30) from pet center with radial glow, flame, and shade
-- `tryClickNightlight()` — hit detection within 18px radius of lamp position
-- `toggleNightlight()` — handles toggle logic, sound, speech, diary, achievement check, save
-- `playNightlightClickSound()` — ascending sine chirp (on) or descending (off)
-- `getNightlightPosition()` — returns {x, y} for consistent positioning across draw/click
-- Auto-on in `completeFallingAsleep()` and nighttime session resume; auto-off in `completeWakingUp()`
-- Click handler added in mousedown before snowman building checks
-- Sleep talking uses `sleepTalkTimer` in the main loop's isSleeping block
+- Renderer is ~17,100+ lines
+- Rain sounds use `ambientRainActive`, `nextRainPatterTime`, `nextHeavyDropTime`, `nextThunderTime`, `totalRainSoundSessions`
+- `playRainPatter()` — cluster of 3-8 high-pass filtered noise bursts simulating multiple drops
+- `playHeavyDrop()` — single bandpass-filtered noise burst for a louder splashy impact
+- `playThunderRumble()` — low-pass filtered noise with rolling sine-modulated envelope (~1.2-2.2s duration)
+- `updateAmbientRainSounds()` — triggers on rainy/stormy weather, follows same pattern as other ambient sound systems
+- Storm intensity doubles the rain patter and heavy drop intervals
+- Thunder only plays during stormy weather (not regular rain)
 - dailyActivityLog tracks: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman
 - Two mini-games: Star Catcher (reflex) and Memory Match (pattern recall)
 - Five personality types: Shy, Energetic, Curious, Sleepy, Gluttonous
-- Total achievements: 57
+- Total achievements: 58

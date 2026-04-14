@@ -537,6 +537,36 @@ const EVENING_CHORUS_REACTIONS = [
   "Twilight symphony~ Frogs and katydids together! 🌅🎵",
 ];
 
+// --- Ambient Rain Sounds ---
+let ambientRainActive = false;
+let nextRainPatterTime = 0;
+let nextHeavyDropTime = 0;
+let nextThunderTime = 0;
+let ambientRainFirstSession = false;
+let totalRainSoundSessions = 0;
+const RAIN_PATTER_MIN_INTERVAL = 30;
+const RAIN_PATTER_MAX_INTERVAL = 90;
+const HEAVY_DROP_MIN_INTERVAL = 120;
+const HEAVY_DROP_MAX_INTERVAL = 300;
+const THUNDER_MIN_INTERVAL = 600;
+const THUNDER_MAX_INTERVAL = 1800;
+
+const RAIN_SOUND_REACTIONS = [
+  "Listen to the rain~ So peaceful! 🌧️💤",
+  "Pitter patter pitter patter~ 🌧️🎶",
+  "The rain sounds like a lullaby~ 🌧️✨",
+  "I love the sound of raindrops~ 🌧️💙",
+  "Rain, rain~ Sing your song! 🎵🌧️",
+  "So cozy listening to the rain~ 🌧️☺️",
+];
+
+const THUNDER_REACTIONS = [
+  "Eep~! Thunder! Hold me! ⛈️😱",
+  "BOOM~! That was so loud! ⛈️💥",
+  "Whoa~! The sky is rumbling! ⛈️",
+  "Thunder makes me brave... I think! ⛈️💪",
+];
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -2727,6 +2757,140 @@ function updateAmbientEveningSounds(): void {
     nextKatydidTime = frame + KATYDID_MIN_INTERVAL + Math.floor(Math.random() * (KATYDID_MAX_INTERVAL - KATYDID_MIN_INTERVAL));
     if (!isSleeping && !speechBubble && Math.random() < 0.1) {
       queueSpeechBubble("Ka-ty-did! Ka-ty-didn't~! The katydids are arguing! 🦗😄", 150, true);
+    }
+  }
+
+  checkAchievements();
+}
+
+// --- Ambient Rain Sound Functions ---
+
+function playRainPatter(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dropCount = 3 + Math.floor(Math.random() * 5);
+  for (let i = 0; i < dropCount; i++) {
+    const start = t + i * (0.03 + Math.random() * 0.04);
+    const dur = 0.02 + Math.random() * 0.03;
+    const bufSize = Math.floor(audioCtx.sampleRate * dur);
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let j = 0; j < bufSize; j++) {
+      data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.3));
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 4000 + Math.random() * 4000;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.008 + Math.random() * 0.006, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start(start);
+    src.stop(start + dur + 0.01);
+  }
+}
+
+function playHeavyDrop(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 0.08 + Math.random() * 0.05;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.15));
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1500 + Math.random() * 2000;
+  filter.Q.value = 0.5;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.02 + Math.random() * 0.01, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur + 0.01);
+}
+
+function playThunderRumble(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 1.2 + Math.random() * 1.0;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    const env = Math.exp(-j / (bufSize * 0.4)) * (1 + 0.3 * Math.sin(j / (bufSize * 0.1)));
+    data[j] = (Math.random() * 2 - 1) * env;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 150 + Math.random() * 100;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.04, t);
+  gain.gain.setValueAtTime(0.04, t + dur * 0.3);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur + 0.05);
+}
+
+function updateAmbientRainSounds(): void {
+  const isRaining = currentWeather === "rainy" || currentWeather === "stormy";
+
+  if (isRaining && !ambientRainActive) {
+    ambientRainActive = true;
+    totalRainSoundSessions++;
+    nextRainPatterTime = frame + 30 + Math.floor(Math.random() * 60);
+    nextHeavyDropTime = frame + 90 + Math.floor(Math.random() * 120);
+    nextThunderTime = frame + THUNDER_MIN_INTERVAL + Math.floor(Math.random() * (THUNDER_MAX_INTERVAL - THUNDER_MIN_INTERVAL));
+    if (!ambientRainFirstSession) {
+      ambientRainFirstSession = true;
+      addDiaryEntry("general", "🌧️", "The rain began to sing~ Pitter patter on the window!");
+    }
+  } else if (!isRaining && ambientRainActive) {
+    ambientRainActive = false;
+  }
+
+  if (!ambientRainActive) return;
+
+  if (frame >= nextRainPatterTime) {
+    playRainPatter();
+    const minInt = currentWeather === "stormy" ? RAIN_PATTER_MIN_INTERVAL / 2 : RAIN_PATTER_MIN_INTERVAL;
+    const maxInt = currentWeather === "stormy" ? RAIN_PATTER_MAX_INTERVAL / 2 : RAIN_PATTER_MAX_INTERVAL;
+    nextRainPatterTime = frame + minInt + Math.floor(Math.random() * (maxInt - minInt));
+  }
+
+  if (frame >= nextHeavyDropTime) {
+    playHeavyDrop();
+    const minInt = currentWeather === "stormy" ? HEAVY_DROP_MIN_INTERVAL / 2 : HEAVY_DROP_MIN_INTERVAL;
+    const maxInt = currentWeather === "stormy" ? HEAVY_DROP_MAX_INTERVAL / 2 : HEAVY_DROP_MAX_INTERVAL;
+    nextHeavyDropTime = frame + minInt + Math.floor(Math.random() * (maxInt - minInt));
+    if (!isSleeping && !speechBubble && Math.random() < 0.1) {
+      queueSpeechBubble(RAIN_SOUND_REACTIONS[Math.floor(Math.random() * RAIN_SOUND_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (currentWeather === "stormy" && frame >= nextThunderTime) {
+    playThunderRumble();
+    nextThunderTime = frame + THUNDER_MIN_INTERVAL + Math.floor(Math.random() * (THUNDER_MAX_INTERVAL - THUNDER_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.35) {
+      queueSpeechBubble(THUNDER_REACTIONS[Math.floor(Math.random() * THUNDER_REACTIONS.length)], 150, true);
     }
   }
 
@@ -10847,6 +11011,11 @@ const achievements: Achievement[] = [
     icon: "🕯️", unlockMessage: "Guardian of the little flame~! The nightlight loves you back! 🕯️💛✨",
     condition: () => totalNightlightToggles >= 20, unlocked: false,
   },
+  {
+    id: "rain_listener", name: "Rain Listener", description: "Listen to the rain 10 times",
+    icon: "🌧️", unlockMessage: "The rain sings just for you~! A cozy soul who loves the pitter patter! 🌧️💙🎶",
+    condition: () => totalRainSoundSessions >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -11678,6 +11847,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#6B9BD2";
+  ctx.fillText("RAIN SOUNDS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌧️ ${totalRainSoundSessions} sessions`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#B0C4DE";
   ctx.fillText("SNOWMEN BUILT", panelX + 12, y);
   ctx.textAlign = "right";
@@ -12117,6 +12296,7 @@ interface SaveData {
   sleepTalkFirstTime: boolean;
   totalNightlightToggles: number;
   nightlightFirstTime: boolean;
+  totalRainSoundSessions: number;
   version: number;
 }
 
@@ -12199,6 +12379,7 @@ function buildSaveData(): SaveData {
     sleepTalkFirstTime,
     totalNightlightToggles,
     nightlightFirstTime,
+    totalRainSoundSessions,
     version: 1,
   };
 }
@@ -12513,6 +12694,9 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).nightlightFirstTime === "boolean") {
     nightlightFirstTime = (data as SaveData).nightlightFirstTime;
+  }
+  if (typeof (data as SaveData).totalRainSoundSessions === "number") {
+    totalRainSoundSessions = (data as SaveData).totalRainSoundSessions;
   }
 
   // Restore diary
@@ -15392,6 +15576,9 @@ function update(): void {
 
   // --- Ambient Evening Frog Chorus ---
   updateAmbientEveningSounds();
+
+  // --- Ambient Rain Sounds ---
+  updateAmbientRainSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;

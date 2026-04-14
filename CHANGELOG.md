@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.83.0] — 2026-04-14 — Rain Sounds
+
+### Added
+- **Ambient rain patter** — gentle high-frequency noise bursts simulating clusters of raindrops hitting a window, using filtered white noise with exponential decay
+- **Heavy drops** — occasional louder, deeper raindrop impacts with bandpass filtering for a satisfying splashy quality
+- **Thunder rumbles** — during stormy weather, low-frequency rumbling thunder with organic envelope shaping (slow decay with sine modulation for rolling thunder effect)
+- **Weather-aware intensity** — rain patter and heavy drops play twice as frequently during storms compared to regular rain
+- **Speech reactions** — 6 cozy rain messages ("Listen to the rain~ So peaceful! 🌧️💤") and 4 thunder reactions ("Eep~! Thunder! Hold me! ⛈️😱") with natural randomness
+- **Diary entry** — first rain sound session logged to pet diary
+- **Rain Listener achievement** — listen to the rain 10 times to unlock achievement #58 (🌧️)
+- **Stats tracking** — total rain sound sessions displayed in stats panel
+- **Full persistence** — rain sound session count saved across sessions
+- **Total achievements: 58**
+
+**Why this feature:** The pet already has a beautiful visual rain system with falling raindrop particles and puddles, plus four ambient sound palettes covering the full day cycle (night crickets, morning birdsong, afternoon cicadas, evening frog chorus). But rainy weather — one of the most emotionally evocative weather types — was silent. Adding rain sounds fills this gap perfectly, making rainy days feel cozy and immersive rather than just visual. The three-layered sound design (gentle patter + heavy drops + thunder) creates natural depth, and the stormy weather intensification makes storms feel powerful and dramatic.
+
 ## [v0.82.0] — 2026-04-14 — Nightlight
 
 ### Added
