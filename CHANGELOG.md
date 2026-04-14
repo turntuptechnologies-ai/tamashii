@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.82.0] — 2026-04-14 — Nightlight
+
+### Added
+- **Cozy nightlight** — a small, warm-glowing lamp appears beside the sleeping pet, automatically turning on when the pet falls asleep
+- **Click to toggle** — click the nightlight during sleep to turn it on or off, giving the player a gentle interaction even while the pet sleeps
+- **Warm radial glow** — when lit, the nightlight casts a soft, pulsing amber glow with layered radial gradients (outer warm haze + inner bright core)
+- **Flickering flame** — a tiny animated filament inside the lamp shade flickers gently with multi-frequency sine waves for organic movement
+- **Lamp design** — hand-drawn lamp with a dome shade (gradient-lit when on, muted when off), wooden base, and decorative detail
+- **Toggle sound effect** — soft ascending tone when turning on, descending tone when turning off, subtle enough not to wake the pet
+- **Speech reactions** — 8 cozy "on" messages ("The nightlight is so warm~ 🕯️✨") and 4 brave "off" messages ("The stars are my nightlight now~ ⭐"), triggered with natural randomness
+- **Auto-on/off** — nightlight automatically turns on when the pet falls asleep (including bedtime ritual) and turns off when waking up
+- **Session resume** — nightlight re-activates when loading during nighttime
+- **Diary entry** — first nightlight discovery logged to pet diary
+- **Nightlight Keeper achievement** — toggle the nightlight 20 times to unlock achievement #57 (🕯️)
+- **Full persistence** — total toggles and first-time flag saved across sessions
+- **Total achievements: 57**
+
+**Why this feature:** The sleep system has grown beautifully — bedtime rituals, sleep talking, dream bubbles — but it's been entirely passive once the pet is asleep. The nightlight adds the first *interactive* element to the sleeping state: a warm, cozy lamp that players can toggle on and off. It's a small, intimate gesture — like tucking in a child and leaving a nightlight on — that deepens the emotional connection. The pulsing warm glow also adds visual richness to the nighttime scene, making the sleeping pet feel even more peaceful and cared for.
+
 ## [v0.81.0] — 2026-04-14 — Sleep Talking
 
 ### Added

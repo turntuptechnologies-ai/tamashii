@@ -372,6 +372,14 @@ let sleepRitualProgress = 0;
 let totalSleepRituals = 0;
 let sleepRitualFirstTime = true;
 
+// --- Nightlight ---
+let nightlightOn = false;
+let nightlightGlowPhase = 0;
+let nightlightFirstTime = true;
+let totalNightlightToggles = 0;
+const NIGHTLIGHT_X_OFFSET = 65;
+const NIGHTLIGHT_Y_OFFSET = 30;
+
 // --- Sleep Talking ---
 let sleepTalkTimer = 0;
 let totalSleepTalks = 0;
@@ -2979,6 +2987,165 @@ function triggerSleepTalk(): void {
   saveGame();
 }
 
+// --- Nightlight Functions ---
+const NIGHTLIGHT_MESSAGES = [
+  "The nightlight is so warm~ 🕯️✨",
+  "A cozy little glow~ 💛",
+  "Soft light... safe dreams... 🌙💫",
+  "Like a tiny star by my bed~ ⭐",
+  "Mmm... warm glow... nice... 🕯️",
+  "The light keeps the dark away~ 💛✨",
+  "So peaceful with the nightlight on~ 🌟",
+  "Goodnight, little light~ 🕯️💤",
+];
+
+const NIGHTLIGHT_OFF_MESSAGES = [
+  "It's okay... I'm brave in the dark~ 🌙",
+  "The stars are my nightlight now~ ⭐",
+  "Darkness is cozy too~ 💤",
+  "Goodnight... *yawn*... 😴",
+];
+
+function playNightlightClickSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(nightlightOn ? 520 : 380, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(nightlightOn ? 620 : 280, audioCtx.currentTime + 0.08);
+  gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.12);
+}
+
+function toggleNightlight(): void {
+  nightlightOn = !nightlightOn;
+  totalNightlightToggles++;
+  playNightlightClickSound();
+
+  if (nightlightFirstTime) {
+    nightlightFirstTime = false;
+    addDiaryEntry("general", "🕯️", `${petName || "Tamashii"} discovered the nightlight~! A warm glow for sweet dreams.`);
+  }
+
+  if (nightlightOn && Math.random() < 0.4) {
+    const msg = NIGHTLIGHT_MESSAGES[Math.floor(Math.random() * NIGHTLIGHT_MESSAGES.length)];
+    queueSpeechBubble(msg, 150, true);
+  } else if (!nightlightOn && Math.random() < 0.35) {
+    const msg = NIGHTLIGHT_OFF_MESSAGES[Math.floor(Math.random() * NIGHTLIGHT_OFF_MESSAGES.length)];
+    queueSpeechBubble(msg, 150, true);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function getNightlightPosition(): { x: number; y: number } {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2 + bounceOffset;
+  return { x: cx + NIGHTLIGHT_X_OFFSET, y: cy + NIGHTLIGHT_Y_OFFSET };
+}
+
+function tryClickNightlight(clickX: number, clickY: number): boolean {
+  if (!isSleeping && sleepTransitionType !== "falling_asleep") return false;
+  const pos = getNightlightPosition();
+  const dx = clickX - pos.x;
+  const dy = clickY - pos.y;
+  return dx * dx + dy * dy <= 18 * 18;
+}
+
+function drawNightlight(): void {
+  if (!isSleeping && sleepTransitionType !== "falling_asleep") return;
+  const alpha = isSleeping ? 1 : sleepTransitionProgress;
+  if (alpha < 0.05) return;
+
+  const pos = getNightlightPosition();
+  const x = pos.x;
+  const y = pos.y;
+
+  nightlightGlowPhase += 0.03;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  if (nightlightOn) {
+    const pulse = 0.85 + Math.sin(nightlightGlowPhase) * 0.15;
+    const glowRadius = 35 * pulse;
+    const outerGlow = ctx.createRadialGradient(x, y - 8, 2, x, y - 8, glowRadius);
+    outerGlow.addColorStop(0, `rgba(255, 220, 130, ${0.35 * pulse})`);
+    outerGlow.addColorStop(0.4, `rgba(255, 200, 100, ${0.15 * pulse})`);
+    outerGlow.addColorStop(1, "rgba(255, 180, 80, 0)");
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(x, y - 8, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    const innerGlow = ctx.createRadialGradient(x, y - 8, 0, x, y - 8, 12);
+    innerGlow.addColorStop(0, `rgba(255, 240, 180, ${0.5 * pulse})`);
+    innerGlow.addColorStop(1, "rgba(255, 220, 130, 0)");
+    ctx.fillStyle = innerGlow;
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Lamp base — small rounded rectangle
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 6);
+  ctx.lineTo(x + 6, y + 6);
+  ctx.lineTo(x + 5, y + 3);
+  ctx.lineTo(x - 5, y + 3);
+  ctx.closePath();
+  ctx.fillStyle = nightlightOn ? "#D4A574" : "#A88866";
+  ctx.fill();
+  ctx.strokeStyle = "#8B6914";
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  // Lamp shade — dome shape
+  ctx.beginPath();
+  ctx.moveTo(x - 7, y + 3);
+  ctx.quadraticCurveTo(x - 8, y - 6, x - 3, y - 12);
+  ctx.quadraticCurveTo(x, y - 14, x + 3, y - 12);
+  ctx.quadraticCurveTo(x + 8, y - 6, x + 7, y + 3);
+  ctx.closePath();
+
+  if (nightlightOn) {
+    const shadeGrad = ctx.createLinearGradient(x, y - 14, x, y + 3);
+    shadeGrad.addColorStop(0, "#FFF3D4");
+    shadeGrad.addColorStop(0.5, "#FFE4A8");
+    shadeGrad.addColorStop(1, "#FFD080");
+    ctx.fillStyle = shadeGrad;
+  } else {
+    const shadeGrad = ctx.createLinearGradient(x, y - 14, x, y + 3);
+    shadeGrad.addColorStop(0, "#C8B89A");
+    shadeGrad.addColorStop(1, "#A89878");
+    ctx.fillStyle = shadeGrad;
+  }
+  ctx.fill();
+  ctx.strokeStyle = nightlightOn ? "#E8C878" : "#887766";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Tiny flame/filament when on
+  if (nightlightOn) {
+    const flicker = Math.sin(nightlightGlowPhase * 3) * 0.5 + Math.sin(nightlightGlowPhase * 7) * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 2);
+    ctx.quadraticCurveTo(x - 2 + flicker, y - 7, x, y - 10);
+    ctx.quadraticCurveTo(x + 2 - flicker, y - 7, x, y - 2);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255, 230, 150, ${0.7 + Math.sin(nightlightGlowPhase * 2) * 0.2})`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function startFallingAsleep(): void {
   if (isSleeping || sleepTransitionType) return;
   sleepTransitionType = "falling_asleep";
@@ -2997,6 +3164,7 @@ function completeFallingAsleep(): void {
   sleepTransitionType = null;
   sleepStartFrame = frame;
   sleepBreathProgress = 0;
+  nightlightOn = true;
 
   // Track unique nights slept
   const today = new Date().toISOString().slice(0, 10);
@@ -3012,6 +3180,7 @@ function completeWakingUp(): void {
   isSleeping = false;
   sleepTransitionType = null;
   sleepBreathProgress = 0;
+  nightlightOn = false;
   dailyActivityLog = []; // reset daily activities for new day
 
   // Full energy restore from a good night's sleep
@@ -8976,6 +9145,16 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Splashed a puddle, don't start drag
     }
   }
+  // Check for nightlight toggle clicks during sleep
+  if (isSleeping || sleepTransitionType === "falling_asleep") {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickNightlight(clickX, clickY)) {
+      toggleNightlight();
+      return;
+    }
+  }
   // Check for snowman building clicks
   if (activeSnowman && activeSnowman.stage < 5) {
     const rect = canvas.getBoundingClientRect();
@@ -10663,6 +10842,11 @@ const achievements: Achievement[] = [
     icon: "💤", unlockMessage: "Such a chatty sleeper~! The dreams must be vivid tonight! 💤🗨️✨",
     condition: () => totalSleepTalks >= 30, unlocked: false,
   },
+  {
+    id: "nightlight_keeper", name: "Nightlight Keeper", description: "Toggle the nightlight 20 times",
+    icon: "🕯️", unlockMessage: "Guardian of the little flame~! The nightlight loves you back! 🕯️💛✨",
+    condition: () => totalNightlightToggles >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -11931,6 +12115,8 @@ interface SaveData {
   sleepRitualFirstTime: boolean;
   totalSleepTalks: number;
   sleepTalkFirstTime: boolean;
+  totalNightlightToggles: number;
+  nightlightFirstTime: boolean;
   version: number;
 }
 
@@ -12011,6 +12197,8 @@ function buildSaveData(): SaveData {
     sleepRitualFirstTime,
     totalSleepTalks,
     sleepTalkFirstTime,
+    totalNightlightToggles,
+    nightlightFirstTime,
     version: 1,
   };
 }
@@ -12320,6 +12508,12 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).sleepTalkFirstTime === "boolean") {
     sleepTalkFirstTime = (data as SaveData).sleepTalkFirstTime;
   }
+  if (typeof (data as SaveData).totalNightlightToggles === "number") {
+    totalNightlightToggles = (data as SaveData).totalNightlightToggles;
+  }
+  if (typeof (data as SaveData).nightlightFirstTime === "boolean") {
+    nightlightFirstTime = (data as SaveData).nightlightFirstTime;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -12400,6 +12594,7 @@ window.tamashii.loadSaveData().then((raw) => {
   if (currentTimeOfDay === "night") {
     isSleeping = true;
     sleepBreathProgress = 0;
+    nightlightOn = true;
   }
 });
 
@@ -16189,6 +16384,9 @@ function draw(): void {
 
   // Butterfly companion (drawn above particles, below speech bubble)
   drawButterfly();
+
+  // Nightlight (beside sleeping pet, below dream bubbles)
+  drawNightlight();
 
   // Dream bubbles (above butterfly, below speech bubble)
   for (const db of dreamBubbles) {
