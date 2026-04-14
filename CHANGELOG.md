@@ -3,6 +3,29 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.80.0] — 2026-04-14 — Bedtime Ritual
+
+### Added
+- **Multi-phase bedtime ritual** — when night arrives, the pet now goes through a charming 5-phase winding-down sequence before falling asleep, instead of immediately transitioning to sleep
+- **Yawn phase** (~2.3s) — big sleepy yawn with body leaning back, mouth opening wide showing tongue, heavy-lidded drooping eyes, descending 3-note lullaby tone
+- **Stretch phase** (~1.8s) — gentle evening wind-down stretch with ascending body elongation and slight tilt, relaxing descending tones
+- **Curl up phase** (~2.2s) — body settles downward and compresses slightly, as if curling into a cozy position, soft low tones
+- **Nuzzle phase** (~1.5s) — adorable side-to-side nuzzling motion as the pet finds the perfect sleeping spot, gentle rhythmic tones
+- **Drift off phase** (~2s) — final gentle swaying that gradually stills, descending 3-note melody fading to silence, then normal sleep transition begins
+- **Progressive drowsiness** — eyes get progressively heavier and droopier across all phases, sleepy blush fades in
+- **Dynamic eyelid** — heavy upper eyelid drawn in the pet's actual body color, covering more of the eye as the ritual progresses
+- **Phase-specific speech** — unique speech bubble messages per phase (16 total), from "*biiiig yawn~*" to "Drifting off... to dreamland..."
+- **Sleepy sparkle particles** — 6 sparkle particles burst gently outward when the ritual completes, marking the transition to sleep
+- **Interaction blocking** — all clicks, tricks, hiccups, sneezes, yawn chains, and idle animations are suppressed during the ritual
+- **Care points** — +1 friendship XP per completed ritual
+- **Diary entry** — first bedtime ritual logged to pet diary
+- **Stats panel section** — bedtime ritual count displayed in the sleep stats area
+- **Sweet Dreamer achievement** — complete 20 bedtime rituals to unlock achievement #55 (😴)
+- **Full persistence** — total rituals and first-time flag saved across sessions
+- **Total achievements: 55**
+
+**Why this feature:** Tamashii already has a beautiful morning stretch sequence (yawn → stretch up → shake → hop → sparkle) that makes waking up feel like an event. But falling asleep was just a 2-second eye-close transition — anticlimactic for such a daily ritual. The bedtime ritual mirrors the morning stretch as a bookend, transforming the transition to sleep into its own multi-phase ceremony: a big yawn, a winding-down stretch, curling up cozy, nuzzling into position, and finally drifting off. The progressively drooping eyelids and phase-specific sounds create that universal feeling of fighting sleep and gradually surrendering to it.
+
 ## [v0.79.0] — 2026-04-13 — Snowman Building
 
 ### Added

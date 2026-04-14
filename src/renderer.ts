@@ -364,6 +364,24 @@ let sleepStartFrame = 0;           // frame when sleep began
 let sleepNightcapBob = 0;          // wobble for nightcap
 let dailyActivityLog: string[] = []; // tracks activities for contextual dreams
 
+// --- Sleep Ritual ---
+type SleepRitualPhase = "none" | "yawn" | "stretch" | "curl_up" | "nuzzle" | "drift_off";
+let sleepRitualActive = false;
+let sleepRitualPhase: SleepRitualPhase = "none";
+let sleepRitualProgress = 0;
+let totalSleepRituals = 0;
+let sleepRitualFirstTime = true;
+
+const SLEEP_RITUAL_PHASES: SleepRitualPhase[] = ["yawn", "stretch", "curl_up", "nuzzle", "drift_off"];
+const SLEEP_RITUAL_DURATIONS: Record<SleepRitualPhase, number> = {
+  none: 0,
+  yawn: 140,        // ~2.3s — big sleepy yawn
+  stretch: 110,     // ~1.8s — winding-down stretch
+  curl_up: 130,     // ~2.2s — settling into position
+  nuzzle: 90,       // ~1.5s — cute side-to-side nuzzle
+  drift_off: 120,   // ~2s — final gentle sway into sleep
+};
+
 // --- Ambient Night Sounds ---
 let ambientNightActive = false;
 let nextCricketTime = 0;
@@ -609,6 +627,166 @@ function getMorningStretchTransform(): { rotation: number; scaleX: number; scale
       const sway = Math.sin(t * Math.PI * 3) * 0.05 * (1 - t * 0.5);
       const pulse = Math.sin(t * Math.PI) * 0.03;
       return { rotation: sway, scaleX: 1 + pulse, scaleY: 1 + pulse, offsetX: 0, offsetY: 0 };
+    }
+    default:
+      return null;
+  }
+}
+
+// --- Sleep Ritual ---
+
+function startSleepRitual(): void {
+  if (sleepRitualActive || isSleeping || sleepTransitionType) return;
+  sleepRitualActive = true;
+  sleepRitualPhase = "yawn";
+  sleepRitualProgress = 0;
+
+  playTone(520, 0.35, "sine", 0.04);
+  setTimeout(() => playTone(440, 0.4, "sine", 0.035), 200);
+  setTimeout(() => playTone(370, 0.5, "sine", 0.03), 450);
+
+  const yawnMessages = [
+    "*yaaaaaawn~* So sleepy... 🥱",
+    "*biiiig yawn~* My eyes are heavy... 😪",
+    "Mmmmm... *yaaawn* ...bedtime~ 🌙",
+    "*the biggest yawn~* Can't... stay... awake... 🥱💤",
+  ];
+  queueSpeechBubble(yawnMessages[Math.floor(Math.random() * yawnMessages.length)], 120, true);
+  spawnEmoteSet("sleepy", 2);
+}
+
+function advanceSleepRitual(): void {
+  const currentIndex = SLEEP_RITUAL_PHASES.indexOf(sleepRitualPhase);
+  if (currentIndex < 0 || currentIndex >= SLEEP_RITUAL_PHASES.length - 1) {
+    completeSleepRitual();
+    return;
+  }
+
+  const nextPhase = SLEEP_RITUAL_PHASES[currentIndex + 1];
+  sleepRitualPhase = nextPhase;
+  sleepRitualProgress = 0;
+
+  switch (nextPhase) {
+    case "stretch":
+      playTone(440, 0.2, "sine", 0.04);
+      setTimeout(() => playTone(392, 0.25, "sine", 0.035), 150);
+      if (Math.random() < 0.6) {
+        const msgs = ["*streeetch~* One last stretch... 💫", "Ahh~ Loosening up before bed... 🌙", "*sleepy stretch~* 😴"];
+        queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 90, true);
+      }
+      break;
+    case "curl_up":
+      playTone(350, 0.3, "sine", 0.03);
+      setTimeout(() => playTone(294, 0.35, "sine", 0.025), 200);
+      if (Math.random() < 0.5) {
+        const msgs = ["Getting cozy~ 🛏️", "*curls up small~* So warm... ✨", "Settling in... nice and snug~ 💤"];
+        queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 100, true);
+      }
+      break;
+    case "nuzzle":
+      playTone(330, 0.15, "sine", 0.025);
+      setTimeout(() => playTone(310, 0.15, "sine", 0.02), 120);
+      setTimeout(() => playTone(330, 0.15, "sine", 0.025), 240);
+      if (Math.random() < 0.5) {
+        const msgs = ["*nuzzle nuzzle~* 💕", "*snuggle snuggle~* 🥰", "*finds the perfect spot~* ✨"];
+        queueSpeechBubble(msgs[Math.floor(Math.random() * msgs.length)], 80, true);
+      }
+      break;
+    case "drift_off":
+      playTone(294, 0.4, "sine", 0.02);
+      setTimeout(() => playTone(262, 0.5, "sine", 0.018), 250);
+      setTimeout(() => playTone(220, 0.6, "sine", 0.015), 550);
+      const driftMsgs = [
+        "Night night... sweet dreams... 💤🌙",
+        "Drifting off... to dreamland... ✨😴",
+        "Goodnight... world... 🌙💕",
+        "Zzz... almost... there... 💤✨",
+      ];
+      queueSpeechBubble(driftMsgs[Math.floor(Math.random() * driftMsgs.length)], 100, true);
+      break;
+  }
+}
+
+function completeSleepRitual(): void {
+  sleepRitualActive = false;
+  sleepRitualPhase = "none";
+  sleepRitualProgress = 0;
+  totalSleepRituals++;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.3;
+    particles.push({
+      x: cx + Math.cos(angle) * 10,
+      y: cy - 10 + Math.sin(angle) * 5,
+      vx: Math.cos(angle) * 0.3,
+      vy: -0.5 - Math.random() * 0.5,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 3 + Math.random() * 2,
+      type: "sparkle",
+    });
+  }
+
+  if (sleepRitualFirstTime) {
+    sleepRitualFirstTime = false;
+    addDiaryEntry("milestone", "😴", "First bedtime ritual~ Such a peaceful way to drift off to sleep!");
+  }
+
+  friendshipXP += 1;
+  checkAchievements();
+  saveGame();
+
+  startFallingAsleep();
+}
+
+function updateSleepRitual(): void {
+  if (!sleepRitualActive || sleepRitualPhase === "none") return;
+
+  const duration = SLEEP_RITUAL_DURATIONS[sleepRitualPhase];
+  sleepRitualProgress += 1 / duration;
+
+  if (sleepRitualProgress >= 1) {
+    advanceSleepRitual();
+  }
+}
+
+function getSleepRitualTransform(): { rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number } | null {
+  if (!sleepRitualActive || sleepRitualPhase === "none") return null;
+
+  const t = sleepRitualProgress;
+  const ease = Math.sin(t * Math.PI);
+
+  switch (sleepRitualPhase) {
+    case "yawn": {
+      const leanBack = ease * 0.08;
+      const widen = ease * 0.05;
+      return { rotation: -leanBack, scaleX: 1 + widen, scaleY: 1 - widen * 0.3, offsetX: 0, offsetY: ease * -3 };
+    }
+    case "stretch": {
+      const stretchY = ease * 0.08;
+      const stretchX = ease * -0.04;
+      const lift = ease * 3;
+      return { rotation: ease * 0.03, scaleX: 1 + stretchX, scaleY: 1 + stretchY, offsetX: 0, offsetY: -lift };
+    }
+    case "curl_up": {
+      const shrink = t * 0.06;
+      const settle = t * 4;
+      const tilt = t * 0.04;
+      return { rotation: tilt, scaleX: 1 + shrink * 0.3, scaleY: 1 - shrink, offsetX: 0, offsetY: settle };
+    }
+    case "nuzzle": {
+      const nuzzleX = Math.sin(t * Math.PI * 3) * 4 * (1 - t * 0.5);
+      const nuzzleRot = Math.sin(t * Math.PI * 3) * 0.06 * (1 - t * 0.5);
+      const settled = 0.06;
+      return { rotation: 0.04 + nuzzleRot, scaleX: 1 + settled * 0.3, scaleY: 1 - settled, offsetX: nuzzleX, offsetY: 4 };
+    }
+    case "drift_off": {
+      const sway = Math.sin(t * Math.PI * 1.5) * 0.03 * (1 - t);
+      const settled = 0.06;
+      const finalSettle = t * 2;
+      return { rotation: 0.04 + sway, scaleX: 1 + settled * 0.3, scaleY: 1 - settled, offsetX: 0, offsetY: 4 + finalSettle };
     }
     default:
       return null;
@@ -1161,7 +1339,7 @@ function playHiccupCureSound(): void {
 }
 
 function startHiccupEpisode(): void {
-  if (hiccupActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive) return;
+  if (hiccupActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || sleepRitualActive || teaPartyActive) return;
   hiccupActive = true;
   hiccupCount = 0;
   hiccupTotalInEpisode = HICCUP_EPISODE_MIN + Math.floor(Math.random() * (HICCUP_EPISODE_MAX - HICCUP_EPISODE_MIN + 1));
@@ -1336,7 +1514,7 @@ function playSneezeBuildup(): void {
 }
 
 function startSneezeEpisode(): void {
-  if (sneezeActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive || hiccupActive) return;
+  if (sneezeActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || sleepRitualActive || teaPartyActive || hiccupActive) return;
   if (getSeason() !== "spring") return;
   sneezeActive = true;
   sneezeCount = 0;
@@ -1492,7 +1670,7 @@ function playYawnChainEndSound(): void {
 }
 
 function tryStartYawnChain(): boolean {
-  if (!isYawning || yawnChainActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || teaPartyActive || hiccupActive || sneezeActive) return false;
+  if (!isYawning || yawnChainActive || isSleeping || minigameActive || memoryGameActive || meditationActive || morningStretchActive || sleepRitualActive || teaPartyActive || hiccupActive || sneezeActive) return false;
   if (yawnProgress < 0.15 || yawnProgress > 0.85) return false;
 
   yawnChainActive = true;
@@ -2664,17 +2842,7 @@ function startFallingAsleep(): void {
   if (isSleeping || sleepTransitionType) return;
   sleepTransitionType = "falling_asleep";
   sleepTransitionProgress = 0;
-
-  const bedtimeMessages = [
-    "*yaaaawn*... Good night~",
-    "So sleepy... night night~ 🌙",
-    "Time for bed... *yawn*",
-    "Sweet dreams await~ 💤",
-    "Sleepy time... zzz...",
-  ];
-  queueSpeechBubble(bedtimeMessages[Math.floor(Math.random() * bedtimeMessages.length)], 180, true);
   playLullabySound();
-  spawnEmoteSet("sleepy", 2);
 }
 
 function startWakingUp(): void {
@@ -2735,7 +2903,7 @@ const idleAnimMessages: Record<string, string[]> = {
 };
 
 function startIdleAnimation(): void {
-  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping || morningStretchActive || meditationActive) return;
+  if (idleAnim !== "none" || isSpinning || isDragging || isCharging || minigameActive || memoryGameActive || activeTrick !== null || isSleeping || morningStretchActive || sleepRitualActive || meditationActive) return;
   // Pick animation weighted by personality
   idleAnim = pickWeightedIdleAnimation();
   idleAnimProgress = 0;
@@ -10343,6 +10511,11 @@ const achievements: Achievement[] = [
     icon: "⛄", unlockMessage: "A master snow sculptor~! Every snowman is a work of art! ⛄❄️🎨",
     condition: () => totalSnowmenBuilt >= 5, unlocked: false,
   },
+  {
+    id: "sweet_dreamer", name: "Sweet Dreamer", description: "Complete 20 bedtime rituals",
+    icon: "😴", unlockMessage: "The sweetest dreamer of all~ Every night is a peaceful journey to dreamland! 😴💫🌙",
+    condition: () => totalSleepRituals >= 20, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -10779,6 +10952,8 @@ function drawStatsPanel(): void {
   ctx.font = "7px monospace";
   ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText(`${totalNightsSlept} nights slept`, w / 2, y);
+  y += 10;
+  ctx.fillText(`😴 ${totalSleepRituals} bedtime rituals`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -11603,6 +11778,8 @@ interface SaveData {
   totalAfternoonSoundsSessions: number;
   totalEveningChorusSessions: number;
   totalSnowmenBuilt: number;
+  totalSleepRituals: number;
+  sleepRitualFirstTime: boolean;
   version: number;
 }
 
@@ -11679,6 +11856,8 @@ function buildSaveData(): SaveData {
     totalAfternoonSoundsSessions,
     totalEveningChorusSessions,
     totalSnowmenBuilt,
+    totalSleepRituals,
+    sleepRitualFirstTime,
     version: 1,
   };
 }
@@ -11976,6 +12155,12 @@ function applySaveData(data: SaveData): void {
   if (typeof (data as SaveData).totalSnowmenBuilt === "number") {
     totalSnowmenBuilt = (data as SaveData).totalSnowmenBuilt;
   }
+  if (typeof (data as SaveData).totalSleepRituals === "number") {
+    totalSleepRituals = (data as SaveData).totalSleepRituals;
+  }
+  if (typeof (data as SaveData).sleepRitualFirstTime === "boolean") {
+    sleepRitualFirstTime = (data as SaveData).sleepRitualFirstTime;
+  }
 
   // Restore diary
   if (Array.isArray(data.diary)) {
@@ -12138,8 +12323,8 @@ function onPetClicked(): void {
     return;
   }
 
-  // Don't allow normal interactions during sleep transitions
-  if (sleepTransitionType) return;
+  // Don't allow normal interactions during sleep transitions or ritual
+  if (sleepTransitionType || sleepRitualActive) return;
 
   // Start meditation if prompt is showing and it's evening
   if (meditationPromptVisible && !meditationActive && currentTimeOfDay === "evening") {
@@ -12475,6 +12660,68 @@ function drawFace(cx: number, cy: number, size: number): void {
   // Determine stat-driven visual states
   const isSadFromStats = !isHappy && petHappiness < 25;
   const isDrainedFromStats = !isHappy && !isYawning && petEnergy < 20;
+
+  // Sleep ritual face — drowsy, heavy-lidded eyes progressing toward sleep
+  if (sleepRitualActive) {
+    const phaseIdx = SLEEP_RITUAL_PHASES.indexOf(sleepRitualPhase);
+    const overallProgress = (phaseIdx + sleepRitualProgress) / SLEEP_RITUAL_PHASES.length;
+    const droopiness = 0.3 + overallProgress * 0.7;
+
+    for (const side of [-1, 1]) {
+      const ex = cx + side * eyeSpacing;
+      const eyeOpenness = Math.max(0.1, 1 - droopiness);
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 2 + droopiness * 2, 8 * es, 9 * es * eyeOpenness * 0.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY + 2 + droopiness * 2, 4 * es, 5 * es * eyeOpenness * 0.4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fill();
+      // Heavy upper eyelid
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY - 1 + droopiness, 9 * es, 7 * es * droopiness * 0.6, 0, -Math.PI, 0);
+      ctx.fillStyle = getBodyColors().body;
+      ctx.fill();
+    }
+
+    // Sleepy blush (fades in as ritual progresses)
+    if (overallProgress > 0.3) {
+      const blushAlpha = (overallProgress - 0.3) * 0.4;
+      ctx.save();
+      ctx.globalAlpha = blushAlpha;
+      ctx.fillStyle = "#FF9999";
+      ctx.beginPath();
+      ctx.ellipse(cx - eyeSpacing - 6, eyeY + 10, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + eyeSpacing + 6, eyeY + 10, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Mouth: yawn phase gets big open yawn, others get drowsy smile
+    const mouthY = cy + size * 0.08;
+    if (sleepRitualPhase === "yawn") {
+      const yawnOpen = Math.sin(sleepRitualProgress * Math.PI);
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY + yawnOpen * 3, 5 + yawnOpen * 3, 3 + yawnOpen * 5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#2a1a3e";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY + yawnOpen * 3, 4 + yawnOpen * 2, 2 + yawnOpen * 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#FF8888";
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, mouthY - 1, 4, 0.1, Math.PI - 0.1);
+      ctx.strokeStyle = "#1a1a2e";
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    return;
+  }
 
   // Sleeping face — fully closed eyes with peaceful expression
   if (isSleeping || sleepTransitionType === "falling_asleep") {
@@ -13992,6 +14239,9 @@ function update(): void {
   // Morning stretch sequence update
   updateMorningStretch();
 
+  // Sleep ritual sequence update
+  updateSleepRitual();
+
   // Evening sunset meditation update
   updateMeditation();
 
@@ -14736,10 +14986,9 @@ function update(): void {
 
   // --- Sleep Schedule ---
   // Auto-sleep when night arrives after a delay
-  if (currentTimeOfDay === "night" && !isSleeping && !sleepTransitionType && !minigameActive && !memoryGameActive && !isDragging && !isSpinning && !isCharging && activeTrick === null) {
-    // Start falling asleep 5 seconds after night begins (or immediately if already night on load)
-    if (frame > 300) { // give a small delay before auto-sleep kicks in
-      startFallingAsleep();
+  if (currentTimeOfDay === "night" && !isSleeping && !sleepTransitionType && !sleepRitualActive && !minigameActive && !memoryGameActive && !isDragging && !isSpinning && !isCharging && activeTrick === null) {
+    if (frame > 300) {
+      startSleepRitual();
     }
   }
 
@@ -15586,6 +15835,17 @@ function draw(): void {
       ctx.translate(cx + stretchTx.offsetX, feetY + stretchTx.offsetY);
       ctx.rotate(stretchTx.rotation);
       ctx.scale(stretchTx.scaleX, stretchTx.scaleY);
+      ctx.translate(-cx, -feetY);
+    }
+  }
+
+  // Sleep ritual transform
+  if (sleepRitualActive && !isSpinning) {
+    const ritualTx = getSleepRitualTransform();
+    if (ritualTx) {
+      ctx.translate(cx + ritualTx.offsetX, feetY + ritualTx.offsetY);
+      ctx.rotate(ritualTx.rotation);
+      ctx.scale(ritualTx.scaleX, ritualTx.scaleY);
       ctx.translate(-cx, -feetY);
     }
   }
