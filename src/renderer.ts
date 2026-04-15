@@ -3303,6 +3303,188 @@ function drawAurora(): void {
   ctx.restore();
 }
 
+// === COMET EVENT ===
+
+interface CometTailParticle {
+  x: number;
+  y: number;
+  alpha: number;
+  size: number;
+  hue: number;
+}
+
+interface Comet {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  tail: CometTailParticle[];
+  headSize: number;
+  headHue: number;
+}
+
+let activeComet: Comet | null = null;
+let cometCheckTimer = 0;
+let cometFirstSeen = false;
+let totalCometsWitnessed = 0;
+const COMET_CHECK_INTERVAL = 5400;   // check every ~90 seconds
+const COMET_CHANCE = 0.025;          // 2.5% chance per check during nighttime
+const COMET_MIN_DURATION = 3600;     // ~60 seconds
+const COMET_MAX_DURATION = 7200;     // ~120 seconds
+const COMET_TAIL_MAX = 80;
+
+const COMET_SPEECHES = [
+  "A comet~!! It's so beautiful, look at that tail! ☄️✨",
+  "Whoa... a wandering star passing through~! ☄️💫",
+  "I read that comets are ancient ice... so cool! ☄️❄️",
+  "Quick, make a wish on the comet~! ☄️🙏✨",
+  "That glowing tail stretches across the whole sky~! ☄️🌌",
+  "A cosmic traveler from far far away~! Safe travels, little comet! ☄️💙",
+];
+
+function spawnComet(canvasW: number, canvasH: number): void {
+  const goingRight = Math.random() < 0.5;
+  const startX = goingRight ? -30 : canvasW + 30;
+  const endX = goingRight ? canvasW + 30 : -30;
+  const startY = 10 + Math.random() * canvasH * 0.25;
+  const endY = startY + (Math.random() - 0.3) * canvasH * 0.15;
+
+  const duration = COMET_MIN_DURATION + Math.floor(Math.random() * (COMET_MAX_DURATION - COMET_MIN_DURATION));
+
+  activeComet = {
+    x: startX,
+    y: startY,
+    vx: (endX - startX) / duration,
+    vy: (endY - startY) / duration,
+    life: duration,
+    maxLife: duration,
+    tail: [],
+    headSize: 3 + Math.random() * 2,
+    headHue: Math.random() < 0.5 ? 45 : 190,
+  };
+
+  totalCometsWitnessed++;
+
+  if (!isSleeping && !speechBubble) {
+    queueSpeechBubble(COMET_SPEECHES[Math.floor(Math.random() * COMET_SPEECHES.length)], 220, true);
+  }
+
+  if (!cometFirstSeen) {
+    cometFirstSeen = true;
+    addDiaryEntry("general", "☄️", "Saw a comet drifting across the night sky~! Its glowing tail was mesmerizing!");
+  }
+
+  playCometSound();
+}
+
+function playCometSound(): void {
+  if (!soundEnabled) return;
+  const freqs = [330, 392, 494, 587];
+  for (let i = 0; i < freqs.length; i++) {
+    setTimeout(() => {
+      playTone(freqs[i], 1.8, "sine", 0.015);
+    }, i * 400);
+  }
+}
+
+function updateComet(): void {
+  const isNight = currentTimeOfDay === "night";
+
+  if (isNight && !activeComet) {
+    cometCheckTimer++;
+    if (cometCheckTimer >= COMET_CHECK_INTERVAL) {
+      cometCheckTimer = 0;
+      if (Math.random() < COMET_CHANCE) {
+        spawnComet(canvas.width, canvas.height);
+      }
+    }
+  } else if (!isNight && !activeComet) {
+    cometCheckTimer = 0;
+  }
+
+  if (!activeComet) return;
+
+  activeComet.x += activeComet.vx;
+  activeComet.y += activeComet.vy;
+  activeComet.life--;
+
+  activeComet.tail.unshift({
+    x: activeComet.x + (Math.random() - 0.5) * 2,
+    y: activeComet.y + (Math.random() - 0.5) * 2,
+    alpha: 0.8 + Math.random() * 0.2,
+    size: activeComet.headSize * (0.4 + Math.random() * 0.4),
+    hue: activeComet.headHue + (Math.random() - 0.5) * 30,
+  });
+
+  if (activeComet.tail.length > COMET_TAIL_MAX) {
+    activeComet.tail.length = COMET_TAIL_MAX;
+  }
+
+  for (const p of activeComet.tail) {
+    p.alpha *= 0.97;
+    p.size *= 0.995;
+  }
+
+  if (activeComet.life <= 0) {
+    activeComet = null;
+  }
+}
+
+function drawComet(): void {
+  if (!activeComet) return;
+
+  ctx.save();
+
+  const fadeIn = Math.min(1, (activeComet.maxLife - activeComet.life) / 60);
+  const fadeOut = Math.min(1, activeComet.life / 60);
+  const globalFade = fadeIn * fadeOut;
+
+  for (let i = activeComet.tail.length - 1; i >= 0; i--) {
+    const p = activeComet.tail[i];
+    const t = i / activeComet.tail.length;
+    const a = p.alpha * globalFade * (1 - t * 0.7);
+    if (a < 0.005) continue;
+
+    ctx.globalAlpha = a * 0.3;
+    ctx.fillStyle = `hsla(${p.hue}, 60%, 80%, 1)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = a;
+    ctx.fillStyle = `hsla(${p.hue}, 50%, 90%, 1)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const hx = activeComet.x;
+  const hy = activeComet.y;
+  const hs = activeComet.headSize;
+
+  ctx.globalAlpha = globalFade * 0.15;
+  ctx.fillStyle = `hsla(${activeComet.headHue}, 60%, 85%, 1)`;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hs * 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = globalFade * 0.4;
+  ctx.fillStyle = `hsla(${activeComet.headHue}, 50%, 90%, 1)`;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hs * 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = globalFade * 0.9;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(hx, hy, hs, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function logDailyActivity(activity: string): void {
   if (!dailyActivityLog.includes(activity)) {
     dailyActivityLog.push(activity);
@@ -11303,6 +11485,11 @@ const achievements: Achievement[] = [
     icon: "⚡", unlockMessage: "You've faced the storm and found its beauty~! A true storm chaser! ⚡🌩️✨",
     condition: () => totalLightningBoltsWitnessed >= 15, unlocked: false,
   },
+  {
+    id: "comet_gazer", name: "Comet Gazer", description: "Witness 3 comets drift across the sky",
+    icon: "☄️", unlockMessage: "A true cosmic wanderer~! The comets know your name! ☄️🌌✨",
+    condition: () => totalCometsWitnessed >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -12114,6 +12301,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E8C880";
+  ctx.fillText("COMETS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`☄️ ${totalCometsWitnessed} witnessed`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#F0C060";
   ctx.fillText("AFTERNOON AMBIENCE", panelX + 12, y);
   ctx.textAlign = "right";
@@ -12607,6 +12804,8 @@ interface SaveData {
   totalWindSoundSessions: number;
   totalLightningBoltsWitnessed: number;
   lightningFirstTime: boolean;
+  totalCometsWitnessed: number;
+  cometFirstSeen: boolean;
   version: number;
 }
 
@@ -12693,6 +12892,8 @@ function buildSaveData(): SaveData {
     totalWindSoundSessions,
     totalLightningBoltsWitnessed,
     lightningFirstTime,
+    totalCometsWitnessed,
+    cometFirstSeen,
     version: 1,
   };
 }
@@ -13019,6 +13220,12 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).lightningFirstTime === "boolean") {
     lightningFirstTime = (data as SaveData).lightningFirstTime;
+  }
+  if (typeof (data as SaveData).totalCometsWitnessed === "number") {
+    totalCometsWitnessed = (data as SaveData).totalCometsWitnessed;
+  }
+  if (typeof (data as SaveData).cometFirstSeen === "boolean") {
+    cometFirstSeen = (data as SaveData).cometFirstSeen;
   }
 
   // Restore diary
@@ -15502,6 +15709,9 @@ function update(): void {
   // Aurora borealis update
   updateAurora();
 
+  // Comet event update
+  updateComet();
+
   // Rainbow after rain update
   updateRainbow();
 
@@ -16608,6 +16818,9 @@ function draw(): void {
 
   // Aurora borealis (sky layer, behind pet)
   drawAurora();
+
+  // Comet (sky layer, behind pet)
+  drawComet();
 
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();

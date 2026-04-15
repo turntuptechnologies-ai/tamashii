@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.86.0] — 2026-04-15 — Comet Event
+
+### Added
+- **Rare comet event** — during nighttime, a slow-moving comet can appear and drift across the entire sky over 60-120 seconds, with a glowing head and long particle tail
+- **Dual color palette** — comets randomly spawn with either a warm amber (hue 45) or cool cyan (hue 190) head, with tail particles varying ±15 hue for natural color dispersion
+- **Layered head rendering** — three concentric layers: soft outer glow (6x radius), bright mid-glow (3x radius), and white-hot core for realistic coma effect
+- **Particle tail system** — up to 80 tail particles with position jitter, gradual alpha decay (0.97x per frame), size shrinkage, and depth-ordered rendering from tail tip to head
+- **Smooth lifecycle** — fade-in over first 60 frames and fade-out over final 60 frames for graceful entry and exit
+- **Rare spawn timing** — checked every ~90 seconds with 2.5% chance during nighttime only, making comets genuinely special events
+- **Speech reactions** — 6 comet-themed messages ("A comet~!! It's so beautiful, look at that tail! ☄️✨", "A cosmic traveler from far far away~! ☄️💙") triggered on each sighting
+- **Ethereal arrival sound** — ascending four-tone sine melody (E4→G4→B4→D5) for a celestial announcement
+- **Diary entry** — first comet witnessed is logged to pet diary
+- **Comet Gazer achievement** — witness 3 comets to unlock achievement #61 (☄️)
+- **Stats tracking** — total comets witnessed displayed in stats panel
+- **Full persistence** — comet count and first-time flag saved across sessions
+- **Total achievements: 61**
+
+**Why this feature:** The night sky already has stars, constellations, shooting stars, meteor showers, and aurora borealis — but all of these are either static or fast. A comet fills a unique niche: a rare, slow-moving celestial visitor that you can actually watch drift across the sky over minutes. It rewards patient nighttime observation and pairs naturally with the existing stargazing experience. The rarity (roughly one every hour of nighttime play) makes each sighting feel genuinely special.
+
 ## [v0.85.0] — 2026-04-15 — Thunderstorm Lightning Bolts
 
 ### Added
