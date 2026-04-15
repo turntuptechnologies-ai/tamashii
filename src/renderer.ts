@@ -590,6 +590,62 @@ const THUNDER_REACTIONS = [
   "Thunder makes me brave... I think! ⛈️💪",
 ];
 
+// --- Lightning Bolts ---
+interface LightningSegment {
+  x1: number; y1: number; x2: number; y2: number;
+  branch: number; // 0 = main trunk, higher = sub-branch
+}
+interface LightningBolt {
+  segments: LightningSegment[];
+  life: number;
+  maxLife: number;
+  flashAlpha: number;
+}
+let activeLightningBolts: LightningBolt[] = [];
+let nextLightningTime = 0;
+let totalLightningBoltsWitnessed = 0;
+let lightningFirstTime = false;
+const LIGHTNING_MIN_INTERVAL = 300;
+const LIGHTNING_MAX_INTERVAL = 900;
+
+const LIGHTNING_REACTIONS = [
+  "Whoa~! Did you see that lightning?! ⚡😲",
+  "The sky just cracked open~! ⚡✨",
+  "Lightning is so beautiful... and scary! ⚡😳",
+  "ZAP~! Nature's fireworks! ⚡🎆",
+  "That bolt was HUGE~! ⚡💥",
+  "Lightning makes the sky glow~! ⚡🌌",
+];
+
+function generateLightningBolt(canvasW: number, canvasH: number): LightningBolt {
+  const segments: LightningSegment[] = [];
+  const startX = canvasW * (0.15 + Math.random() * 0.7);
+  const startY = 0;
+  const endY = canvasH * (0.4 + Math.random() * 0.35);
+
+  function buildBranch(x: number, y: number, targetY: number, branch: number, maxBranches: number): void {
+    const steps = 6 + Math.floor(Math.random() * 6);
+    const stepY = (targetY - y) / steps;
+    let cx = x;
+    let cy = y;
+    for (let i = 0; i < steps; i++) {
+      const nx = cx + (Math.random() - 0.5) * 40 * (branch === 0 ? 1 : 0.6);
+      const ny = cy + stepY + (Math.random() - 0.5) * stepY * 0.3;
+      segments.push({ x1: cx, y1: cy, x2: nx, y2: ny, branch });
+      cx = nx;
+      cy = ny;
+      if (branch < maxBranches && Math.random() < 0.25) {
+        const branchEndY = cy + (targetY - cy) * (0.3 + Math.random() * 0.4);
+        buildBranch(cx, cy, branchEndY, branch + 1, maxBranches);
+      }
+    }
+  }
+
+  buildBranch(startX, startY, endY, 0, 2);
+  const life = 20 + Math.floor(Math.random() * 15);
+  return { segments, life, maxLife: life, flashAlpha: 0.2 + Math.random() * 0.1 };
+}
+
 // --- Morning Stretches ---
 type MorningStretchPhase = "none" | "yawn" | "stretch_up" | "shake" | "hop" | "sparkle";
 let morningStretchPhase: MorningStretchPhase = "none";
@@ -7355,13 +7411,61 @@ function drawWeatherOverlay(): void {
     }
   }
 
-  // Storm flash
-  if (currentWeather === "stormy" && Math.random() < 0.003) {
-    ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.fillRect(0, 0, w, h);
-    // Thunder sound
+  // Lightning bolts during storms
+  if (currentWeather === "stormy" && frame >= nextLightningTime) {
+    const bolt = generateLightningBolt(w, h);
+    activeLightningBolts.push(bolt);
+    nextLightningTime = frame + LIGHTNING_MIN_INTERVAL + Math.floor(Math.random() * (LIGHTNING_MAX_INTERVAL - LIGHTNING_MIN_INTERVAL));
+    totalLightningBoltsWitnessed++;
     playTone(60, 0.3, "sawtooth", 0.06);
     setTimeout(() => playTone(40, 0.4, "sawtooth", 0.04), 150);
+    if (!isSleeping && !speechBubble && Math.random() < 0.3) {
+      queueSpeechBubble(LIGHTNING_REACTIONS[Math.floor(Math.random() * LIGHTNING_REACTIONS.length)], 150, true);
+    }
+    if (!lightningFirstTime) {
+      lightningFirstTime = true;
+      addDiaryEntry("general", "⚡", "Saw my first lightning bolt! The sky split open with a brilliant flash!");
+    }
+  }
+  // Render active lightning bolts
+  for (let bi = activeLightningBolts.length - 1; bi >= 0; bi--) {
+    const bolt = activeLightningBolts[bi];
+    const t = bolt.life / bolt.maxLife;
+    // Screen flash at bolt start
+    if (bolt.life === bolt.maxLife) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${bolt.flashAlpha})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    // Draw bolt segments
+    ctx.save();
+    for (const seg of bolt.segments) {
+      const width = seg.branch === 0 ? 2.5 : seg.branch === 1 ? 1.5 : 0.8;
+      const glowWidth = seg.branch === 0 ? 8 : seg.branch === 1 ? 5 : 3;
+      const alpha = t * (seg.branch === 0 ? 1 : 0.7);
+      // Outer glow
+      ctx.strokeStyle = `rgba(180, 200, 255, ${alpha * 0.3})`;
+      ctx.lineWidth = glowWidth;
+      ctx.beginPath();
+      ctx.moveTo(seg.x1, seg.y1);
+      ctx.lineTo(seg.x2, seg.y2);
+      ctx.stroke();
+      // Core bolt
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(seg.x1, seg.y1);
+      ctx.lineTo(seg.x2, seg.y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    bolt.life--;
+    if (bolt.life <= 0) {
+      activeLightningBolts.splice(bi, 1);
+    }
+  }
+  // Clear bolts when weather changes away from stormy
+  if (currentWeather !== "stormy" && activeLightningBolts.length > 0) {
+    activeLightningBolts.length = 0;
   }
 
   // Cloudy/rainy/stormy dim overlay
@@ -11194,6 +11298,11 @@ const achievements: Achievement[] = [
     icon: "🌬️", unlockMessage: "The wind whispers your name~! A free spirit who dances with the breeze! 🌬️🍃✨",
     condition: () => totalWindSoundSessions >= 10, unlocked: false,
   },
+  {
+    id: "storm_chaser", name: "Storm Chaser", description: "Witness 15 lightning bolts",
+    icon: "⚡", unlockMessage: "You've faced the storm and found its beauty~! A true storm chaser! ⚡🌩️✨",
+    condition: () => totalLightningBoltsWitnessed >= 15, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -12045,6 +12154,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E0E0FF";
+  ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`⚡ ${totalLightningBoltsWitnessed} witnessed`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#B0C4DE";
   ctx.fillText("SNOWMEN BUILT", panelX + 12, y);
   ctx.textAlign = "right";
@@ -12486,6 +12605,8 @@ interface SaveData {
   nightlightFirstTime: boolean;
   totalRainSoundSessions: number;
   totalWindSoundSessions: number;
+  totalLightningBoltsWitnessed: number;
+  lightningFirstTime: boolean;
   version: number;
 }
 
@@ -12570,6 +12691,8 @@ function buildSaveData(): SaveData {
     nightlightFirstTime,
     totalRainSoundSessions,
     totalWindSoundSessions,
+    totalLightningBoltsWitnessed,
+    lightningFirstTime,
     version: 1,
   };
 }
@@ -12890,6 +13013,12 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).totalWindSoundSessions === "number") {
     totalWindSoundSessions = (data as SaveData).totalWindSoundSessions;
+  }
+  if (typeof (data as SaveData).totalLightningBoltsWitnessed === "number") {
+    totalLightningBoltsWitnessed = (data as SaveData).totalLightningBoltsWitnessed;
+  }
+  if (typeof (data as SaveData).lightningFirstTime === "boolean") {
+    lightningFirstTime = (data as SaveData).lightningFirstTime;
   }
 
   // Restore diary

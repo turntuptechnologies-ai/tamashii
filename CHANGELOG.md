@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.85.0] — 2026-04-15 — Thunderstorm Lightning Bolts
+
+### Added
+- **Forked lightning bolts** — during stormy weather, procedurally generated lightning bolts crack across the sky with realistic branching paths (recursive forking algorithm with up to 3 branch depths)
+- **Layered rendering** — each bolt segment rendered with a bright white core and a soft blue-white outer glow, with sub-branches rendered thinner and more transparent than the main trunk
+- **Animated lifecycle** — bolts appear with a bright screen flash, then fade out over ~20-35 frames with natural alpha decay
+- **Thunder sync** — each lightning bolt triggers the existing thunder sound effects (deep sawtooth rumble + delayed follow-up), replacing the old random screen flash
+- **Speech reactions** — 6 lightning-specific messages ("Whoa~! Did you see that lightning?! ⚡😲", "ZAP~! Nature's fireworks! ⚡🎆") triggered with 30% chance per bolt
+- **Diary entry** — first lightning bolt witnessed is logged to pet diary
+- **Storm Chaser achievement** — witness 15 lightning bolts to unlock achievement #60 (⚡)
+- **Stats tracking** — total lightning bolts witnessed displayed in stats panel
+- **Full persistence** — lightning bolt count and first-time flag saved across sessions
+- **Total achievements: 60**
+
+**Why this feature:** Storms already had rain sounds, thunder rumbles, and a faint white screen flash — but the lightning itself was invisible. Real thunderstorms are defined by their lightning, and the previous 0.003-probability white rectangle was underwhelming. This upgrade replaces that with dramatic forked lightning bolts that crack across the sky with branching paths, glowing cores, and natural fade-out — making storms the most visually spectacular weather event. Combined with the existing rain patter, heavy drops, and thunder rumbles, storms now deliver a complete audiovisual experience.
+
 ## [v0.84.0] — 2026-04-15 — Wind Sounds
 
 ### Added
