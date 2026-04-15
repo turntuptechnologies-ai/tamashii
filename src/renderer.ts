@@ -560,6 +560,29 @@ const RAIN_SOUND_REACTIONS = [
   "So cozy listening to the rain~ 🌧️☺️",
 ];
 
+// --- Ambient Wind Sounds ---
+let ambientWindActive = false;
+let nextWindGustTime = 0;
+let nextRustlingTime = 0;
+let nextWindyChimeTime = 0;
+let ambientWindFirstSession = false;
+let totalWindSoundSessions = 0;
+const WIND_GUST_MIN_INTERVAL = 90;
+const WIND_GUST_MAX_INTERVAL = 240;
+const RUSTLING_MIN_INTERVAL = 45;
+const RUSTLING_MAX_INTERVAL = 120;
+const WINDY_CHIME_MIN_INTERVAL = 180;
+const WINDY_CHIME_MAX_INTERVAL = 480;
+
+const WIND_SOUND_REACTIONS = [
+  "Whoooosh~! The wind is singing! 🌬️🎶",
+  "Hold on to your hat~! It's breezy! 🌬️💨",
+  "The wind carries little whispers~ 🍃✨",
+  "Wheee~ I can feel the breeze! 🌬️😊",
+  "Listen to the leaves dancing~ 🍃🎵",
+  "The wind chimes are so pretty~ 🎐💫",
+];
+
 const THUNDER_REACTIONS = [
   "Eep~! Thunder! Hold me! ⛈️😱",
   "BOOM~! That was so loud! ⛈️💥",
@@ -2244,7 +2267,7 @@ function playOwlHoot(): void {
   osc2.stop(t + 1.3);
 }
 
-function playWindGust(): void {
+function playNightWindGust(): void {
   if (!soundEnabled) return;
   if (audioCtx.state === "suspended") audioCtx.resume();
   const t = audioCtx.currentTime;
@@ -2318,7 +2341,7 @@ function updateAmbientNightSounds(): void {
   }
 
   if (frame >= nextWindTime) {
-    playWindGust();
+    playNightWindGust();
     nextWindTime = frame + WIND_MIN_INTERVAL + Math.floor(Math.random() * (WIND_MAX_INTERVAL - WIND_MIN_INTERVAL));
   }
 }
@@ -2891,6 +2914,156 @@ function updateAmbientRainSounds(): void {
     nextThunderTime = frame + THUNDER_MIN_INTERVAL + Math.floor(Math.random() * (THUNDER_MAX_INTERVAL - THUNDER_MIN_INTERVAL));
     if (!isSleeping && !speechBubble && Math.random() < 0.35) {
       queueSpeechBubble(THUNDER_REACTIONS[Math.floor(Math.random() * THUNDER_REACTIONS.length)], 150, true);
+    }
+  }
+
+  checkAchievements();
+}
+
+// --- Ambient Wind Sound Functions ---
+
+function playWindGust(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 1.0 + Math.random() * 1.5;
+  const bufferSize = Math.floor(audioCtx.sampleRate * dur);
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1);
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  const bandpass = audioCtx.createBiquadFilter();
+  bandpass.type = "bandpass";
+  bandpass.frequency.setValueAtTime(300 + Math.random() * 200, t);
+  bandpass.frequency.exponentialRampToValueAtTime(600 + Math.random() * 400, t + dur * 0.4);
+  bandpass.frequency.exponentialRampToValueAtTime(200 + Math.random() * 150, t + dur);
+  bandpass.Q.value = 0.5 + Math.random() * 0.5;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.001, t);
+  gain.gain.linearRampToValueAtTime(0.04 + Math.random() * 0.03, t + dur * 0.3);
+  gain.gain.linearRampToValueAtTime(0.05 + Math.random() * 0.02, t + dur * 0.5);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(bandpass);
+  bandpass.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur + 0.05);
+}
+
+function playRustlingLeaves(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const burstCount = 2 + Math.floor(Math.random() * 4);
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0.015, t);
+  masterGain.connect(audioCtx.destination);
+  for (let i = 0; i < burstCount; i++) {
+    const onset = t + i * (0.06 + Math.random() * 0.08);
+    const dur = 0.05 + Math.random() * 0.08;
+    const bufLen = Math.floor(audioCtx.sampleRate * dur);
+    const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let j = 0; j < bufLen; j++) {
+      ch[j] = (Math.random() * 2 - 1);
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 3000 + Math.random() * 3000;
+    hp.Q.value = 0.3;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.001, onset);
+    gain.gain.linearRampToValueAtTime(0.5 + Math.random() * 0.5, onset + dur * 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, onset + dur);
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(masterGain);
+    src.start(onset);
+    src.stop(onset + dur + 0.02);
+  }
+}
+
+function playWindyChime(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const noteCount = 2 + Math.floor(Math.random() * 5);
+  const chimeFreqs = [440, 523, 659, 784, 880, 1047, 1175, 1319];
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.setValueAtTime(0.015, t);
+  masterGain.connect(audioCtx.destination);
+  for (let i = 0; i < noteCount; i++) {
+    const noteStart = t + i * (0.08 + Math.random() * 0.15);
+    const freq = chimeFreqs[Math.floor(Math.random() * chimeFreqs.length)];
+    const dur = 1.2 + Math.random() * 1.8;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, noteStart);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.996, noteStart + dur);
+    gain.gain.setValueAtTime(0, noteStart);
+    gain.gain.linearRampToValueAtTime(0.5 + Math.random() * 0.5, noteStart + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, noteStart + dur);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(noteStart);
+    osc.stop(noteStart + dur + 0.02);
+    const overtone = audioCtx.createOscillator();
+    const overGain = audioCtx.createGain();
+    overtone.type = "sine";
+    overtone.frequency.setValueAtTime(freq * 3.01, noteStart);
+    overGain.gain.setValueAtTime(0, noteStart);
+    overGain.gain.linearRampToValueAtTime(0.15, noteStart + 0.01);
+    overGain.gain.exponentialRampToValueAtTime(0.001, noteStart + dur * 0.4);
+    overtone.connect(overGain);
+    overGain.connect(masterGain);
+    overtone.start(noteStart);
+    overtone.stop(noteStart + dur * 0.4 + 0.02);
+  }
+}
+
+function updateAmbientWindSounds(): void {
+  const isWindy = currentWeather === "windy";
+
+  if (isWindy && !ambientWindActive) {
+    ambientWindActive = true;
+    totalWindSoundSessions++;
+    nextWindGustTime = frame + 30 + Math.floor(Math.random() * 60);
+    nextRustlingTime = frame + 60 + Math.floor(Math.random() * 60);
+    nextWindyChimeTime = frame + WINDY_CHIME_MIN_INTERVAL + Math.floor(Math.random() * (WINDY_CHIME_MAX_INTERVAL - WINDY_CHIME_MIN_INTERVAL));
+    if (!ambientWindFirstSession) {
+      ambientWindFirstSession = true;
+      addDiaryEntry("general", "🌬️", "The wind picked up today~ I could hear it whooshing and the chimes singing!");
+    }
+  } else if (!isWindy && ambientWindActive) {
+    ambientWindActive = false;
+  }
+
+  if (!ambientWindActive) return;
+
+  if (frame >= nextWindGustTime) {
+    playWindGust();
+    nextWindGustTime = frame + WIND_GUST_MIN_INTERVAL + Math.floor(Math.random() * (WIND_GUST_MAX_INTERVAL - WIND_GUST_MIN_INTERVAL));
+  }
+
+  if (frame >= nextRustlingTime) {
+    playRustlingLeaves();
+    nextRustlingTime = frame + RUSTLING_MIN_INTERVAL + Math.floor(Math.random() * (RUSTLING_MAX_INTERVAL - RUSTLING_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.08) {
+      queueSpeechBubble(WIND_SOUND_REACTIONS[Math.floor(Math.random() * WIND_SOUND_REACTIONS.length)], 150, true);
+    }
+  }
+
+  if (frame >= nextWindyChimeTime) {
+    playWindyChime();
+    nextWindyChimeTime = frame + WINDY_CHIME_MIN_INTERVAL + Math.floor(Math.random() * (WINDY_CHIME_MAX_INTERVAL - WINDY_CHIME_MIN_INTERVAL));
+    if (!isSleeping && !speechBubble && Math.random() < 0.2) {
+      queueSpeechBubble(WIND_SOUND_REACTIONS[Math.floor(Math.random() * WIND_SOUND_REACTIONS.length)], 150, true);
     }
   }
 
@@ -11016,6 +11189,11 @@ const achievements: Achievement[] = [
     icon: "🌧️", unlockMessage: "The rain sings just for you~! A cozy soul who loves the pitter patter! 🌧️💙🎶",
     condition: () => totalRainSoundSessions >= 10, unlocked: false,
   },
+  {
+    id: "wind_whistler", name: "Wind Whistler", description: "Listen to the wind 10 times",
+    icon: "🌬️", unlockMessage: "The wind whispers your name~! A free spirit who dances with the breeze! 🌬️🍃✨",
+    condition: () => totalWindSoundSessions >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -11857,6 +12035,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#87CEEB";
+  ctx.fillText("WIND SOUNDS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌬️ ${totalWindSoundSessions} sessions`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#B0C4DE";
   ctx.fillText("SNOWMEN BUILT", panelX + 12, y);
   ctx.textAlign = "right";
@@ -12297,6 +12485,7 @@ interface SaveData {
   totalNightlightToggles: number;
   nightlightFirstTime: boolean;
   totalRainSoundSessions: number;
+  totalWindSoundSessions: number;
   version: number;
 }
 
@@ -12380,6 +12569,7 @@ function buildSaveData(): SaveData {
     totalNightlightToggles,
     nightlightFirstTime,
     totalRainSoundSessions,
+    totalWindSoundSessions,
     version: 1,
   };
 }
@@ -12697,6 +12887,9 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).totalRainSoundSessions === "number") {
     totalRainSoundSessions = (data as SaveData).totalRainSoundSessions;
+  }
+  if (typeof (data as SaveData).totalWindSoundSessions === "number") {
+    totalWindSoundSessions = (data as SaveData).totalWindSoundSessions;
   }
 
   // Restore diary
@@ -15579,6 +15772,9 @@ function update(): void {
 
   // --- Ambient Rain Sounds ---
   updateAmbientRainSounds();
+
+  // --- Ambient Wind Sounds ---
+  updateAmbientWindSounds();
 
   // --- Pet Dreams (night only, when sleeping or sleepy) ---
   const dreamCx = canvas.width / 2;

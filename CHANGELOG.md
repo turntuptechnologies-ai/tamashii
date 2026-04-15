@@ -3,6 +3,22 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.84.0] — 2026-04-15 — Wind Sounds
+
+### Added
+- **Wind gusts** — sweeping bandpass-filtered noise with rising/falling frequency sweep (300-600Hz) and organic swell envelope, creating realistic gusting wind during windy weather
+- **Rustling leaves** — clusters of 2-6 high-pass filtered noise bursts (3000-6000Hz) simulating leaves skittering and fluttering in the breeze
+- **Wind chimes** — randomized 2-7 note sequences from a pentatonic-friendly scale (A4-E6) with sine oscillators, natural decay, and subtle overtone harmonics for metallic shimmer
+- **Weather-aware activation** — all three sound layers activate only during windy weather and deactivate when weather changes
+- **Speech reactions** — 6 wind-themed messages ("Whoooosh~! The wind is singing! 🌬️🎶", "The wind chimes are so pretty~ 🎐💫") triggered naturally during rustling and chime events
+- **Diary entry** — first wind sound session logged to pet diary
+- **Wind Whistler achievement** — listen to the wind 10 times to unlock achievement #59 (🌬️)
+- **Stats tracking** — total wind sound sessions displayed in stats panel
+- **Full persistence** — wind sound session count saved across sessions
+- **Total achievements: 59**
+
+**Why this feature:** After adding rain sounds last cycle, windy weather was the last weather type without its own ambient soundscape. The pet already reacts visually to wind with blowing particles, and the night ambient system had a basic low-pass wind gust. This upgrade gives windy weather a full three-layered sound palette — sweeping gusts for atmosphere, rustling leaves for texture, and wind chimes for melody — completing the weather-sound collection alongside rain/thunder, crickets, birdsong, cicadas, and frog chorus.
+
 ## [v0.83.0] — 2026-04-14 — Rain Sounds
 
 ### Added
