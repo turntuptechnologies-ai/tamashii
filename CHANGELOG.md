@@ -3,6 +3,25 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.87.0] — 2026-04-16 — Dream Theater
+
+### Added
+- **Vivid dream scenes** — while sleeping, large cloud-shaped thought bubbles periodically appear above the pet, containing mini dream vignettes with multiple icons and dreamy captions
+- **Activity-based dreams** — dream content is influenced by the day's activities: feeding produces feast dreams, playing produces bouncing-on-clouds dreams, music sessions produce dancing-to-starlight dreams, and more (11 activity-specific templates)
+- **Cloud rendering** — dream scenes use overlapping ellipses to form a fluffy cloud shape, with trailing thought dots leading down to the pet, giving a classic comic-book dream bubble aesthetic
+- **Dream icons and captions** — each cloud contains 3 hand-drawn dream icons arranged side by side, plus a small italic caption underneath (e.g., "a feast of yummies~", "flying through stars~")
+- **Gentle lifecycle** — dream clouds fade in over ~40 frames, float upward slowly with organic wobble on two axes, and fade out gracefully over the final 15% of their ~5-7 second lifespan
+- **One at a time** — only one dream scene is visible at a time, spawning every ~25-45 seconds during sleep, keeping dreams special rather than cluttered
+- **Dream chime sound** — a soft ascending C-E-G major arpeggio (sine wave, very low volume) plays when each dream scene appears, adding a gentle celestial quality
+- **Generic fallback dreams** — when no activities have been logged, generic dreamy scenes appear (fluffy cloud beds, a world of colors, flying through stars, warm and safe, a gentle breeze)
+- **Diary entry** — first dream scene is logged to the pet diary
+- **Sweet Dreamer achievement** — have 10 vivid dream scenes to unlock achievement #62 (💭)
+- **Stats tracking** — total dream scenes displayed in stats panel
+- **Full persistence** — dream scene count and first-time flag saved across sessions
+- **Total achievements: 62**
+
+**Why this feature:** The sleep system already has Zzz particles, sleep talking, contextual dream bubbles with single icons, a nightlight, and a bedtime ritual — but the dream experience was still limited to small floating icon bubbles. Dream Theater adds a new visual layer: larger, cloud-shaped thought bubbles that show actual dream *scenes* with multiple icons and captions, making the pet's inner dream world visible and connected to the day's activities. It rewards players who interact with many features during the day with richer, more varied dream content at night.
+
 ## [v0.86.0] — 2026-04-15 — Comet Event
 
 ### Added

@@ -384,6 +384,51 @@ const NIGHTLIGHT_Y_OFFSET = 30;
 let sleepTalkTimer = 0;
 let totalSleepTalks = 0;
 let sleepTalkFirstTime = true;
+
+// --- Dream Theater ---
+interface DreamScene {
+  x: number;
+  y: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  wobblePhase: number;
+  icons: string[];
+  caption: string;
+  fadeIn: number;
+}
+
+const dreamScenes: DreamScene[] = [];
+let dreamSceneTimer = 0;
+let totalDreamScenes = 0;
+let dreamSceneFirstTime = true;
+const DREAM_SCENE_MIN_INTERVAL = 1500; // ~25 seconds
+const DREAM_SCENE_MAX_INTERVAL = 2700; // ~45 seconds
+
+interface DreamTemplate {
+  activity: string;
+  icons: string[][];
+  captions: string[];
+}
+
+const DREAM_TEMPLATES: DreamTemplate[] = [
+  { activity: "fed", icons: [["food", "food", "star"], ["food", "heart", "food"]], captions: ["a feast of yummies~", "endless snack mountain~", "cake as tall as the sky~"] },
+  { activity: "played", icons: [["star", "butterfly", "star"], ["heart", "star", "music"]], captions: ["playing forever and ever~", "bouncing on clouds~", "a sky full of toys~"] },
+  { activity: "trick", icons: [["star", "music", "star"], ["star", "star", "heart"]], captions: ["the greatest trick ever~", "standing ovation~!", "a trick so amazing~"] },
+  { activity: "petted", icons: [["heart", "heart", "heart"], ["heart", "flower", "heart"]], captions: ["warm gentle pats~", "softest hands ever~", "cozy love blanket~"] },
+  { activity: "music", icons: [["music", "music", "star"], ["music", "heart", "music"]], captions: ["a melody of dreams~", "dancing to starlight~", "the moon is singing~"] },
+  { activity: "photo", icons: [["flower", "butterfly", "star"], ["star", "flower", "moon"]], captions: ["picture perfect~", "a gallery of memories~", "framing the stars~"] },
+  { activity: "fireflies", icons: [["star", "butterfly", "moon"], ["star", "star", "butterfly"]], captions: ["firefly lanterns~", "a garden of lights~", "dancing sparkles~"] },
+  { activity: "story", icons: [["moon", "star", "heart"], ["star", "butterfly", "flower"]], captions: ["once upon a dream~", "happily ever after~", "the story continues~"] },
+  { activity: "constellations", icons: [["star", "star", "moon"], ["star", "moon", "star"]], captions: ["connecting the stars~", "the sky is a painting~", "star friends forever~"] },
+  { activity: "meditation", icons: [["heart", "moon", "flower"], ["flower", "heart", "star"]], captions: ["perfect stillness~", "floating in peace~", "a calm ocean~"] },
+  { activity: "tea", icons: [["food", "flower", "heart"], ["heart", "food", "flower"]], captions: ["infinite tea party~", "a warm cozy cup~", "tea with the moon~"] },
+];
+
+const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
+  icons: [["star", "moon", "heart"], ["butterfly", "flower", "star"], ["moon", "heart", "moon"], ["star", "star", "star"]],
+  captions: ["fluffy cloud beds~", "a world of colors~", "flying through stars~", "warm and safe~", "a gentle breeze~"],
+};
 const SLEEP_TALK_MIN_INTERVAL = 900;   // ~15 seconds minimum between mumbles
 const SLEEP_TALK_MAX_INTERVAL = 2400;  // ~40 seconds maximum
 
@@ -3560,6 +3605,156 @@ function triggerSleepTalk(): void {
     addDiaryEntry("general", "💤", `${petName} talked in their sleep for the first time~! "${message}"`);
   }
   saveGame();
+}
+
+// --- Dream Theater Functions ---
+function getDreamScene(): { icons: string[]; caption: string } {
+  const matched: DreamTemplate[] = [];
+  for (const t of DREAM_TEMPLATES) {
+    if (dailyActivityLog.includes(t.activity)) matched.push(t);
+  }
+  if (matched.length > 0 && Math.random() < 0.7) {
+    const t = matched[Math.floor(Math.random() * matched.length)];
+    const icons = t.icons[Math.floor(Math.random() * t.icons.length)];
+    const caption = t.captions[Math.floor(Math.random() * t.captions.length)];
+    return { icons: [...icons], caption };
+  }
+  const icons = DREAM_GENERIC_SCENES.icons[Math.floor(Math.random() * DREAM_GENERIC_SCENES.icons.length)];
+  const caption = DREAM_GENERIC_SCENES.captions[Math.floor(Math.random() * DREAM_GENERIC_SCENES.captions.length)];
+  return { icons: [...icons], caption };
+}
+
+function spawnDreamScene(): void {
+  if (!isSleeping || sleepTransitionType) return;
+  const scene = getDreamScene();
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2 + bounceOffset;
+  const maxLife = 300 + Math.floor(Math.random() * 120);
+  dreamScenes.push({
+    x: cx + (Math.random() - 0.5) * 30,
+    y: cy - 50,
+    vy: -(0.12 + Math.random() * 0.08),
+    life: maxLife,
+    maxLife,
+    wobblePhase: Math.random() * Math.PI * 2,
+    icons: scene.icons,
+    caption: scene.caption,
+    fadeIn: 0,
+  });
+  totalDreamScenes++;
+  if (dreamSceneFirstTime) {
+    dreamSceneFirstTime = false;
+    addDiaryEntry("milestone", "💭", `${petName || "Tamashii"} had their first vivid dream~! "${scene.caption}"`);
+  }
+  playDreamChimeSound();
+  saveGame();
+}
+
+function playDreamChimeSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const notes = [523.25, 659.25, 783.99]; // C5, E5, G5 — gentle major chord arpeggio
+  notes.forEach((freq, i) => {
+    setTimeout(() => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.025, audioCtx.currentTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.6);
+    }, i * 180);
+  });
+}
+
+function drawDreamScene(scene: DreamScene): void {
+  const lifeRatio = scene.life / scene.maxLife;
+  const fadeInAlpha = Math.min(scene.fadeIn / 40, 1);
+  const fadeOutAlpha = lifeRatio < 0.15 ? lifeRatio / 0.15 : 1;
+  const alpha = fadeInAlpha * fadeOutAlpha * 0.9;
+  if (alpha < 0.01) return;
+
+  ctx.save();
+  const wobbleX = Math.sin(scene.wobblePhase) * 4;
+  const wobbleY = Math.sin(scene.wobblePhase * 0.7) * 2;
+  const sx = scene.x + wobbleX;
+  const sy = scene.y + wobbleY;
+
+  ctx.globalAlpha = alpha;
+
+  // Cloud shape — overlapping circles
+  const cw = 52;
+  const ch = 32;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.strokeStyle = "rgba(180, 180, 220, 0.45)";
+  ctx.lineWidth = 0.7;
+
+  // Main cloud body
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, cw * 0.5, ch * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Left bump
+  ctx.beginPath();
+  ctx.ellipse(sx - cw * 0.3, sy + 2, cw * 0.28, ch * 0.35, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Right bump
+  ctx.beginPath();
+  ctx.ellipse(sx + cw * 0.3, sy + 1, cw * 0.25, ch * 0.32, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Top bump
+  ctx.beginPath();
+  ctx.ellipse(sx - 3, sy - ch * 0.25, cw * 0.22, ch * 0.28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Fill over strokes for solid interior
+  ctx.strokeStyle = "transparent";
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, cw * 0.42, ch * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Thought bubble trailing dots
+  const dot1x = sx - cw * 0.2;
+  const dot1y = sy + ch * 0.55;
+  const dot2x = sx - cw * 0.35;
+  const dot2y = sy + ch * 0.8;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+  ctx.strokeStyle = "rgba(180, 180, 220, 0.35)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(dot1x, dot1y, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(dot2x, dot2y, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.fill();
+  ctx.stroke();
+
+  // Dream icons inside cloud
+  ctx.globalAlpha = alpha * 0.95;
+  const iconSpacing = 16;
+  const startX = sx - ((scene.icons.length - 1) * iconSpacing) / 2;
+  for (let i = 0; i < scene.icons.length; i++) {
+    drawDreamIcon(startX + i * iconSpacing, sy - 4, scene.icons[i], 10);
+  }
+
+  // Caption text below icons
+  ctx.globalAlpha = alpha * 0.7;
+  ctx.font = "italic 6px sans-serif";
+  ctx.fillStyle = "#8878AA";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(scene.caption, sx, sy + 8);
+
+  ctx.restore();
 }
 
 // --- Nightlight Functions ---
@@ -11490,6 +11685,11 @@ const achievements: Achievement[] = [
     icon: "☄️", unlockMessage: "A true cosmic wanderer~! The comets know your name! ☄️🌌✨",
     condition: () => totalCometsWitnessed >= 3, unlocked: false,
   },
+  {
+    id: "sweet_dreamer", name: "Sweet Dreamer", description: "Have 10 vivid dream scenes while sleeping",
+    icon: "💭", unlockMessage: "A world of dreams awaits~! Your imagination knows no bounds! 💭🌙✨",
+    condition: () => totalDreamScenes >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -11930,6 +12130,8 @@ function drawStatsPanel(): void {
   ctx.fillText(`😴 ${totalSleepRituals} bedtime rituals`, w / 2, y);
   y += 10;
   ctx.fillText(`💤 ${totalSleepTalks} sleep talks`, w / 2, y);
+  y += 10;
+  ctx.fillText(`💭 ${totalDreamScenes} dream scenes`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -12806,6 +13008,8 @@ interface SaveData {
   lightningFirstTime: boolean;
   totalCometsWitnessed: number;
   cometFirstSeen: boolean;
+  totalDreamScenes: number;
+  dreamSceneFirstTime: boolean;
   version: number;
 }
 
@@ -12894,6 +13098,8 @@ function buildSaveData(): SaveData {
     lightningFirstTime,
     totalCometsWitnessed,
     cometFirstSeen,
+    totalDreamScenes,
+    dreamSceneFirstTime,
     version: 1,
   };
 }
@@ -13226,6 +13432,12 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).cometFirstSeen === "boolean") {
     cometFirstSeen = (data as SaveData).cometFirstSeen;
+  }
+  if (typeof (data as SaveData).totalDreamScenes === "number") {
+    totalDreamScenes = (data as SaveData).totalDreamScenes;
+  }
+  if (typeof (data as SaveData).dreamSceneFirstTime === "boolean") {
+    dreamSceneFirstTime = (data as SaveData).dreamSceneFirstTime;
   }
 
   // Restore diary
@@ -16160,6 +16372,33 @@ function update(): void {
     }
   }
 
+  // --- Dream Theater (vivid dream scenes while sleeping) ---
+  if (isSleeping && !sleepTransitionType && currentTimeOfDay === "night") {
+    dreamSceneTimer++;
+    const interval = DREAM_SCENE_MIN_INTERVAL + Math.floor(Math.random() * (DREAM_SCENE_MAX_INTERVAL - DREAM_SCENE_MIN_INTERVAL));
+    if (dreamSceneTimer >= interval && dreamScenes.length < 1) {
+      dreamSceneTimer = 0;
+      spawnDreamScene();
+    }
+  } else {
+    dreamSceneTimer = 0;
+  }
+  for (let i = dreamScenes.length - 1; i >= 0; i--) {
+    const ds = dreamScenes[i];
+    ds.y += ds.vy;
+    ds.wobblePhase += 0.025;
+    ds.fadeIn++;
+    ds.life--;
+    if (ds.life <= 0) {
+      dreamScenes.splice(i, 1);
+    }
+  }
+  if (!isSleeping && dreamScenes.length > 0) {
+    for (const ds of dreamScenes) {
+      ds.life = Math.min(ds.life, 20);
+    }
+  }
+
   // Idle bounce (speed and amplitude vary by time of day)
   if (!isDragging) {
     const amplitude = getBounceAmplitude();
@@ -17116,6 +17355,9 @@ function draw(): void {
   // Dream bubbles (above butterfly, below speech bubble)
   for (const db of dreamBubbles) {
     drawDreamBubble(db);
+  }
+  for (const ds of dreamScenes) {
+    drawDreamScene(ds);
   }
 
   // Sunset meditation guide (above dream bubbles)
