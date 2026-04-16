@@ -3,6 +3,33 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.89.0] — 2026-04-16 — Marshmallow Roasting
+
+### Added
+- **Marshmallow on a stick** — about 5 seconds after you light a campfire, a marshmallow-on-a-stick appears next to the fire, ready to be roasted
+- **Click to roast** — click the marshmallow to swing it over the flames and start the roast timer
+- **Click to pull out** — click again while roasting to pull the marshmallow off the fire and reveal the outcome
+- **Five roast outcomes** — timing determines the result: raw (too early, 0-25% roast), toasty (light tan, 25-48%), **golden PERFECT** (180 frame sweet spot from 48-72%), dark (well-done, 72-90%), and burnt (black/smoking, 90%+)
+- **Live roast meter** — a color-coded timing bar above the marshmallow shows the current roast level with a pointer; the golden zone is highlighted in bright orange so you can aim for perfect
+- **Color progression** — the marshmallow body smoothly interpolates from white → tan → golden brown → dark brown → near-black as it roasts, with darker shading on the side facing the fire
+- **Burnt speckles** — once past 72% roast, black speckles appear on the marshmallow body for realistic char detail
+- **Sizzle & crackle audio** — high-pass-filtered noise bursts play when roasting starts and every ~2.3 seconds during the roast
+- **Outcome sounds** — perfect golden plays an ascending major arpeggio (A5→E6→A6), toasty plays a warm double chime, raw plays a descending sine, burnt plays a short sawtooth buzz
+- **Result label** — after pulling out, a color-coded outcome label appears above the marshmallow ("PERFECT!", "toasty~", "raw", "dark", "burnt!") with shimmer star for perfect roasts
+- **Rewards by outcome** — perfect golden: +5 happiness, +2 care points, +3 friendship XP and 12-particle sparkle burst; toasty: +2 happiness, +1 care; dark: +1 happiness; raw/burnt: 0 boost
+- **Smoking burnt marshmallow** — if you burn it, dark smoke particles rise continuously during the result display
+- **Auto-burn safety** — if you never pull out, the marshmallow auto-burns at 100% so it doesn't stay on forever
+- **Respawn cycle** — after each marshmallow, a new one appears ~15 seconds later (as long as the fire is still lit)
+- **Contextual speeches** — 5 speech pools (perfect/toasty/raw/dark/burnt) with varied reactions like "PERFECT~!! Golden all over! 🌟🍡" and "*cough cough* too hot~! 🍡🔥"
+- **Dream template** — "marshmallow" activity added to DREAM_TEMPLATES so sleeping after roasting yields dreams of "golden marshmallows~", "sticky sweet dreams~", "roasting with friends~"
+- **Diary entry** — first marshmallow roasted is logged to the pet diary as a milestone
+- **Marshmallow Master achievement** — achieve 5 perfect golden roasts to unlock achievement #64 (🍡)
+- **Stats tracking** — total marshmallows roasted and perfect golden count displayed in the SLEEP section of the stats panel
+- **Full persistence** — totalMarshmallowsRoasted, perfectMarshmallowRoasts, and marshmallowFirstRoast saved across sessions
+- **Total achievements: 64**
+
+**Why this feature:** The campfire added in v0.88 was cozy but passive — you lit it, fed it, and watched it burn. Marshmallow roasting turns the campfire into an active mini-game with skill-based timing, reward scaling, and satisfying audiovisual feedback. It completes the "campfire experience" arc (snow falls → logs appear → light the fire → feed the fire → **roast marshmallows** → watch embers fade) into a complete cozy winter evening. The 5-outcome timing gradient rewards patience and practice, and the "perfect golden" sweet spot gives skilled players something to aim for — with the Marshmallow Master achievement as a long-term goal for landing 5 perfects.
+
 ## [v0.88.0] — 2026-04-16 — Cozy Campfire
 
 ### Added

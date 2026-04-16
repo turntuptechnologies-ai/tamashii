@@ -424,6 +424,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "meditation", icons: [["heart", "moon", "flower"], ["flower", "heart", "star"]], captions: ["perfect stillness~", "floating in peace~", "a calm ocean~"] },
   { activity: "tea", icons: [["food", "flower", "heart"], ["heart", "food", "flower"]], captions: ["infinite tea party~", "a warm cozy cup~", "tea with the moon~"] },
   { activity: "campfire", icons: [["heart", "star", "moon"], ["star", "heart", "star"]], captions: ["dancing by the fire~", "toasty cozy nights~", "warm in the snow~"] },
+  { activity: "marshmallow", icons: [["star", "heart", "star"], ["food", "star", "food"]], captions: ["golden marshmallows~", "sticky sweet dreams~", "roasting with friends~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -8163,6 +8164,534 @@ function drawCampfire(): void {
   ctx.restore();
 }
 
+// --- Marshmallow roasting mini-game (spawns alongside lit campfire) ---
+type MarshmallowOutcome = "raw" | "toasty" | "golden" | "dark" | "burnt";
+
+interface Marshmallow {
+  state: "ready" | "roasting" | "result";
+  roastLevel: number;   // 0-1 over the roast
+  roastTimer: number;
+  resultTimer: number;
+  outcome: MarshmallowOutcome | null;
+  animT: number;        // 0 = ready pose, 1 = roasting pose
+  bob: number;
+  smokeTimer: number;
+}
+
+let activeMarshmallow: Marshmallow | null = null;
+let marshmallowSpawnTimer = 0;
+let marshmallowRespawnTimer = 0;
+let totalMarshmallowsRoasted = 0;
+let perfectMarshmallowRoasts = 0;
+let marshmallowFirstRoast = false;
+
+const MARSHMALLOW_ROAST_FRAMES = 480;     // ~8 seconds from raw to burnt
+const MARSHMALLOW_SPAWN_DELAY = 300;      // ~5s after fire lit
+const MARSHMALLOW_RESPAWN_DELAY = 900;    // ~15s between marshmallows
+const MARSHMALLOW_RESULT_FRAMES = 180;    // ~3s of showing outcome
+
+const MARSHMALLOW_PERFECT_SPEECHES = [
+  "PERFECT~!! Golden all over! 🌟🍡",
+  "Ohhh~ the perfect roast! 💛✨",
+  "Golden brown and squishy~! 🍡💖",
+  "Mmm~! Just right~! 😋✨",
+  "You nailed it~! 🎯🍡",
+];
+const MARSHMALLOW_TOASTY_SPEECHES = [
+  "Toasty~! Warm and yummy! 🍡😊",
+  "A little light~ still good! 🍡💛",
+  "Soft and warm~! 🍡",
+];
+const MARSHMALLOW_RAW_SPEECHES = [
+  "Too raw~! 😣 Cold middle!",
+  "Eep~ barely warm! 🍡❄️",
+  "Needed more time~! ⏳",
+];
+const MARSHMALLOW_DARK_SPEECHES = [
+  "A bit crispy~! 🍡🔥",
+  "Dark but still yummy~! 😅",
+  "Extra toasted edition~! 🍡",
+];
+const MARSHMALLOW_BURNT_SPEECHES = [
+  "Oops~! Burnt! *cough* 💨",
+  "*cough cough* too hot~! 🍡🔥",
+  "Ashes~! Try again! 😮‍💨",
+];
+
+function spawnMarshmallow(): void {
+  if (!activeCampfire || activeCampfire.state !== "lit") return;
+  activeMarshmallow = {
+    state: "ready",
+    roastLevel: 0,
+    roastTimer: 0,
+    resultTimer: 0,
+    outcome: null,
+    animT: 0,
+    bob: 0,
+    smokeTimer: 0,
+  };
+  playTone(540, 0.12, "sine", 0.04);
+  setTimeout(() => playTone(700, 0.1, "triangle", 0.035), 90);
+}
+
+function getMarshmallowAnchor(): { ax: number; ay: number } {
+  if (!activeCampfire) return { ax: 0, ay: 0 };
+  return { ax: activeCampfire.x + 48, ay: activeCampfire.y - 4 };
+}
+
+function getMarshmallowTip(): { mx: number; my: number } {
+  if (!activeCampfire || !activeMarshmallow) return { mx: 0, my: 0 };
+  const readyX = activeCampfire.x + 34;
+  const readyY = activeCampfire.y - 18;
+  const roastX = activeCampfire.x + 2;
+  const roastY = activeCampfire.y - 14;
+  const t = activeMarshmallow.animT;
+  const eased = t * t * (3 - 2 * t);
+  return {
+    mx: readyX + (roastX - readyX) * eased,
+    my: readyY + (roastY - readyY) * eased,
+  };
+}
+
+function classifyRoast(level: number): MarshmallowOutcome {
+  if (level < 0.25) return "raw";
+  if (level < 0.48) return "toasty";
+  if (level < 0.72) return "golden";
+  if (level < 0.90) return "dark";
+  return "burnt";
+}
+
+function playMarshmallowSizzle(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 0.35;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    const env = Math.exp(-j / (bufSize * 0.7));
+    data[j] = (Math.random() * 2 - 1) * env * 0.4;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 3200;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.025, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur);
+}
+
+function playMarshmallowResult(outcome: MarshmallowOutcome): void {
+  if (!soundEnabled) return;
+  if (outcome === "golden") {
+    playTone(880, 0.12, "sine", 0.06);
+    setTimeout(() => playTone(1320, 0.14, "sine", 0.05), 90);
+    setTimeout(() => playTone(1760, 0.18, "sine", 0.045), 190);
+  } else if (outcome === "toasty" || outcome === "dark") {
+    playTone(520, 0.12, "triangle", 0.05);
+    setTimeout(() => playTone(660, 0.14, "triangle", 0.04), 100);
+  } else if (outcome === "raw") {
+    playTone(320, 0.15, "sine", 0.045);
+    setTimeout(() => playTone(260, 0.18, "sine", 0.04), 120);
+  } else {
+    // burnt: short descending buzz
+    playTone(240, 0.12, "sawtooth", 0.04);
+    setTimeout(() => playTone(180, 0.18, "sawtooth", 0.035), 100);
+  }
+}
+
+function startRoastingMarshmallow(): void {
+  if (!activeMarshmallow || activeMarshmallow.state !== "ready") return;
+  activeMarshmallow.state = "roasting";
+  activeMarshmallow.roastTimer = 0;
+  activeMarshmallow.roastLevel = 0;
+  playTone(440, 0.1, "triangle", 0.04);
+  queueSpeechBubble("Roasting time~! 🍡🔥", 120);
+}
+
+function pullOutMarshmallow(): void {
+  if (!activeMarshmallow || activeMarshmallow.state !== "roasting") return;
+  const m = activeMarshmallow;
+  m.state = "result";
+  m.resultTimer = 0;
+  m.outcome = classifyRoast(m.roastLevel);
+  totalMarshmallowsRoasted++;
+  playMarshmallowResult(m.outcome);
+
+  let speechList: string[];
+  let happyDelta = 0;
+  let careDelta = 0;
+  let xpDelta = 0;
+  switch (m.outcome) {
+    case "golden":
+      speechList = MARSHMALLOW_PERFECT_SPEECHES;
+      happyDelta = 5; careDelta = 2; xpDelta = 3;
+      perfectMarshmallowRoasts++;
+      // sparkle burst
+      for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const sp = 1 + Math.random() * 1.5;
+        const { mx, my } = getMarshmallowTip();
+        particles.push({
+          x: mx, y: my,
+          vx: Math.cos(angle) * sp,
+          vy: Math.sin(angle) * sp - 0.5,
+          life: 50 + Math.random() * 20,
+          maxLife: 50 + Math.random() * 20,
+          size: 1.3 + Math.random() * 1.2,
+          type: "sparkle",
+        });
+      }
+      break;
+    case "toasty":
+      speechList = MARSHMALLOW_TOASTY_SPEECHES;
+      happyDelta = 2; careDelta = 1;
+      break;
+    case "raw":
+      speechList = MARSHMALLOW_RAW_SPEECHES;
+      break;
+    case "dark":
+      speechList = MARSHMALLOW_DARK_SPEECHES;
+      happyDelta = 1;
+      break;
+    case "burnt":
+      speechList = MARSHMALLOW_BURNT_SPEECHES;
+      break;
+  }
+  const speech = speechList[Math.floor(Math.random() * speechList.length)];
+  queueSpeechBubble(speech, 170, m.outcome === "golden");
+
+  if (happyDelta) petHappiness = Math.min(100, petHappiness + happyDelta);
+  if (careDelta) totalCarePoints += careDelta;
+  if (xpDelta) friendshipXP += xpDelta;
+
+  if (!marshmallowFirstRoast) {
+    marshmallowFirstRoast = true;
+    addDiaryEntry("milestone", "🍡", "Roasted my first marshmallow over the campfire~! 🔥🍡");
+  }
+  logDailyActivity("marshmallow");
+  checkAchievements();
+  saveGame();
+}
+
+function tryClickMarshmallow(clickX: number, clickY: number): boolean {
+  if (!activeMarshmallow) return false;
+  if (activeMarshmallow.state === "result") return false;
+  const { mx, my } = getMarshmallowTip();
+  const dx = clickX - mx;
+  const dy = clickY - my;
+  const hitR = 13;
+  if (dx * dx + dy * dy <= hitR * hitR) {
+    if (activeMarshmallow.state === "ready") {
+      startRoastingMarshmallow();
+    } else if (activeMarshmallow.state === "roasting") {
+      pullOutMarshmallow();
+    }
+    return true;
+  }
+  return false;
+}
+
+function updateMarshmallow(): void {
+  // Despawn if campfire isn't actively lit (embers/unlit/gone)
+  if (!activeCampfire || activeCampfire.state !== "lit") {
+    if (activeMarshmallow && activeMarshmallow.state !== "result") {
+      activeMarshmallow = null;
+    }
+    if (!activeCampfire) {
+      activeMarshmallow = null;
+      marshmallowSpawnTimer = 0;
+      marshmallowRespawnTimer = 0;
+      return;
+    }
+  }
+
+  // Spawn logic: lit campfire + no marshmallow + timer passed
+  if (activeCampfire && activeCampfire.state === "lit" && !activeMarshmallow) {
+    if (marshmallowRespawnTimer > 0) {
+      marshmallowRespawnTimer--;
+    } else {
+      marshmallowSpawnTimer++;
+      if (marshmallowSpawnTimer >= MARSHMALLOW_SPAWN_DELAY) {
+        marshmallowSpawnTimer = 0;
+        spawnMarshmallow();
+      }
+    }
+  }
+
+  if (!activeMarshmallow) return;
+  const m = activeMarshmallow;
+  m.bob += 0.08;
+
+  if (m.state === "ready") {
+    m.animT = Math.max(0, m.animT - 0.06);
+  } else if (m.state === "roasting") {
+    m.animT = Math.min(1, m.animT + 0.06);
+    m.roastTimer++;
+    m.roastLevel = Math.min(1, m.roastTimer / MARSHMALLOW_ROAST_FRAMES);
+    // Sizzle sound at roast start and occasionally
+    if (m.roastTimer === 8) playMarshmallowSizzle();
+    if (m.roastTimer > 0 && m.roastTimer % 140 === 0) playMarshmallowSizzle();
+    // Heat particles rise from the marshmallow
+    if (Math.random() < 0.18) {
+      const { mx, my } = getMarshmallowTip();
+      particles.push({
+        x: mx + (Math.random() - 0.5) * 4,
+        y: my - 2,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.5 - Math.random() * 0.5,
+        life: 30 + Math.random() * 20,
+        maxLife: 30 + Math.random() * 20,
+        size: 0.8 + Math.random() * 0.5,
+        type: "sparkle",
+      });
+    }
+    // Auto-burn: if the player never pulls out, it burns and falls off
+    if (m.roastLevel >= 1) {
+      m.roastLevel = 1;
+      pullOutMarshmallow();
+    }
+  } else if (m.state === "result") {
+    m.resultTimer++;
+    if (m.outcome === "burnt") {
+      m.smokeTimer++;
+      if (m.smokeTimer % 8 === 0) {
+        const { mx, my } = getMarshmallowTip();
+        particles.push({
+          x: mx + (Math.random() - 0.5) * 3,
+          y: my - 4,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: -0.4 - Math.random() * 0.3,
+          life: 50 + Math.random() * 20,
+          maxLife: 50 + Math.random() * 20,
+          size: 1.2 + Math.random(),
+          type: "sparkle",
+        });
+      }
+    }
+    if (m.resultTimer >= MARSHMALLOW_RESULT_FRAMES) {
+      activeMarshmallow = null;
+      marshmallowRespawnTimer = MARSHMALLOW_RESPAWN_DELAY;
+      marshmallowSpawnTimer = 0;
+    }
+  }
+}
+
+function getMarshmallowColor(level: number): { r: number; g: number; b: number } {
+  // White (255,245,230) → tan (220,180,130) → golden (180,110,60) → dark (100,60,30) → black (40,25,15)
+  const stops = [
+    { t: 0.0,  r: 255, g: 248, b: 232 },
+    { t: 0.28, r: 240, g: 210, b: 170 },
+    { t: 0.55, r: 200, g: 135, b: 75 },
+    { t: 0.78, r: 115, g: 70, b: 38 },
+    { t: 1.0,  r: 35, g: 25, b: 18 },
+  ];
+  for (let i = 1; i < stops.length; i++) {
+    if (level <= stops[i].t) {
+      const a = stops[i - 1];
+      const b = stops[i];
+      const u = (level - a.t) / (b.t - a.t);
+      return {
+        r: Math.floor(a.r + (b.r - a.r) * u),
+        g: Math.floor(a.g + (b.g - a.g) * u),
+        b: Math.floor(a.b + (b.b - a.b) * u),
+      };
+    }
+  }
+  const last = stops[stops.length - 1];
+  return { r: last.r, g: last.g, b: last.b };
+}
+
+function drawMarshmallow(): void {
+  if (!activeMarshmallow || !activeCampfire) return;
+  const m = activeMarshmallow;
+  const { ax, ay } = getMarshmallowAnchor();
+  const { mx, my } = getMarshmallowTip();
+
+  const bob = m.state === "ready" ? Math.sin(m.bob) * 0.8 : 0;
+
+  // Stick (skewer)
+  ctx.save();
+  ctx.strokeStyle = "#8a5a2a";
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(ax, ay + bob * 0.3);
+  ctx.lineTo(mx, my + bob);
+  ctx.stroke();
+  // Stick highlight
+  ctx.strokeStyle = "rgba(200, 150, 90, 0.5)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay + bob * 0.3 - 0.5);
+  ctx.lineTo(mx, my + bob - 0.5);
+  ctx.stroke();
+  ctx.restore();
+
+  // Marshmallow body
+  const level = m.state === "result" ? m.roastLevel : m.roastLevel;
+  const color = getMarshmallowColor(level);
+  const cx2 = mx;
+  const cy2 = my + bob;
+  const width = 6.5;
+  const height = 7;
+
+  // Slight squish on perfect moment
+  const pulse = (m.state === "roasting" && classifyRoast(level) === "golden")
+    ? 0.08 * Math.sin(frame * 0.3)
+    : 0;
+  const w = width * (1 + pulse);
+  const h = height * (1 - pulse);
+
+  // Body
+  ctx.save();
+  ctx.translate(cx2, cy2);
+  // compute stick angle for rotation
+  const angle = Math.atan2(my - ay, mx - ax);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+  ctx.beginPath();
+  ctx.roundRect(-w, -h / 2, w * 2, h, 2);
+  ctx.fill();
+
+  // Darker bottom shading (from side near flame)
+  if (m.state === "roasting" || m.state === "result") {
+    const darkR = Math.max(0, color.r - 60);
+    const darkG = Math.max(0, color.g - 50);
+    const darkB = Math.max(0, color.b - 30);
+    const grad = ctx.createLinearGradient(-w, 0, w, 0);
+    grad.addColorStop(0, `rgba(${darkR}, ${darkG}, ${darkB}, 0.7)`);
+    grad.addColorStop(0.5, "rgba(0, 0, 0, 0)");
+    grad.addColorStop(1, `rgba(${darkR}, ${darkG}, ${darkB}, 0.25)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(-w, -h / 2, w * 2, h, 2);
+    ctx.fill();
+  }
+
+  // Highlight on top
+  ctx.fillStyle = `rgba(255, 255, 255, ${level < 0.3 ? 0.45 : 0.18})`;
+  ctx.beginPath();
+  ctx.ellipse(-w * 0.25, -h * 0.25, w * 0.6, h * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Burnt overlay: black speckles
+  if (level > 0.72) {
+    const speckleDensity = Math.min(1, (level - 0.72) / 0.28);
+    ctx.fillStyle = `rgba(15, 10, 5, ${0.4 + speckleDensity * 0.4})`;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.arc(
+        -w + Math.random() * w * 2,
+        -h / 2 + Math.random() * h,
+        0.4 + Math.random() * 0.7,
+        0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+  }
+
+  // Stick poking through the mallow (visible tip)
+  ctx.strokeStyle = "#5a3818";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.6, 0);
+  ctx.lineTo(w * 1.1, 0);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Ready state hint label
+  if (m.state === "ready") {
+    if (Math.floor(frame / 60) % 6 === 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.font = "7px monospace";
+      ctx.fillStyle = "#ffcc88";
+      ctx.textAlign = "center";
+      ctx.fillText("click to roast 🍡", cx2, cy2 - 12);
+      ctx.restore();
+    }
+  }
+
+  // Roasting state: roast meter
+  if (m.state === "roasting") {
+    const meterX = cx2 - 14;
+    const meterY = cy2 - 20;
+    const meterW = 28;
+    const meterH = 3;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(meterX - 1, meterY - 1, meterW + 2, meterH + 2);
+    // Sections
+    const sections = [
+      { end: 0.25, color: "#dfe6ec" },       // raw
+      { end: 0.48, color: "#e8c78a" },       // toasty
+      { end: 0.72, color: "#ffb54a" },       // golden (perfect zone)
+      { end: 0.90, color: "#8a4a22" },       // dark
+      { end: 1.00, color: "#2a1810" },       // burnt
+    ];
+    let prev = 0;
+    for (const sec of sections) {
+      ctx.fillStyle = sec.color;
+      ctx.fillRect(meterX + prev * meterW, meterY, (sec.end - prev) * meterW, meterH);
+      prev = sec.end;
+    }
+    // Pointer
+    const px = meterX + m.roastLevel * meterW;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(px, meterY - 2);
+    ctx.lineTo(px - 2, meterY - 5);
+    ctx.lineTo(px + 2, meterY - 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Result state: outcome label
+  if (m.state === "result" && m.outcome) {
+    const fade = m.resultTimer < 20
+      ? m.resultTimer / 20
+      : m.resultTimer > MARSHMALLOW_RESULT_FRAMES - 30
+        ? (MARSHMALLOW_RESULT_FRAMES - m.resultTimer) / 30
+        : 1;
+    const labels: Record<MarshmallowOutcome, { text: string; color: string }> = {
+      raw:     { text: "raw",     color: "#9ad3ff" },
+      toasty:  { text: "toasty~", color: "#ffd58a" },
+      golden:  { text: "PERFECT!", color: "#ffdd55" },
+      dark:    { text: "dark",    color: "#d18a55" },
+      burnt:   { text: "burnt!",  color: "#ff7a55" },
+    };
+    const label = labels[m.outcome];
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.font = m.outcome === "golden" ? "bold 9px monospace" : "bold 8px monospace";
+    ctx.textAlign = "center";
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(label.text, cx2, cy2 - 14);
+    ctx.fillStyle = label.color;
+    ctx.fillText(label.text, cx2, cy2 - 14);
+    if (m.outcome === "golden") {
+      // Shimmer star above
+      const starY = cy2 - 22 + Math.sin(frame * 0.2) * 1;
+      ctx.fillStyle = "#fff1a0";
+      ctx.font = "10px monospace";
+      ctx.fillText("✨", cx2, starY);
+    }
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -10531,6 +11060,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Advanced snowman build, don't start drag
     }
   }
+  // Check for marshmallow clicks (roast or pull out) before campfire hits
+  if (activeMarshmallow && activeCampfire) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickMarshmallow(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for campfire clicks (light, feed, or rekindle)
   if (activeCampfire) {
     const rect = canvas.getBoundingClientRect();
@@ -12253,6 +12791,11 @@ const achievements: Achievement[] = [
     icon: "🔥", unlockMessage: "The warmth of your fires chases winter's chill~! A true fire keeper! 🔥❄️✨",
     condition: () => totalCampfiresLit >= 5, unlocked: false,
   },
+  {
+    id: "marshmallow_master", name: "Marshmallow Master", description: "Achieve 5 perfect golden marshmallow roasts",
+    icon: "🍡", unlockMessage: "A master roaster~! Every marshmallow turns golden in your hands! 🍡🔥✨",
+    condition: () => perfectMarshmallowRoasts >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -12697,6 +13240,8 @@ function drawStatsPanel(): void {
   ctx.fillText(`💭 ${totalDreamScenes} dream scenes`, w / 2, y);
   y += 10;
   ctx.fillText(`🔥 ${totalCampfiresLit} campfires lit`, w / 2, y);
+  y += 10;
+  ctx.fillText(`🍡 ${totalMarshmallowsRoasted} marshmallows (${perfectMarshmallowRoasts} perfect)`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -13577,6 +14122,9 @@ interface SaveData {
   dreamSceneFirstTime: boolean;
   totalCampfiresLit: number;
   campfireFirstLit: boolean;
+  totalMarshmallowsRoasted: number;
+  perfectMarshmallowRoasts: number;
+  marshmallowFirstRoast: boolean;
   version: number;
 }
 
@@ -13669,6 +14217,9 @@ function buildSaveData(): SaveData {
     dreamSceneFirstTime,
     totalCampfiresLit,
     campfireFirstLit,
+    totalMarshmallowsRoasted,
+    perfectMarshmallowRoasts,
+    marshmallowFirstRoast,
     version: 1,
   };
 }
@@ -14013,6 +14564,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).campfireFirstLit === "boolean") {
     campfireFirstLit = (data as SaveData).campfireFirstLit;
+  }
+  if (typeof (data as SaveData).totalMarshmallowsRoasted === "number") {
+    totalMarshmallowsRoasted = (data as SaveData).totalMarshmallowsRoasted;
+  }
+  if (typeof (data as SaveData).perfectMarshmallowRoasts === "number") {
+    perfectMarshmallowRoasts = (data as SaveData).perfectMarshmallowRoasts;
+  }
+  if (typeof (data as SaveData).marshmallowFirstRoast === "boolean") {
+    marshmallowFirstRoast = (data as SaveData).marshmallowFirstRoast;
   }
 
   // Restore diary
@@ -16510,6 +17070,8 @@ function update(): void {
 
   // Campfire update
   updateCampfire();
+  // Marshmallow roasting update (after campfire so it sees current fire state)
+  updateMarshmallow();
 
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
@@ -17659,6 +18221,8 @@ function draw(): void {
 
   // Campfire (on the ground, behind pet)
   drawCampfire();
+  // Marshmallow on its stick above the fire
+  drawMarshmallow();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
