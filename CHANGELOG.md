@@ -3,6 +3,33 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.88.0] — 2026-04-16 — Cozy Campfire
+
+### Added
+- **Campfire in the snow** — during snowy weather, a stack of unlit logs appears on the ground (on the right side, separate from the snowman) after ~25 seconds of snowy weather, waiting to be lit
+- **Click to light** — click the logs to ignite them with a dramatic whoosh sound, burst of sparks, and warm speech reaction
+- **Layered flame rendering** — four flame layers using bezier-curve shapes stacked with additive blending: outer orange (large, swaying), mid yellow-orange, inner bright yellow, and a hot white-yellow core
+- **Organic flame flicker** — each layer wobbles at a different phase and speed with sine-wave sway, producing natural fire movement
+- **Rising sparks** — orange sparkle particles continuously rise from the flames during burn, with increased density when feeding the fire
+- **Warm radial glow** — a golden-orange radial gradient illuminates the ground around the fire, scaling with how many logs have been added
+- **Ring of stones** — small gray stones arranged around the base of the fire with subtle highlights for depth
+- **Teepee of logs** — three hand-drawn logs (back-left, back-right, front-horizontal) with rounded bodies, dark end caps, and bark stripe detailing; darken visibly as the fire burns down
+- **Crackling sound design** — procedural crackle/pop sounds using short bandpass-filtered noise bursts at random intervals (~40-130 frames apart), sometimes doubled up for natural fire rhythm
+- **Feed the fire** — click an already-lit campfire to add another log (up to 5 feeds), extending its burn time by ~1 minute each and triggering spark bursts + speech reactions
+- **Ember phase** — after burning through its lifetime (~4+ minutes), the flames subside to pulsing red-orange coals that glow softly for ~1 minute before extinguishing
+- **Rekindle embers** — click glowing embers to revive them back to a full flame (short-lived, reduced max lifetime)
+- **Contextual speech** — 5 lighting speeches, 4 feeding speeches, and 5 ambient warmth speeches that appear occasionally while the pet basks in the warmth
+- **Weather-aware behavior** — if snowy weather ends, fire dies faster; unlit logs disappear after ~30s if weather clears
+- **Dream template** — added "campfire" to dream scene activities: dreams of "dancing by the fire~", "toasty cozy nights~", "warm in the snow~" after lighting a campfire during the day
+- **Happiness + care boost** — lighting gives +5 happiness, +3 care points, +3 friendship XP; feeding gives +2 happiness, +1 care point
+- **Diary entry** — first campfire lit is logged to the pet diary with a milestone marker
+- **Fire Keeper achievement** — light 5 cozy campfires in the snow to unlock achievement #63 (🔥)
+- **Stats tracking** — total campfires lit displayed in the SLEEP section of the stats panel
+- **Full persistence** — campfire count and first-lit flag saved across sessions
+- **Total achievements: 63**
+
+**Why this feature:** Snowy weather already had the snowman-building feature, but still felt cold and a bit lonely. A campfire is the quintessential cozy winter element — it adds warmth, light, sound, and interactivity to snowy scenes in a way that perfectly complements the existing snowman. The three-state lifecycle (unlit logs → blazing fire → glowing embers) creates an evolving scene you can tend to over several minutes, and the feed/rekindle mechanics give the player a gentle caretaking loop. Together with the snowman on the left side of the screen, snowy weather now feels like a proper winter scene: build a friend, light a fire, enjoy the warmth.
+
 ## [v0.87.0] — 2026-04-16 — Dream Theater
 
 ### Added

@@ -423,6 +423,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "constellations", icons: [["star", "star", "moon"], ["star", "moon", "star"]], captions: ["connecting the stars~", "the sky is a painting~", "star friends forever~"] },
   { activity: "meditation", icons: [["heart", "moon", "flower"], ["flower", "heart", "star"]], captions: ["perfect stillness~", "floating in peace~", "a calm ocean~"] },
   { activity: "tea", icons: [["food", "flower", "heart"], ["heart", "food", "flower"]], captions: ["infinite tea party~", "a warm cozy cup~", "tea with the moon~"] },
+  { activity: "campfire", icons: [["heart", "star", "moon"], ["star", "heart", "star"]], captions: ["dancing by the fire~", "toasty cozy nights~", "warm in the snow~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -7614,6 +7615,554 @@ function drawSnowman(): void {
   ctx.restore();
 }
 
+// --- Campfire (Cozy fire during snowy weather) ---
+interface Campfire {
+  x: number;
+  y: number;
+  state: "unlit" | "lit" | "embers";
+  lifetime: number;
+  maxLifetime: number;
+  flickerPhase: number;
+  igniteProgress: number;
+  sparkTimer: number;
+  emberTimer: number;
+  feeds: number;
+  warmWobble: number;
+}
+
+let activeCampfire: Campfire | null = null;
+let campfireSpawnTimer = 0;
+let totalCampfiresLit = 0;
+let campfireFirstLit = false;
+let campfireCrackleTimer = 0;
+let campfireWarmMsgTimer = 0;
+const CAMPFIRE_SPAWN_DELAY = 1500;    // ~25s of snowy weather before logs appear
+const CAMPFIRE_MAX_LIFETIME = 14400;  // ~4 minutes of full burn
+const CAMPFIRE_EMBERS_TIME = 3600;    // ~1 minute of glowing embers fading
+const CAMPFIRE_FEED_BOOST = 3600;     // ~1 minute added per log feed
+const CAMPFIRE_MAX_FEEDS = 5;
+
+const CAMPFIRE_LIGHT_SPEECHES = [
+  "A warm fire~! So cozy in the cold! 🔥☃️",
+  "Mmm~ the flames feel so good! 🔥💖",
+  "A cozy campfire~! 🔥✨",
+  "Come sit by the fire~! 🔥🧣",
+  "The flames dance so prettily~ 🔥💫",
+];
+
+const CAMPFIRE_FEED_SPEECHES = [
+  "More wood~! Burn bright! 🔥✨",
+  "The fire grows stronger~ 🔥💪",
+  "Cozy crackles~! 🪵🔥",
+  "Keep it going~! 🔥🎵",
+];
+
+const CAMPFIRE_WARM_SPEECHES = [
+  "So warm and toasty~ 🔥💖",
+  "I could stay here forever~ 🔥😌",
+  "Winter nights like this~ 🔥❄️",
+  "*purrrr~ warm~* 🔥💤",
+  "The fire is my friend~ 🔥🤗",
+];
+
+function playCampfireIgniteSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 0.4;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    const env = Math.exp(-j / (bufSize * 0.5)) * (1 - Math.exp(-j / (bufSize * 0.05)));
+    data[j] = (Math.random() * 2 - 1) * env;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 800;
+  filter.Q.value = 0.6;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.06, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur);
+  setTimeout(() => playTone(180, 0.25, "sine", 0.04), 80);
+  setTimeout(() => playTone(120, 0.3, "triangle", 0.03), 200);
+}
+
+function playCampfireCrackle(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const dur = 0.04 + Math.random() * 0.05;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    data[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufSize * 0.2));
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1800 + Math.random() * 2000;
+  filter.Q.value = 1.2;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.012 + Math.random() * 0.012, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur + 0.01);
+}
+
+function playCampfireFeedSound(): void {
+  if (!soundEnabled) return;
+  playTone(160, 0.12, "triangle", 0.06);
+  setTimeout(() => playTone(110, 0.18, "sine", 0.05), 40);
+  setTimeout(() => {
+    playCampfireCrackle();
+    playCampfireCrackle();
+    playCampfireCrackle();
+  }, 120);
+}
+
+function spawnCampfireLogs(): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 50;
+  // Right side — snowman is on the left
+  const cx = w * 0.68 + Math.random() * w * 0.12;
+  activeCampfire = {
+    x: cx,
+    y: groundY,
+    state: "unlit",
+    lifetime: 0,
+    maxLifetime: CAMPFIRE_MAX_LIFETIME,
+    flickerPhase: 0,
+    igniteProgress: 0,
+    sparkTimer: 0,
+    emberTimer: 0,
+    feeds: 0,
+    warmWobble: 0,
+  };
+  playTone(200, 0.15, "triangle", 0.05);
+  setTimeout(() => playTone(150, 0.18, "sine", 0.04), 80);
+  queueSpeechBubble("Ooh, some logs~! Light the fire? 🪵🔥", 200);
+}
+
+function igniteCampfire(): void {
+  if (!activeCampfire || activeCampfire.state !== "unlit") return;
+  const cf = activeCampfire;
+  cf.state = "lit";
+  cf.lifetime = 0;
+  cf.igniteProgress = 0;
+  totalCampfiresLit++;
+  playCampfireIgniteSound();
+
+  for (let i = 0; i < 14; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+    const speed = 1.2 + Math.random() * 2.2;
+    particles.push({
+      x: cf.x + (Math.random() - 0.5) * 8,
+      y: cf.y - 10,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 50 + Math.random() * 30,
+      maxLife: 50 + Math.random() * 30,
+      size: 1.5 + Math.random() * 1.5,
+      type: "sparkle",
+    });
+  }
+
+  const speech = CAMPFIRE_LIGHT_SPEECHES[Math.floor(Math.random() * CAMPFIRE_LIGHT_SPEECHES.length)];
+  queueSpeechBubble(speech, 180, true);
+
+  if (!campfireFirstLit) {
+    campfireFirstLit = true;
+    addDiaryEntry("milestone", "🔥", "Lit my first campfire~! Warm and cozy in the snow! 🔥❄️");
+  }
+  logDailyActivity("campfire");
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  friendshipXP += 3;
+  checkAchievements();
+  saveGame();
+}
+
+function feedCampfire(): void {
+  if (!activeCampfire || activeCampfire.state !== "lit") return;
+  const cf = activeCampfire;
+  if (cf.feeds >= CAMPFIRE_MAX_FEEDS) {
+    queueSpeechBubble("The fire is blazing bright already~! 🔥✨", 150);
+    return;
+  }
+  cf.feeds++;
+  cf.maxLifetime += CAMPFIRE_FEED_BOOST;
+  cf.warmWobble = 1;
+  playCampfireFeedSound();
+
+  for (let i = 0; i < 8; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+    const speed = 1 + Math.random() * 2;
+    particles.push({
+      x: cf.x + (Math.random() - 0.5) * 10,
+      y: cf.y - 12,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 40 + Math.random() * 25,
+      maxLife: 40 + Math.random() * 25,
+      size: 1.5 + Math.random() * 1.2,
+      type: "sparkle",
+    });
+  }
+
+  const speech = CAMPFIRE_FEED_SPEECHES[Math.floor(Math.random() * CAMPFIRE_FEED_SPEECHES.length)];
+  queueSpeechBubble(speech, 150);
+  petHappiness = Math.min(100, petHappiness + 2);
+  totalCarePoints += 1;
+}
+
+function rekindleCampfire(): void {
+  if (!activeCampfire || activeCampfire.state !== "embers") return;
+  const cf = activeCampfire;
+  cf.state = "lit";
+  cf.lifetime = 0;
+  cf.maxLifetime = Math.floor(CAMPFIRE_MAX_LIFETIME * 0.6);
+  cf.feeds = Math.max(0, cf.feeds - 1);
+  cf.emberTimer = 0;
+  playCampfireFeedSound();
+  queueSpeechBubble("Back to life~! 🔥✨", 150);
+  for (let i = 0; i < 10; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+    const speed = 1 + Math.random() * 1.8;
+    particles.push({
+      x: cf.x + (Math.random() - 0.5) * 8,
+      y: cf.y - 10,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 40 + Math.random() * 20,
+      maxLife: 40 + Math.random() * 20,
+      size: 1.2 + Math.random(),
+      type: "sparkle",
+    });
+  }
+}
+
+function tryClickCampfire(clickX: number, clickY: number): boolean {
+  if (!activeCampfire) return false;
+  const cf = activeCampfire;
+  const dx = clickX - cf.x;
+  const dy = clickY - (cf.y - 10);
+  const hitRadius = 22;
+  if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+    if (cf.state === "unlit") {
+      igniteCampfire();
+    } else if (cf.state === "lit") {
+      feedCampfire();
+    } else if (cf.state === "embers") {
+      rekindleCampfire();
+    }
+    return true;
+  }
+  return false;
+}
+
+function updateCampfire(): void {
+  if (currentWeather === "snowy" && !activeCampfire) {
+    campfireSpawnTimer++;
+    if (campfireSpawnTimer >= CAMPFIRE_SPAWN_DELAY) {
+      campfireSpawnTimer = 0;
+      spawnCampfireLogs();
+    }
+  } else if (currentWeather !== "snowy" && !activeCampfire) {
+    campfireSpawnTimer = 0;
+  }
+
+  if (!activeCampfire) return;
+  const cf = activeCampfire;
+
+  cf.warmWobble *= 0.9;
+
+  if (cf.state === "unlit") {
+    if (currentWeather !== "snowy") {
+      cf.lifetime++;
+      if (cf.lifetime > 1800) {
+        activeCampfire = null;
+        return;
+      }
+    } else {
+      cf.lifetime = 0;
+    }
+    return;
+  }
+
+  if (cf.state === "lit") {
+    cf.lifetime++;
+    cf.flickerPhase += 0.25;
+    cf.igniteProgress = Math.min(1, cf.igniteProgress + 0.03);
+
+    cf.sparkTimer++;
+    const sparkRate = 4 + Math.floor(2 * Math.sin(cf.flickerPhase * 0.3));
+    if (cf.sparkTimer >= sparkRate) {
+      cf.sparkTimer = 0;
+      if (Math.random() < 0.8) {
+        particles.push({
+          x: cf.x + (Math.random() - 0.5) * 8,
+          y: cf.y - 14 - Math.random() * 4,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: -0.8 - Math.random() * 0.9,
+          life: 60 + Math.random() * 40,
+          maxLife: 60 + Math.random() * 40,
+          size: 1.2 + Math.random() * 1.0,
+          type: "sparkle",
+        });
+      }
+    }
+
+    campfireCrackleTimer++;
+    if (campfireCrackleTimer >= 40 + Math.random() * 90) {
+      campfireCrackleTimer = 0;
+      playCampfireCrackle();
+      if (Math.random() < 0.4) {
+        setTimeout(() => playCampfireCrackle(), 120 + Math.random() * 100);
+      }
+    }
+
+    campfireWarmMsgTimer++;
+    if (campfireWarmMsgTimer >= 1200 && !speechBubble && !isSleeping && Math.random() < 0.3) {
+      campfireWarmMsgTimer = 0;
+      const warmMsg = CAMPFIRE_WARM_SPEECHES[Math.floor(Math.random() * CAMPFIRE_WARM_SPEECHES.length)];
+      queueSpeechBubble(warmMsg, 150);
+    } else if (campfireWarmMsgTimer >= 1800) {
+      campfireWarmMsgTimer = 0;
+    }
+
+    if (cf.lifetime >= cf.maxLifetime) {
+      cf.state = "embers";
+      cf.emberTimer = 0;
+    }
+
+    if (currentWeather !== "snowy") {
+      cf.lifetime += 3;
+    }
+    return;
+  }
+
+  if (cf.state === "embers") {
+    cf.emberTimer++;
+    cf.flickerPhase += 0.08;
+
+    if (Math.random() < 0.07) {
+      particles.push({
+        x: cf.x + (Math.random() - 0.5) * 6,
+        y: cf.y - 12,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.4 - Math.random() * 0.4,
+        life: 50 + Math.random() * 30,
+        maxLife: 50 + Math.random() * 30,
+        size: 0.8 + Math.random() * 0.6,
+        type: "sparkle",
+      });
+    }
+
+    if (Math.random() < 0.003) {
+      playCampfireCrackle();
+    }
+
+    if (cf.emberTimer >= CAMPFIRE_EMBERS_TIME) {
+      activeCampfire = null;
+      campfireSpawnTimer = 0;
+      campfireCrackleTimer = 0;
+      campfireWarmMsgTimer = 0;
+    }
+  }
+}
+
+function drawCampfireLog(x: number, y: number, w: number, h: number, darken: number): void {
+  const r = Math.floor(130 * darken);
+  const g = Math.floor(85 * darken);
+  const b = Math.floor(50 * darken);
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.beginPath();
+  ctx.roundRect(x, y - h / 2, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = `rgb(${Math.floor(80 * darken)}, ${Math.floor(50 * darken)}, ${Math.floor(30 * darken)})`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 1.5, h / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + w, y, 1.5, h / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${Math.floor(60 * darken)}, ${Math.floor(35 * darken)}, ${Math.floor(20 * darken)}, 0.5)`;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.3, y - h / 2 + 0.5);
+  ctx.lineTo(x + w * 0.3, y + h / 2 - 0.5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.65, y - h / 2 + 0.5);
+  ctx.lineTo(x + w * 0.65, y + h / 2 - 0.5);
+  ctx.stroke();
+}
+
+function drawCampfireFlame(cx: number, baseY: number, halfWidth: number, height: number): void {
+  ctx.beginPath();
+  ctx.moveTo(cx - halfWidth, baseY);
+  ctx.bezierCurveTo(
+    cx - halfWidth * 1.2, baseY - height * 0.4,
+    cx - halfWidth * 0.3, baseY - height * 0.7,
+    cx, baseY - height
+  );
+  ctx.bezierCurveTo(
+    cx + halfWidth * 0.3, baseY - height * 0.7,
+    cx + halfWidth * 1.2, baseY - height * 0.4,
+    cx + halfWidth, baseY
+  );
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawCampfire(): void {
+  if (!activeCampfire) return;
+  const cf = activeCampfire;
+
+  ctx.save();
+
+  const wobble = Math.sin(frame * 0.25) * cf.warmWobble * 1.2;
+  const baseY = cf.y;
+
+  if (cf.state === "lit" || cf.state === "embers") {
+    const glowIntensity = cf.state === "lit"
+      ? (0.7 + 0.3 * Math.sin(cf.flickerPhase * 0.8)) * cf.igniteProgress
+      : 0.3 * (1 - cf.emberTimer / CAMPFIRE_EMBERS_TIME);
+    const glowRadius = cf.state === "lit" ? 60 + cf.feeds * 6 : 35;
+    const grad = ctx.createRadialGradient(cf.x, baseY - 2, 0, cf.x, baseY - 2, glowRadius);
+    grad.addColorStop(0, `rgba(255, 170, 80, ${0.28 * glowIntensity})`);
+    grad.addColorStop(0.4, `rgba(255, 130, 50, ${0.14 * glowIntensity})`);
+    grad.addColorStop(1, "rgba(255, 120, 40, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(cf.x, baseY - 2, glowRadius, glowRadius * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = "#6a5d54";
+  const stonePositions = [
+    { dx: -14, dy: 2, r: 3.2 },
+    { dx: -7, dy: 4, r: 2.8 },
+    { dx: 0, dy: 5, r: 3.5 },
+    { dx: 7, dy: 4, r: 2.6 },
+    { dx: 14, dy: 2, r: 3.2 },
+    { dx: -10, dy: -1, r: 2.4 },
+    { dx: 11, dy: -1, r: 2.2 },
+  ];
+  for (const s of stonePositions) {
+    ctx.beginPath();
+    ctx.ellipse(cf.x + s.dx, baseY + s.dy, s.r, s.r * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+  for (const s of stonePositions) {
+    ctx.beginPath();
+    ctx.ellipse(cf.x + s.dx - s.r * 0.3, baseY + s.dy - s.r * 0.25, s.r * 0.4, s.r * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(cf.x, baseY);
+  ctx.rotate(wobble * 0.03);
+  const darken = cf.state === "embers" ? 0.55 : (cf.state === "lit" ? 0.85 : 1);
+
+  ctx.save();
+  ctx.rotate(-0.5);
+  drawCampfireLog(-4, -2, 18, 4, darken);
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(0.5);
+  drawCampfireLog(-4, -2, 18, 4, darken);
+  ctx.restore();
+
+  drawCampfireLog(-9, -1, 18, 4, darken);
+  ctx.restore();
+
+  if (cf.state === "lit") {
+    const ignite = cf.igniteProgress;
+    const flameBase = baseY - 4;
+    const flameIntensity = 1 + cf.feeds * 0.15;
+    const flicker = 0.85 + 0.15 * Math.sin(cf.flickerPhase) + 0.1 * Math.sin(cf.flickerPhase * 2.3);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    const outerH = (16 + cf.feeds * 2) * flicker * flameIntensity * ignite;
+    const outerW = 8 + cf.feeds * 0.8;
+    const outerSway = Math.sin(cf.flickerPhase * 0.7) * 2;
+    ctx.fillStyle = "rgba(255, 100, 30, 0.55)";
+    drawCampfireFlame(cf.x + outerSway, flameBase, outerW, outerH);
+
+    const midH = outerH * 0.75;
+    const midW = outerW * 0.65;
+    const midSway = Math.sin(cf.flickerPhase * 1.1 + 0.5) * 1.3;
+    ctx.fillStyle = "rgba(255, 170, 50, 0.75)";
+    drawCampfireFlame(cf.x + midSway, flameBase, midW, midH);
+
+    const innerH = outerH * 0.5;
+    const innerW = outerW * 0.4;
+    const innerSway = Math.sin(cf.flickerPhase * 1.5 + 1.2) * 0.8;
+    ctx.fillStyle = "rgba(255, 230, 130, 0.85)";
+    drawCampfireFlame(cf.x + innerSway, flameBase, innerW, innerH);
+
+    const coreH = outerH * 0.28;
+    const coreW = outerW * 0.22;
+    ctx.fillStyle = "rgba(255, 250, 220, 0.9)";
+    drawCampfireFlame(cf.x, flameBase + 2, coreW, coreH);
+
+    ctx.restore();
+  } else if (cf.state === "embers") {
+    const fade = 1 - cf.emberTimer / CAMPFIRE_EMBERS_TIME;
+    const pulse = 0.6 + 0.4 * Math.sin(cf.flickerPhase);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 5; i++) {
+      const ex = cf.x + (i - 2) * 3;
+      const ey = baseY - 2;
+      ctx.fillStyle = `rgba(255, ${90 + i * 10}, 30, ${0.5 * fade * pulse})`;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 2 + Math.random() * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (cf.state === "unlit") {
+    const pulseAlpha = 0.3 + 0.2 * Math.sin(frame * 0.1);
+    ctx.fillStyle = `rgba(255, 200, 100, ${pulseAlpha})`;
+    ctx.font = "bold 8px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("Click to light! 🔥", cf.x, baseY - 18);
+  }
+
+  if (cf.state === "lit" && cf.igniteProgress > 0.5 && cf.feeds < CAMPFIRE_MAX_FEEDS) {
+    if (Math.floor(frame / 60) % 10 === 0) {
+      ctx.globalAlpha = 0.35;
+      ctx.font = "7px monospace";
+      ctx.fillStyle = "#ffb060";
+      ctx.textAlign = "center";
+      ctx.fillText("Click to feed 🪵", cf.x, baseY - 42);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx.restore();
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -9982,6 +10531,15 @@ canvas.addEventListener("mousedown", (e) => {
       return; // Advanced snowman build, don't start drag
     }
   }
+  // Check for campfire clicks (light, feed, or rekindle)
+  if (activeCampfire) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCampfire(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -11690,6 +12248,11 @@ const achievements: Achievement[] = [
     icon: "💭", unlockMessage: "A world of dreams awaits~! Your imagination knows no bounds! 💭🌙✨",
     condition: () => totalDreamScenes >= 10, unlocked: false,
   },
+  {
+    id: "fire_keeper", name: "Fire Keeper", description: "Light 5 cozy campfires in the snow",
+    icon: "🔥", unlockMessage: "The warmth of your fires chases winter's chill~! A true fire keeper! 🔥❄️✨",
+    condition: () => totalCampfiresLit >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -12132,6 +12695,8 @@ function drawStatsPanel(): void {
   ctx.fillText(`💤 ${totalSleepTalks} sleep talks`, w / 2, y);
   y += 10;
   ctx.fillText(`💭 ${totalDreamScenes} dream scenes`, w / 2, y);
+  y += 10;
+  ctx.fillText(`🔥 ${totalCampfiresLit} campfires lit`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -13010,6 +13575,8 @@ interface SaveData {
   cometFirstSeen: boolean;
   totalDreamScenes: number;
   dreamSceneFirstTime: boolean;
+  totalCampfiresLit: number;
+  campfireFirstLit: boolean;
   version: number;
 }
 
@@ -13100,6 +13667,8 @@ function buildSaveData(): SaveData {
     cometFirstSeen,
     totalDreamScenes,
     dreamSceneFirstTime,
+    totalCampfiresLit,
+    campfireFirstLit,
     version: 1,
   };
 }
@@ -13438,6 +14007,12 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).dreamSceneFirstTime === "boolean") {
     dreamSceneFirstTime = (data as SaveData).dreamSceneFirstTime;
+  }
+  if (typeof (data as SaveData).totalCampfiresLit === "number") {
+    totalCampfiresLit = (data as SaveData).totalCampfiresLit;
+  }
+  if (typeof (data as SaveData).campfireFirstLit === "boolean") {
+    campfireFirstLit = (data as SaveData).campfireFirstLit;
   }
 
   // Restore diary
@@ -15933,6 +16508,9 @@ function update(): void {
   // Snowman building update
   updateSnowman();
 
+  // Campfire update
+  updateCampfire();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -17078,6 +17656,9 @@ function draw(): void {
 
   // Snowman (on the ground, behind pet)
   drawSnowman();
+
+  // Campfire (on the ground, behind pet)
+  drawCampfire();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
