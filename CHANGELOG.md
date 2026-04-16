@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.90.0] — 2026-04-16 — Hot Cocoa
+
+### Added
+- **Warm mug of hot cocoa** — about 30 seconds after you light a campfire, a steaming mug of hot cocoa appears on the opposite side from the marshmallow, inviting you to warm up by the fire
+- **Rising steam** — gentle steam particles continuously waft up from the cocoa surface in wobbling S-curves, visible as long as the mug is on screen
+- **Click to sip** — each click takes a sip (3 sips total per mug); the mug tilts toward the pet with a gentle animation when sipping
+- **Sipping sounds** — each sip plays a soft low-pass-filtered burble with a tiny ceramic clink; final sip plays a warm ascending C-E-G major triad
+- **Sips-remaining dots** — three little dots at the base of the mug fill in as you sip, giving a visible progress indicator
+- **Mug art** — warm red/brown ceramic mug with a handle on the right, rim highlight, left-side specular highlight, and a radial-gradient dark-chocolate surface with a subtle lighter shimmer
+- **Floating marshmallow garnish** — if you've ever achieved a perfect golden roast, a tiny marshmallow bobs on top of the cocoa as a reward
+- **Sip speeches** — 7 contextual sip lines like "Mmm~ warm and chocolaty! ☕💖" and "*sip* so cozy~ ☕✨"
+- **Finish speeches** — 5 distinct completion lines like "Aaah~ that was perfect! ☕💖" and "Mmm~ sweet memories in a mug~ ☕💭" with a 6-heart particle burst on the final sip
+- **Rewards** — each sip: +2 happiness, +1 care point; completing a mug: +2 bonus friendship XP
+- **Gentle idle timeout** — if you never drink it, the mug quietly fades away after ~60 seconds so it doesn't stay forever
+- **Fire-aware behavior** — if the campfire goes out or transitions to embers, the mug fades out
+- **Respawn cycle** — after each mug, a new one appears ~90 seconds later (as long as the fire is still lit)
+- **Dream template** — "cocoa" activity added to DREAM_TEMPLATES so sleeping after cocoa yields dreams of "a river of cocoa~", "chocolate clouds~", "warm mugs forever~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks for cocoa: "*mumble*... one more sip... please..." and friends
+- **Diary entry** — first cocoa sipped is logged to the pet diary as a milestone
+- **Cocoa Connoisseur achievement** — finish 10 full mugs to unlock achievement #65 (☕)
+- **Stats tracking** — total cocoas drunk + individual sip count displayed in the SLEEP section of the stats panel
+- **Full persistence** — totalCocoasDrunk, totalCocoaSips, and cocoaFirstSip saved across sessions
+- **Total achievements: 65**
+
+**Why this feature:** The campfire (v0.88) and marshmallow roasting (v0.89) built out the active side of the winter fire experience — lighting, feeding, timing a perfect roast. Hot cocoa completes the scene with its *passive, meditative* counterpart: a warm cup you can slowly sip while watching the flames. The mug sits on the opposite side of the fire from the marshmallow, so a lit campfire can now host both activities at once — one for timing, one for cozy restoration. The floating marshmallow garnish is a small narrative thread connecting the two features: master the roast, and your cocoa gets a marshmallow on top. The 3-sip rhythm gives a gentle, repeatable micro-loop that rewards patience rather than reflex, which is a nice counterbalance in a feature set that has grown heavy on interactive mini-games.
+
 ## [v0.89.0] — 2026-04-16 — Marshmallow Roasting
 
 ### Added

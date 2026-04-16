@@ -425,6 +425,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "tea", icons: [["food", "flower", "heart"], ["heart", "food", "flower"]], captions: ["infinite tea party~", "a warm cozy cup~", "tea with the moon~"] },
   { activity: "campfire", icons: [["heart", "star", "moon"], ["star", "heart", "star"]], captions: ["dancing by the fire~", "toasty cozy nights~", "warm in the snow~"] },
   { activity: "marshmallow", icons: [["star", "heart", "star"], ["food", "star", "food"]], captions: ["golden marshmallows~", "sticky sweet dreams~", "roasting with friends~"] },
+  { activity: "cocoa", icons: [["heart", "food", "heart"], ["food", "flower", "heart"]], captions: ["a river of cocoa~", "chocolate clouds~", "warm mugs forever~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -509,6 +510,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... needs a hat... bigger...",
     "Zzz... snow angel... whooosh...",
     "*snore*... frosty... my friend...",
+  ],
+  cocoa: [
+    "*mumble*... one more sip... please...",
+    "Zzz... chocolate rivers... so warm...",
+    "*snore*... extra marshmallows... pinky up...",
   ],
 };
 
@@ -8692,6 +8698,374 @@ function drawMarshmallow(): void {
   }
 }
 
+// --- Hot Cocoa (Cozy mug by the campfire) ---
+interface HotCocoa {
+  x: number;
+  y: number;
+  sipsRemaining: number;      // starts at 3, decreases with each sip
+  idleTimer: number;           // frames since last interaction
+  fadeIn: number;              // 0 → 1 on spawn
+  fadeOut: number;             // 1 → 0 when finishing
+  steamPhase: number;
+  bob: number;
+  sipAnim: number;             // 0-1, tilt animation when sipping
+  hasFloatingMallow: boolean;  // mini marshmallow floats on top if earned
+  finished: boolean;           // all sips drunk
+  life: number;                // total frames alive
+}
+
+let activeCocoa: HotCocoa | null = null;
+let cocoaSpawnTimer = 0;
+let totalCocoasDrunk = 0;       // completed mugs (all 3 sips)
+let totalCocoaSips = 0;         // individual sips taken
+let cocoaFirstSip = false;
+const COCOA_SPAWN_DELAY = 1800;     // ~30s after fire is lit before cocoa appears
+const COCOA_IDLE_TIMEOUT = 3600;    // ~60s untouched → mug fades away
+const COCOA_RESPAWN_DELAY = 5400;   // ~90s between mugs (fire must still be lit)
+const COCOA_FADE_IN_FRAMES = 45;
+const COCOA_FADE_OUT_FRAMES = 60;
+
+const COCOA_SIP_SPEECHES = [
+  "Mmm~ warm and chocolaty! ☕💖",
+  "*sip* so cozy~ ☕✨",
+  "Toasty tummy~! ☕😌",
+  "Warms me from the inside! ☕🫖",
+  "Chocolate cloud in a cup~ ☕☁️",
+  "*sips happily* ♥",
+  "Cocoa hugs~! ☕🤗",
+];
+
+const COCOA_FINISH_SPEECHES = [
+  "Aaah~ that was perfect! ☕💖",
+  "All gone~! Such a cozy cup! ☕✨",
+  "Warm and full~ 😌☕",
+  "Best cocoa ever~! ☕🌟",
+  "Mmm~ sweet memories in a mug~ ☕💭",
+];
+
+function playCocoaSip(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  // Gentle sipping: low-frequency burble + tiny click
+  const t = audioCtx.currentTime;
+  const dur = 0.22;
+  const bufSize = Math.floor(audioCtx.sampleRate * dur);
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let j = 0; j < bufSize; j++) {
+    const env = Math.exp(-j / (bufSize * 0.5));
+    data[j] = (Math.random() * 2 - 1) * env * 0.25;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 700;
+  filter.Q.value = 0.6;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.05, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
+  src.stop(t + dur);
+  // Tiny ceramic tink
+  setTimeout(() => playTone(720 + Math.random() * 60, 0.05, "sine", 0.025), 20);
+}
+
+function playCocoaFinish(): void {
+  if (!soundEnabled) return;
+  // Warm ascending major triad — C5 E5 G5
+  playTone(523, 0.14, "sine", 0.04);
+  setTimeout(() => playTone(659, 0.16, "sine", 0.04), 100);
+  setTimeout(() => playTone(784, 0.2, "sine", 0.045), 220);
+}
+
+function spawnCocoa(): void {
+  if (!activeCampfire || activeCampfire.state !== "lit") return;
+  // Place mug on the LEFT of the campfire (opposite the marshmallow on the right)
+  const mx = activeCampfire.x - 30;
+  const my = activeCampfire.y + 2;
+  activeCocoa = {
+    x: mx,
+    y: my,
+    sipsRemaining: 3,
+    idleTimer: 0,
+    fadeIn: 0,
+    fadeOut: 1,
+    steamPhase: 0,
+    bob: 0,
+    sipAnim: 0,
+    // Reward: a tiny floating marshmallow on top if the player has achieved perfect roasts
+    hasFloatingMallow: perfectMarshmallowRoasts > 0,
+    finished: false,
+    life: 0,
+  };
+  // Gentle placing sound
+  playTone(420, 0.08, "sine", 0.03);
+  setTimeout(() => playTone(560, 0.09, "sine", 0.028), 70);
+  queueSpeechBubble("Ooh~ hot cocoa by the fire! ☕💖", 170);
+}
+
+function sipCocoa(): void {
+  if (!activeCocoa || activeCocoa.finished || activeCocoa.sipsRemaining <= 0) return;
+  const c = activeCocoa;
+  c.sipsRemaining--;
+  c.idleTimer = 0;
+  c.sipAnim = 1;
+  totalCocoaSips++;
+  playCocoaSip();
+
+  petHappiness = Math.min(100, petHappiness + 2);
+  totalCarePoints += 1;
+
+  if (c.sipsRemaining > 0) {
+    const speech = COCOA_SIP_SPEECHES[Math.floor(Math.random() * COCOA_SIP_SPEECHES.length)];
+    queueSpeechBubble(speech, 130);
+  } else {
+    // Final sip — drink complete
+    c.finished = true;
+    totalCocoasDrunk++;
+    friendshipXP += 2;
+    playCocoaFinish();
+    const speech = COCOA_FINISH_SPEECHES[Math.floor(Math.random() * COCOA_FINISH_SPEECHES.length)];
+    queueSpeechBubble(speech, 180, true);
+    // Tiny heart particle burst on finish
+    for (let i = 0; i < 6; i++) {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+      const sp = 0.7 + Math.random() * 1.0;
+      particles.push({
+        x: c.x + (Math.random() - 0.5) * 4,
+        y: c.y - 8,
+        vx: Math.cos(angle) * sp,
+        vy: Math.sin(angle) * sp,
+        life: 45 + Math.random() * 15,
+        maxLife: 45 + Math.random() * 15,
+        size: 1.4 + Math.random() * 0.8,
+        type: "heart",
+      });
+    }
+  }
+
+  if (!cocoaFirstSip) {
+    cocoaFirstSip = true;
+    addDiaryEntry("milestone", "☕", "Sipped hot cocoa by the campfire~! So warm and sweet! ☕🔥");
+  }
+  logDailyActivity("cocoa");
+  checkAchievements();
+  saveGame();
+}
+
+function tryClickCocoa(clickX: number, clickY: number): boolean {
+  if (!activeCocoa || activeCocoa.finished) return false;
+  const c = activeCocoa;
+  const dx = clickX - c.x;
+  const dy = clickY - (c.y - 5);
+  const hitR = 11;
+  if (dx * dx + dy * dy <= hitR * hitR) {
+    sipCocoa();
+    return true;
+  }
+  return false;
+}
+
+function updateCocoa(): void {
+  // Only spawn during a lit campfire
+  if (!activeCampfire || activeCampfire.state !== "lit") {
+    if (activeCocoa) {
+      // Begin fade-out if fire goes out, unless we're already finishing
+      if (!activeCocoa.finished) {
+        activeCocoa.finished = true;
+      }
+    }
+    if (!activeCampfire) {
+      activeCocoa = null;
+      cocoaSpawnTimer = 0;
+      return;
+    }
+  }
+
+  // Spawn logic
+  if (activeCampfire && activeCampfire.state === "lit" && !activeCocoa) {
+    cocoaSpawnTimer++;
+    const requiredDelay = totalCocoasDrunk > 0 || totalCocoaSips > 0 ? COCOA_RESPAWN_DELAY : COCOA_SPAWN_DELAY;
+    if (cocoaSpawnTimer >= requiredDelay) {
+      cocoaSpawnTimer = 0;
+      spawnCocoa();
+    }
+  } else if (!activeCocoa && (!activeCampfire || activeCampfire.state !== "lit")) {
+    cocoaSpawnTimer = 0;
+  }
+
+  if (!activeCocoa) return;
+  const c = activeCocoa;
+  c.life++;
+  c.bob += 0.05;
+  c.steamPhase += 0.06;
+
+  // Fade-in
+  if (c.fadeIn < 1) {
+    c.fadeIn = Math.min(1, c.fadeIn + 1 / COCOA_FADE_IN_FRAMES);
+  }
+
+  // Sip tilt animation decay
+  if (c.sipAnim > 0) c.sipAnim = Math.max(0, c.sipAnim - 0.04);
+
+  // Idle timeout / finished fade-out
+  if (!c.finished) {
+    c.idleTimer++;
+    if (c.idleTimer >= COCOA_IDLE_TIMEOUT) {
+      // Quietly give up — mug cools, fades away
+      c.finished = true;
+    }
+  } else {
+    c.fadeOut -= 1 / COCOA_FADE_OUT_FRAMES;
+    if (c.fadeOut <= 0) {
+      activeCocoa = null;
+      cocoaSpawnTimer = 0;
+      return;
+    }
+  }
+
+  // Steam particles — only while fire is lit and not fully faded
+  if (c.fadeOut > 0.2 && Math.random() < 0.35) {
+    const sx = c.x + (Math.random() - 0.5) * 3;
+    particles.push({
+      x: sx,
+      y: c.y - 8,
+      vx: (Math.random() - 0.5) * 0.2 + Math.sin(c.steamPhase) * 0.1,
+      vy: -0.35 - Math.random() * 0.35,
+      life: 50 + Math.random() * 25,
+      maxLife: 50 + Math.random() * 25,
+      size: 1.0 + Math.random() * 0.8,
+      type: "sparkle",
+    });
+  }
+}
+
+function drawCocoa(): void {
+  if (!activeCocoa) return;
+  const c = activeCocoa;
+  const alpha = c.fadeIn * c.fadeOut;
+  if (alpha <= 0) return;
+
+  const bob = Math.sin(c.bob) * 0.4;
+  const tilt = c.sipAnim * -0.35; // rotates toward pet when sipping
+  const cx = c.x;
+  const cy = c.y + bob;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  ctx.rotate(tilt);
+
+  // Mug dimensions
+  const mugW = 14;
+  const mugH = 14;
+  const mugTop = -mugH;
+  const mugBottom = 0;
+
+  // Shadow beneath mug
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.25;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(0, mugBottom + 2, mugW * 0.7, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Handle (right side)
+  ctx.strokeStyle = "#c05050";
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(mugW / 2 + 2, mugTop + mugH * 0.55, 3.5, -Math.PI * 0.6, Math.PI * 0.6);
+  ctx.stroke();
+  ctx.strokeStyle = "#8a3030";
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.arc(mugW / 2 + 2, mugTop + mugH * 0.55, 3.5, -Math.PI * 0.55, Math.PI * 0.55);
+  ctx.stroke();
+
+  // Mug body — warm red/brown with subtle gradient
+  const bodyGrad = ctx.createLinearGradient(-mugW / 2, mugTop, mugW / 2, mugBottom);
+  bodyGrad.addColorStop(0, "#d66868");
+  bodyGrad.addColorStop(0.5, "#c05050");
+  bodyGrad.addColorStop(1, "#9a3838");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.roundRect(-mugW / 2, mugTop, mugW, mugH, 2);
+  ctx.fill();
+
+  // Mug rim highlight
+  ctx.fillStyle = "rgba(255, 220, 220, 0.35)";
+  ctx.beginPath();
+  ctx.roundRect(-mugW / 2 + 1, mugTop + 0.5, mugW - 2, 1.5, 1);
+  ctx.fill();
+
+  // Left-side highlight
+  ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.beginPath();
+  ctx.roundRect(-mugW / 2 + 1.5, mugTop + 2, 1.5, mugH - 4, 0.8);
+  ctx.fill();
+
+  // Cocoa surface — chocolate brown
+  const cocoaY = mugTop + 2;
+  const cocoaGrad = ctx.createRadialGradient(0, cocoaY, 0, 0, cocoaY, mugW / 2);
+  cocoaGrad.addColorStop(0, "#6a3a20");
+  cocoaGrad.addColorStop(1, "#3a1e10");
+  ctx.fillStyle = cocoaGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, cocoaY, mugW / 2 - 1, 1.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cocoa surface shimmer — a subtle lighter crescent
+  ctx.fillStyle = "rgba(180, 110, 70, 0.55)";
+  ctx.beginPath();
+  ctx.ellipse(-1, cocoaY - 0.3, mugW * 0.25, 0.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Floating mini marshmallow on top (if earned)
+  if (c.hasFloatingMallow) {
+    const mallowBob = Math.sin(c.bob * 1.3 + 1) * 0.25;
+    ctx.fillStyle = "#fff8e8";
+    ctx.beginPath();
+    ctx.roundRect(-2, cocoaY - 2.2 + mallowBob, 4, 2.2, 0.8);
+    ctx.fill();
+    // soft highlight on the marshmallow
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.beginPath();
+    ctx.roundRect(-1.5, cocoaY - 2 + mallowBob, 1.5, 0.8, 0.4);
+    ctx.fill();
+  }
+
+  // Sips remaining dots (tiny indicators on the mug body)
+  const totalSips = 3;
+  const sipsLeft = c.sipsRemaining;
+  for (let i = 0; i < totalSips; i++) {
+    const filled = i < sipsLeft;
+    const dotX = -mugW / 2 + 3 + i * 3;
+    const dotY = mugTop + mugH - 3;
+    ctx.fillStyle = filled ? "rgba(255, 240, 200, 0.85)" : "rgba(80, 40, 40, 0.5)";
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Hint label above the mug when fully faded in and not finished
+  if (!c.finished && c.fadeIn >= 1 && Math.floor(frame / 60) % 5 === 0) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffd9b0";
+    ctx.textAlign = "center";
+    ctx.fillText("sip ☕", cx, cy - mugH - 6);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -11069,6 +11443,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for cocoa mug clicks (sip) before campfire hits — mug is on opposite side
+  if (activeCocoa) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCocoa(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for campfire clicks (light, feed, or rekindle)
   if (activeCampfire) {
     const rect = canvas.getBoundingClientRect();
@@ -12796,6 +13179,11 @@ const achievements: Achievement[] = [
     icon: "🍡", unlockMessage: "A master roaster~! Every marshmallow turns golden in your hands! 🍡🔥✨",
     condition: () => perfectMarshmallowRoasts >= 5, unlocked: false,
   },
+  {
+    id: "cocoa_connoisseur", name: "Cocoa Connoisseur", description: "Finish 10 mugs of hot cocoa by the fire",
+    icon: "☕", unlockMessage: "A true cocoa connoisseur~! Every mug warms your soul! ☕💖✨",
+    condition: () => totalCocoasDrunk >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -13242,6 +13630,8 @@ function drawStatsPanel(): void {
   ctx.fillText(`🔥 ${totalCampfiresLit} campfires lit`, w / 2, y);
   y += 10;
   ctx.fillText(`🍡 ${totalMarshmallowsRoasted} marshmallows (${perfectMarshmallowRoasts} perfect)`, w / 2, y);
+  y += 10;
+  ctx.fillText(`☕ ${totalCocoasDrunk} cocoas (${totalCocoaSips} sips)`, w / 2, y);
 
   // Bubbles section
   y += 14;
@@ -14125,6 +14515,9 @@ interface SaveData {
   totalMarshmallowsRoasted: number;
   perfectMarshmallowRoasts: number;
   marshmallowFirstRoast: boolean;
+  totalCocoasDrunk: number;
+  totalCocoaSips: number;
+  cocoaFirstSip: boolean;
   version: number;
 }
 
@@ -14220,6 +14613,9 @@ function buildSaveData(): SaveData {
     totalMarshmallowsRoasted,
     perfectMarshmallowRoasts,
     marshmallowFirstRoast,
+    totalCocoasDrunk,
+    totalCocoaSips,
+    cocoaFirstSip,
     version: 1,
   };
 }
@@ -14573,6 +14969,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).marshmallowFirstRoast === "boolean") {
     marshmallowFirstRoast = (data as SaveData).marshmallowFirstRoast;
+  }
+  if (typeof (data as SaveData).totalCocoasDrunk === "number") {
+    totalCocoasDrunk = (data as SaveData).totalCocoasDrunk;
+  }
+  if (typeof (data as SaveData).totalCocoaSips === "number") {
+    totalCocoaSips = (data as SaveData).totalCocoaSips;
+  }
+  if (typeof (data as SaveData).cocoaFirstSip === "boolean") {
+    cocoaFirstSip = (data as SaveData).cocoaFirstSip;
   }
 
   // Restore diary
@@ -17072,6 +17477,8 @@ function update(): void {
   updateCampfire();
   // Marshmallow roasting update (after campfire so it sees current fire state)
   updateMarshmallow();
+  // Hot cocoa update (depends on campfire state too)
+  updateCocoa();
 
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
@@ -18223,6 +18630,8 @@ function draw(): void {
   drawCampfire();
   // Marshmallow on its stick above the fire
   drawMarshmallow();
+  // Hot cocoa mug beside the fire (on the ground)
+  drawCocoa();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
