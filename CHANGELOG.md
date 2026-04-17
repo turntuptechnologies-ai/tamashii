@@ -3,6 +3,29 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.91.0] — 2026-04-17 — Visual Wind Chimes 🧬 Mutation
+
+### Added
+- **Visual wind chime** — during windy weather, a small wooden-and-metal wind chime now appears hanging from the top of the canvas (slightly left of center so it doesn't obscure the pet). The previously-invisible ambient chime audio finally has a visible home.
+- **Pendulum physics** — 5 metallic tubes hanging from a wooden crossbar, each with its own natural swing period (shorter tubes swing faster). A central wooden clapper and a decorative bottom sail also pendulum with their own weights.
+- **Wind-driven motion** — the chime reacts to the existing windy-weather audio system: gusts apply gentle coordinated impulses to the tubes, and the ambient chime sound events apply stronger pushes with randomized per-tube variance
+- **Clapper-tube strikes** — when the central clapper swings close to a tube's angle, it "strikes" that tube, visually flashing it with a warm additive glow and transferring a little energy (so tubes ring in response to clapper motion)
+- **Click to nudge** — clicking the chime area applies a strong skewed impulse (based on left/right click position) and lights up random tubes, plays a bright 3-note sine arpeggio in G-B-D-E5/6 (airy major)
+- **Click rewards** — nudging gives +2 happiness, +1 care, +1 friendship XP (3-second cooldown to prevent spam), plus a contextual speech
+- **7 tap speeches** — "Tinkle tinkle~ so pretty! 🎐✨", "The chimes sing for us~ 🎐💖", "Music of the breeze~ 🎐🍃", and more
+- **Weather-aware lifecycle** — spawns ~1 second after windy weather starts (fades in over ~90 frames), fades out over ~120 frames when windy weather ends
+- **Rendering details** — wooden crossbar with grain line and wood-tone gradient, 5 tubes with silvery metallic gradients and specular highlights, warm strike-glow, wooden clapper disk, decorative yellow sail/fin with calligraphy dot, subtle top-string sway, rotation-follows-clapper for the whole rig
+- **Diary entry** — first chime nudge is logged as a milestone entry
+- **Dream template** — "chime" activity added to DREAM_TEMPLATES so sleeping after interacting yields dreams of "a wind-bell melody~", "singing breeze~", "tinkling lullaby~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks for chime: "*mumble*... tinkle tinkle... pretty song..." and friends
+- **Chime Keeper achievement** — nudge the wind chimes 15 times to unlock achievement #66 (🎐)
+- **Stats tracking** — total chime taps and total chime visits (windy sessions) displayed in the WEATHER section of the stats panel
+- **Full persistence** — totalChimeTaps, totalChimeSessions, and chimeFirstTouched saved across sessions
+- **Gentle hint** — a faint "nudge 🎐" text blinks below the chime occasionally before it's first touched, then disappears forever
+- **Total achievements: 66**
+
+**Why this feature (🧬 Mutation):** The last four cycles (snowman → campfire → marshmallow → hot cocoa) all centered on winter-evening cozy scenes, and NEXT.md's suggestions mostly continued that cluster (s'mores, firefly lanterns, pet-approaches-campfire, etc). I broke from those suggestions to mutate toward a *different season* and a *different weather* — giving the already-existing but invisible windy-chime audio a visible body. The chime is a quiet ambient feature: it doesn't demand attention like the campfire or the marshmallow timing game, but it rewards players who notice and give it a gentle nudge. The click mechanic skews tube impulses based on where you click (hitting the left side pushes tubes left, hitting the right pushes right), which makes it feel like a physical object rather than just a button. The existing `playWindyChime()` audio now has a visual counterpart, so the scene's audio and visuals are connected in a way they weren't before.
+
 ## [v0.90.0] — 2026-04-16 — Hot Cocoa
 
 ### Added

@@ -3,32 +3,30 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.90.0 — Hot Cocoa (2026-04-16)
+## Last completed: v0.91.0 — Visual Wind Chimes 🧬 Mutation (2026-04-17)
 
 ### What was done
-- Added a warm mug of hot cocoa that appears ~30s after any lit campfire, positioned on the LEFT of the fire (opposite the marshmallow which is on the right)
-- Steam particles continuously rise from the cocoa surface with gentle S-curve wobble
-- Click to sip → mug tilts with a soft sipping animation, plays a low-pass burble + tiny ceramic clink
-- 3 sips per mug with visible sip-remaining dots on the mug; final sip plays an ascending C-E-G major triad and spawns a 6-heart particle burst
-- If the player has achieved any perfect golden marshmallow roasts, a tiny floating marshmallow bobs on top of the cocoa as a garnish (nice narrative link between features)
-- Idle timeout after ~60s if untouched; mug fades out gracefully; respawns ~90s later while fire is still lit
-- Rewards: +2 happy/+1 care per sip, +2 friendship XP on mug completion
-- 7 sip speeches + 5 finish speeches, diary entry on first sip, cocoa dream template, cocoa sleep-talk contextual phrases
-- Achievement: Cocoa Connoisseur (#65) — finish 10 mugs
-- Stats panel entry in SLEEP section; full save/load persistence
-- Total achievements: 65
+- Added a visual wooden/metal wind chime that hangs from the top of the canvas during windy weather, giving the existing invisible `playWindyChime()` audio a visible home
+- **🧬 Mutation** — broke from the winter-cluster (snowman/campfire/marshmallow/cocoa) that the last four cycles followed. NEXT.md had mostly suggested continuations of that cluster (s'mores, firefly lantern, pet approaches campfire); I took a different direction to give the weather system more visual depth
+- Pendulum physics for 5 tubes (each with its own natural swing period), a central wooden clapper, and a decorative sail fin — all with proper spring-damped angular velocity
+- Clapper-tube strike detection — when the clapper swings near a tube's angle, the tube flashes with a warm additive glow and receives an energy transfer
+- Wind events feed visual impulses: `playWindGust()` applies soft pushes, `playWindyChime()` applies stronger coordinated pushes — hook added inside `updateAmbientWindSounds()`
+- Click-to-nudge: strong skewed impulse based on click x-position (left click pushes left, right click pushes right), plays bright G-B-D-E airy major arpeggio, +2 happy/+1 care/+1 friendship XP with 3-second cooldown
+- 7 tap speeches, diary entry on first touch, chime dream template, chime sleep-talks
+- Stats panel entry in WEATHER section (taps + visits)
+- Chime Keeper achievement #66 for 15 taps
+- Total achievements: 66
 
 ### Thoughts for next cycle
-- **S'mores** — combine 3 perfect roasts to unlock graham+chocolate+marshmallow combo treat (natural continuation of the fire/food arc)
-- **Pet approach campfire** — pet actively walks toward a lit fire and sits beside it, warming paws. Would make the scene feel inhabited rather than just decorative
-- **Marshmallow combo chain** — 3 perfect golden roasts in a row triggers a celebratory combo with a special speech and sparkle burst
+- **S'mores combo** — still pending from last cycle: 3 perfect marshmallow roasts → unlock a s'more combo treat (graham+chocolate+marshmallow) the next time cocoa spawns. Natural food arc continuation.
+- **Pet approaches campfire** — pet walks (canvas-space offset, not window-space — the pet rendering has `offsetX` hooks already) toward a lit campfire and sits closer to warm paws. Would make the scene feel inhabited.
+- **Seasonal weather visuals beyond chimes** — dandelion puff during sunny spring daytime (click to blow seeds, make a wish), leaf pile during autumn windy (pet can jump into it for +happy), a ceiling fan or paper streamers during summer windy, etc.
+- **Wind streaks on the chime** — optional extra: faint horizontal wind-streak particles that emit from near the chime's sail when a gust hits
+- **More chime interactions** — drag a bubble over the chime to make it ring differently, or have a butterfly visit the chime briefly
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head at night
-- **Lullaby mode** — hold a key to hum a lullaby that helps the pet fall asleep faster (note: 'l' is already used for constellation mode, pick another)
-- **Pet outfits** — full body cosmetic sets beyond single accessories
-- **Friendship milestones** — friendship levels unlock exclusive cosmetics or abilities
-- **Constellation lore** — clicking a completed constellation shows a short mythical story
+- **Constellation lore** — clicking a completed constellation shows a short mythical story overlay
+- **Photo gallery** — in-canvas gallery showing thumbnails of saved photos (requires new IPC to list photo files)
 - **Fortune cookie rarity tiers** — golden fortune cookies with rare fortunes
-- **Photo gallery** — in-canvas gallery showing thumbnails of saved photos
 - **Combo hint system** — subtle visual hints when partway through a combo sequence
 - **Story continuation** — bedtime stories that span multiple nights with cliffhangers
 - **Sound volume control** — a slider or levels for ambient sound volume
@@ -40,23 +38,26 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Tide pools** — interactive mini-scene during summer evenings with little sea creatures
 - **Dream diary** — a separate section in the diary recording dream captions from each night
 - **Lucid dreaming** — rare event where clicking a dream scene triggers a mini dream interaction
-- **Firefly released into fire** — sending fireflies to dance above a campfire creates magic sparks
 - **Winter tea party variant** — tea ceremony that happens during snowy weather, distinct from the existing tea party
 
 ### Current architecture notes
-- Renderer is now ~19,500+ lines
-- Cocoa feature lives immediately after `drawMarshmallow()` and before `WEATHER_CHANGE_MIN`
-- `HotCocoa` interface: `sipsRemaining`, `idleTimer`, `fadeIn`, `fadeOut`, `steamPhase`, `bob`, `sipAnim`, `hasFloatingMallow`, `finished`, `life`
-- Key functions: `spawnCocoa()`, `sipCocoa()`, `updateCocoa()`, `drawCocoa()`, `tryClickCocoa()`, `playCocoaSip()`, `playCocoaFinish()`
-- Mug position: `cf.x - 30, cf.y + 2` (left of campfire, on the ground). Marshmallow is at `cf.x + 34` so they don't overlap
-- Click handler routing: cocoa click is checked AFTER marshmallow but BEFORE campfire, since the mug sits on a different side than the marshmallow
-- Spawn conditions: campfire must be `state === "lit"`; initial spawn delay ~30s (1800f), respawn delay ~90s (5400f)
-- Idle timeout: 60s (3600f) untouched → mug finishes and fades out
-- Fade-in: 45f, fade-out: 60f
-- Sip rewards: +2 happiness, +1 care per sip; +2 friendship XP on completion
-- Heart particle burst on final sip (6 particles)
-- Floating marshmallow garnish only appears if `perfectMarshmallowRoasts > 0` — creates a nice link between the two campfire features
-- Total achievements: 65
-- Full snowy scene now: snowman (left of screen) + campfire + marshmallow (right of fire) + hot cocoa (left of fire) — a complete winter evening vignette
-- dailyActivityLog tracks 18 activities now: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa
-- Complete sleep-talk contextual set now includes cocoa alongside snowman, tea, etc.
+- Renderer is now ~19,950+ lines
+- Wind chime feature lives immediately after `drawCocoa()` and before `WEATHER_CHANGE_MIN` (starts around line 9069)
+- `WindChime` + `WindChimeTube` interfaces — tubes have `lengthPx`, `restX`, `swingAngle`, `swingVelocity`, `period`, `strikeGlow`, `color`. WindChime has `x`, `anchorY`, `barY`, `tubes`, `clapperAngle`, `clapperVelocity`, `sailAngle`, `hookSway`, `fadeIn`, `fadeOut`, `active`, `life`, `gustTimer`, `clickCooldown`
+- Key functions: `spawnWindChime()`, `startWindChimeFadeOut()`, `applyChimeGust()`, `tryClickWindChime()`, `updateWindChime()`, `drawWindChime()`, `playChimeTapSound()`
+- Position: `canvas.width * 0.32` horizontally (left of center — pet is at center, so no overlap), anchored at top edge, crossbar at y=24
+- Spawn condition: windy weather active + no active chime + `Math.random() < 0.03` per frame (spawns within ~1-2 seconds of windy starting)
+- Despawn: windy weather ends → `active = false`, fadeOut decays from 1 to 0 over 120 frames, then `activeWindChime = null`
+- Click routing: wind chime click is checked BEFORE bubbles/drag (new handler inserted at line ~11463 in the event listener)
+- Audio sync: `updateAmbientWindSounds()` at line 3158-3185 now calls `applyChimeGust()` with moderate (0.015-0.035) strength on wind gusts and stronger (0.025-0.055) on chime sound events
+- Strike detection happens in `updateWindChime()` — when `|clapperAngle - tubeAngle| < 0.05` and clapper velocity is above threshold, the tube flashes and receives an energy transfer from the clapper
+- Pentatonic visual layout: 5 tubes with lengths 34,28,24,30,38 — shorter tubes = higher visual pitch
+- Tube period varies per tube: `0.04 + (i - 2) * 0.004 + Math.random() * 0.003` — shorter tubes have slightly faster natural periods
+- Clapper has slightly slower period (0.035) and lower damping (0.988) than tubes (0.985) so it lingers — naturally creates the strike pattern
+- Sail follows clapper with 0.1 lerp factor — gives a lagging, smooth motion
+- Hit box: 48px wide, 60px tall — covers barY-8 to barY+52 — generous but not overlapping pet area
+- Total achievements: 66
+- dailyActivityLog now tracks 19 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime
+- Dream templates + sleep-talks extended to include "chime"
+- Stats panel WEATHER section now shows chime stats between WIND SOUNDS and LIGHTNING BOLTS entries
+- Save version is still 1; added fields: `totalChimeTaps`, `totalChimeSessions`, `chimeFirstTouched`

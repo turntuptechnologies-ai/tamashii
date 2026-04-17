@@ -426,6 +426,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "campfire", icons: [["heart", "star", "moon"], ["star", "heart", "star"]], captions: ["dancing by the fire~", "toasty cozy nights~", "warm in the snow~"] },
   { activity: "marshmallow", icons: [["star", "heart", "star"], ["food", "star", "food"]], captions: ["golden marshmallows~", "sticky sweet dreams~", "roasting with friends~"] },
   { activity: "cocoa", icons: [["heart", "food", "heart"], ["food", "flower", "heart"]], captions: ["a river of cocoa~", "chocolate clouds~", "warm mugs forever~"] },
+  { activity: "chime", icons: [["star", "music", "star"], ["music", "heart", "music"]], captions: ["a wind-bell melody~", "singing breeze~", "tinkling lullaby~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -515,6 +516,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... one more sip... please...",
     "Zzz... chocolate rivers... so warm...",
     "*snore*... extra marshmallows... pinky up...",
+  ],
+  chime: [
+    "*mumble*... tinkle tinkle... pretty song...",
+    "Zzz... the wind is singing... la la...",
+    "*snore*... bells in the breeze... mmm...",
   ],
 };
 
@@ -3157,6 +3163,10 @@ function updateAmbientWindSounds(): void {
 
   if (frame >= nextWindGustTime) {
     playWindGust();
+    // Wind gusts also give the visual chimes a soft push (weaker than a chime event)
+    if (activeWindChime) {
+      applyChimeGust((0.015 + Math.random() * 0.02) * (Math.random() < 0.5 ? 1 : -1));
+    }
     nextWindGustTime = frame + WIND_GUST_MIN_INTERVAL + Math.floor(Math.random() * (WIND_GUST_MAX_INTERVAL - WIND_GUST_MIN_INTERVAL));
   }
 
@@ -3170,6 +3180,10 @@ function updateAmbientWindSounds(): void {
 
   if (frame >= nextWindyChimeTime) {
     playWindyChime();
+    // Visual chime reacts to the audio event: apply a coordinated gust to the tubes
+    if (activeWindChime) {
+      applyChimeGust((0.025 + Math.random() * 0.03) * (Math.random() < 0.5 ? 1 : -1));
+    }
     nextWindyChimeTime = frame + WINDY_CHIME_MIN_INTERVAL + Math.floor(Math.random() * (WINDY_CHIME_MAX_INTERVAL - WINDY_CHIME_MIN_INTERVAL));
     if (!isSleeping && !speechBubble && Math.random() < 0.2) {
       queueSpeechBubble(WIND_SOUND_REACTIONS[Math.floor(Math.random() * WIND_SOUND_REACTIONS.length)], 150, true);
@@ -9066,6 +9080,444 @@ function drawCocoa(): void {
   }
 }
 
+// --- Visual Wind Chimes ---
+// A small bamboo-and-metal wind chime hangs from the top of the canvas during windy weather,
+// swaying with the breeze and producing chime sounds (reusing playWindyChime). Clicking gives
+// the chimes a nudge for a bright chord. Provides a visible home for the previously invisible
+// wind chime audio introduced with windy weather.
+interface WindChimeTube {
+  lengthPx: number;       // visual length (shorter = higher pitch)
+  restX: number;          // x offset from chime center
+  swingAngle: number;     // current pendulum angle (radians, small)
+  swingVelocity: number;  // angular velocity
+  period: number;         // natural swing period factor
+  strikeGlow: number;     // 0-1 bright flash when clapper strikes this tube
+  color: string;          // base tube color (subtle variation per tube)
+}
+
+interface WindChime {
+  x: number;                  // x position of hanging anchor
+  anchorY: number;            // y where string attaches at top of canvas
+  barY: number;               // y position of the crossbar
+  tubes: WindChimeTube[];
+  clapperAngle: number;       // central striker (pendulum)
+  clapperVelocity: number;
+  sailAngle: number;          // bottom wind-catching fin (follows clapper)
+  hookSway: number;           // subtle top-string wobble phase
+  fadeIn: number;             // 0 → 1 when weather becomes windy
+  fadeOut: number;            // stays 1 until windy ends, then 1 → 0
+  active: boolean;            // false once fadeOut starts
+  life: number;               // total frames alive
+  gustTimer: number;          // frames until next random gust
+  clickCooldown: number;      // prevent speech spam when tapping rapidly
+}
+
+let activeWindChime: WindChime | null = null;
+let totalChimeTaps = 0;
+let totalChimeSessions = 0;
+let chimeFirstTouched = false;
+const CHIME_FADE_IN_FRAMES = 90;
+const CHIME_FADE_OUT_FRAMES = 120;
+const CHIME_GUST_MIN_INTERVAL = 50;
+const CHIME_GUST_MAX_INTERVAL = 150;
+
+const CHIME_TAP_SPEECHES = [
+  "Tinkle tinkle~ so pretty! 🎐✨",
+  "The chimes sing for us~ 🎐💖",
+  "Listen~ a little song! 🎐🎵",
+  "Such a gentle tune~ 🎐🌬️",
+  "Music of the breeze~ 🎐🍃",
+  "So sparkly~! 🎐💫",
+  "Wind-ringing magic~ 🎐✨",
+];
+
+function playChimeTapSound(): void {
+  // A soft three-note arpeggio — brighter, more intentional than the ambient chime
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const notes = [784, 988, 1175, 1319]; // G5, B5, D6, E6 — airy major
+  const count = 3 + Math.floor(Math.random() * 2);
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.025, t);
+  master.connect(audioCtx.destination);
+  for (let i = 0; i < count; i++) {
+    const start = t + i * (0.06 + Math.random() * 0.04);
+    const freq = notes[Math.floor(Math.random() * notes.length)];
+    const dur = 1.6 + Math.random() * 1.2;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, start);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.995, start + dur);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.6 + Math.random() * 0.4, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + dur + 0.02);
+    // Bright shimmery overtone
+    const over = audioCtx.createOscillator();
+    const overGain = audioCtx.createGain();
+    over.type = "sine";
+    over.frequency.setValueAtTime(freq * 2.01, start);
+    overGain.gain.setValueAtTime(0, start);
+    overGain.gain.linearRampToValueAtTime(0.18, start + 0.01);
+    overGain.gain.exponentialRampToValueAtTime(0.001, start + dur * 0.5);
+    over.connect(overGain);
+    overGain.connect(master);
+    over.start(start);
+    over.stop(start + dur * 0.5 + 0.02);
+  }
+}
+
+function spawnWindChime(): void {
+  if (activeWindChime) return;
+  const w = canvas.width;
+  // Hang slightly left of center so it doesn't obscure the pet's head
+  const anchorX = w * 0.32;
+  const anchorY = 2;
+  const barY = 24;
+  // 5 tubes, varying lengths — pentatonic visual layout (longer = lower)
+  const lengths = [34, 28, 24, 30, 38];
+  const colors = ["#cfd4d8", "#b8bfc4", "#d5dadc", "#c2c7cb", "#b0b5b9"];
+  const tubes: WindChimeTube[] = lengths.map((L, i) => ({
+    lengthPx: L,
+    restX: -16 + i * 8,
+    swingAngle: 0,
+    swingVelocity: 0,
+    period: 0.04 + (i - 2) * 0.004 + Math.random() * 0.003,
+    strikeGlow: 0,
+    color: colors[i],
+  }));
+  activeWindChime = {
+    x: anchorX,
+    anchorY,
+    barY,
+    tubes,
+    clapperAngle: 0,
+    clapperVelocity: 0,
+    sailAngle: 0,
+    hookSway: Math.random() * Math.PI * 2,
+    fadeIn: 0,
+    fadeOut: 1,
+    active: true,
+    life: 0,
+    gustTimer: 60 + Math.floor(Math.random() * 60),
+    clickCooldown: 0,
+  };
+  totalChimeSessions++;
+  saveGame();
+}
+
+function startWindChimeFadeOut(): void {
+  if (!activeWindChime) return;
+  activeWindChime.active = false;
+}
+
+function applyChimeGust(strength: number): void {
+  if (!activeWindChime) return;
+  const wc = activeWindChime;
+  // Apply a coordinated push with a little variance per tube
+  for (const tube of wc.tubes) {
+    tube.swingVelocity += strength * (0.7 + Math.random() * 0.6);
+  }
+  // Clapper picks up a slightly different impulse so it can strike tubes
+  wc.clapperVelocity += strength * (0.9 + Math.random() * 0.8) * (Math.random() < 0.5 ? 1 : -1);
+}
+
+function tryClickWindChime(clickX: number, clickY: number): boolean {
+  if (!activeWindChime || !activeWindChime.active) return false;
+  const wc = activeWindChime;
+  // Generous rectangular hit box covering the chimes hanging area
+  const left = wc.x - 24;
+  const right = wc.x + 24;
+  const top = wc.barY - 8;
+  const bottom = wc.barY + 52;
+  if (clickX < left || clickX > right || clickY < top || clickY > bottom) return false;
+
+  // A strong coordinated nudge, skewed by where the click landed (left vs right)
+  const skew = (clickX - wc.x) / 24;
+  for (const tube of wc.tubes) {
+    tube.swingVelocity += 0.05 * skew + (Math.random() - 0.5) * 0.04;
+  }
+  wc.clapperVelocity += 0.08 * skew + (Math.random() - 0.5) * 0.05;
+  // Immediate visual: light up 1-2 random tubes to feel responsive
+  const pick = Math.floor(Math.random() * wc.tubes.length);
+  wc.tubes[pick].strikeGlow = 1;
+  if (Math.random() < 0.5) wc.tubes[(pick + 1) % wc.tubes.length].strikeGlow = 1;
+
+  playChimeTapSound();
+  totalChimeTaps++;
+
+  if (wc.clickCooldown <= 0) {
+    petHappiness = Math.min(100, petHappiness + 2);
+    totalCarePoints += 1;
+    friendshipXP += 1;
+    const speech = CHIME_TAP_SPEECHES[Math.floor(Math.random() * CHIME_TAP_SPEECHES.length)];
+    queueSpeechBubble(speech, 130);
+    wc.clickCooldown = 180; // ~3 seconds between rewards
+  }
+
+  if (!chimeFirstTouched) {
+    chimeFirstTouched = true;
+    addDiaryEntry("milestone", "🎐", "Gave the wind chimes a nudge~! Such a sparkly sound! 🎐✨");
+  }
+  logDailyActivity("chime");
+  checkAchievements();
+  saveGame();
+  return true;
+}
+
+function updateWindChime(): void {
+  const isWindy = currentWeather === "windy";
+  // Spawn when windy weather starts (after a brief delay so the transition feels natural)
+  if (isWindy && !activeWindChime) {
+    // Tiny delay so the chimes appear a moment after windy weather takes hold
+    if (Math.random() < 0.03) {
+      spawnWindChime();
+    }
+  }
+  // Start fade-out if weather changes away from windy
+  if (!isWindy && activeWindChime && activeWindChime.active) {
+    startWindChimeFadeOut();
+  }
+  if (!activeWindChime) return;
+  const wc = activeWindChime;
+  wc.life++;
+  wc.hookSway += 0.02;
+
+  // Fade-in / fade-out
+  if (wc.active && wc.fadeIn < 1) {
+    wc.fadeIn = Math.min(1, wc.fadeIn + 1 / CHIME_FADE_IN_FRAMES);
+  }
+  if (!wc.active) {
+    wc.fadeOut = Math.max(0, wc.fadeOut - 1 / CHIME_FADE_OUT_FRAMES);
+    if (wc.fadeOut <= 0) {
+      activeWindChime = null;
+      return;
+    }
+  }
+
+  if (wc.clickCooldown > 0) wc.clickCooldown--;
+
+  // Random gusts — more frequent / stronger while wind is active
+  wc.gustTimer--;
+  if (wc.gustTimer <= 0 && wc.active) {
+    const gustStrength = 0.012 + Math.random() * 0.025;
+    applyChimeGust(gustStrength * (Math.random() < 0.5 ? 1 : -1));
+    wc.gustTimer = CHIME_GUST_MIN_INTERVAL + Math.floor(Math.random() * (CHIME_GUST_MAX_INTERVAL - CHIME_GUST_MIN_INTERVAL));
+  }
+
+  // Tube pendulum physics
+  for (const tube of wc.tubes) {
+    const k = tube.period; // spring constant scaled per tube
+    tube.swingVelocity += -k * tube.swingAngle;
+    tube.swingVelocity *= 0.985; // damping
+    tube.swingAngle += tube.swingVelocity;
+    if (tube.strikeGlow > 0) {
+      tube.strikeGlow = Math.max(0, tube.strikeGlow - 0.04);
+    }
+  }
+  // Clapper physics — slightly heavier pendulum, longer period
+  wc.clapperVelocity += -0.035 * wc.clapperAngle;
+  wc.clapperVelocity *= 0.988;
+  wc.clapperAngle += wc.clapperVelocity;
+  // Sail below clapper — lags behind, smooths the motion
+  wc.sailAngle += (wc.clapperAngle - wc.sailAngle) * 0.1;
+
+  // Detect clapper-tube strikes — when clapper swings near a tube's angle, flash it
+  for (const tube of wc.tubes) {
+    const delta = Math.abs(wc.clapperAngle - tube.swingAngle);
+    const proximity = 0.05;
+    if (delta < proximity && Math.abs(wc.clapperVelocity) > 0.015 && tube.strikeGlow < 0.4) {
+      tube.strikeGlow = 1;
+      // Tiny nudge back to the tube (energy transfer)
+      tube.swingVelocity += wc.clapperVelocity * 0.15;
+      wc.clapperVelocity *= 0.7;
+    }
+  }
+}
+
+function drawWindChime(): void {
+  if (!activeWindChime) return;
+  const wc = activeWindChime;
+  const alpha = wc.fadeIn * wc.fadeOut;
+  if (alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Subtle top-string sway (whole chime gently rocks back and forth)
+  const hookSway = Math.sin(wc.hookSway) * 0.8 + wc.clapperAngle * 2;
+  const originX = wc.x + hookSway;
+  const originY = wc.anchorY;
+
+  // Hanging string — from the very top of the canvas down to the crossbar
+  ctx.strokeStyle = "rgba(120, 90, 70, 0.55)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(wc.x, 0);
+  ctx.lineTo(originX, originY);
+  ctx.lineTo(originX - 10, wc.barY - 2);
+  ctx.moveTo(originX, originY);
+  ctx.lineTo(originX + 10, wc.barY - 2);
+  ctx.stroke();
+
+  // Wooden crossbar (the top piece that holds the tubes)
+  const barW = 36;
+  const barH = 4;
+  const barX = wc.x - barW / 2;
+  const barY = wc.barY;
+  ctx.save();
+  ctx.translate(wc.x, barY);
+  // Tilt the bar slightly with the clapper motion — feels like the whole rig sways
+  ctx.rotate(wc.clapperAngle * 0.25);
+  // Body gradient (wood tone)
+  const grad = ctx.createLinearGradient(0, -barH / 2, 0, barH / 2);
+  grad.addColorStop(0, "#7d5a3f");
+  grad.addColorStop(0.4, "#a07858");
+  grad.addColorStop(1, "#6a4a34");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(-barW / 2, -barH / 2, barW, barH, 1.5);
+  ctx.fill();
+  // Grain line
+  ctx.strokeStyle = "rgba(60, 40, 25, 0.35)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(-barW / 2 + 2, 0.2);
+  ctx.lineTo(barW / 2 - 2, 0.2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw tubes
+  const tubeBaseY = barY + barH / 2;
+  for (let i = 0; i < wc.tubes.length; i++) {
+    const tube = wc.tubes[i];
+    ctx.save();
+    // Tubes hang from the crossbar positions (+ bar sway)
+    const tubeTopX = wc.x + tube.restX + wc.clapperAngle * 2.5;
+    ctx.translate(tubeTopX, tubeBaseY);
+    // Pendulum rotation: pivot is the top of the tube
+    ctx.rotate(tube.swingAngle);
+
+    // Short connector string from bar to tube top
+    ctx.strokeStyle = "rgba(120, 90, 70, 0.55)";
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -barH / 2);
+    ctx.lineTo(0, 0);
+    ctx.stroke();
+
+    // Tube body — thin metallic cylinder
+    const tubeW = 3;
+    const L = tube.lengthPx;
+    // Metallic gradient
+    const mg = ctx.createLinearGradient(-tubeW / 2, 0, tubeW / 2, 0);
+    mg.addColorStop(0, "rgba(90, 96, 100, 0.9)");
+    mg.addColorStop(0.3, tube.color);
+    mg.addColorStop(0.6, "#f2f4f6");
+    mg.addColorStop(1, "rgba(90, 96, 100, 0.9)");
+    ctx.fillStyle = mg;
+    ctx.beginPath();
+    ctx.roundRect(-tubeW / 2, 0, tubeW, L, 1.5);
+    ctx.fill();
+    // Tube top cap (small ring where string attaches)
+    ctx.fillStyle = "#8d939a";
+    ctx.beginPath();
+    ctx.ellipse(0, 0.5, tubeW / 2 + 0.3, 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Specular highlight running down one side
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.fillRect(-tubeW / 2 + 0.5, 1, 0.5, L - 2);
+    // Strike glow — bright warm pulse when struck
+    if (tube.strikeGlow > 0.01) {
+      const glowGrad = ctx.createRadialGradient(0, L / 2, 1, 0, L / 2, 10);
+      glowGrad.addColorStop(0, `rgba(255, 240, 180, ${tube.strikeGlow * 0.8})`);
+      glowGrad.addColorStop(1, "rgba(255, 240, 180, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, L / 2, 8, L / 2 + 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Extra brighten on tube body
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = `rgba(255, 250, 210, ${tube.strikeGlow * 0.45})`;
+      ctx.fillRect(-tubeW / 2, 0, tubeW, L);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    ctx.restore();
+  }
+
+  // Central clapper (a small wooden disk hanging below the bar by a thin cord)
+  ctx.save();
+  const clapperTopY = tubeBaseY + 6;
+  ctx.translate(wc.x + wc.clapperAngle * 4, clapperTopY);
+  ctx.rotate(wc.clapperAngle);
+  // Cord from bar to clapper
+  ctx.strokeStyle = "rgba(120, 90, 70, 0.6)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.lineTo(0, 14);
+  ctx.stroke();
+  // Wooden disk
+  ctx.fillStyle = "#8b6a4a";
+  ctx.beginPath();
+  ctx.ellipse(0, 14, 3.2, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(60, 40, 25, 0.5)";
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Decorative sail/fin below clapper — catches wind visually
+  ctx.save();
+  const sailX = wc.x + wc.sailAngle * 6;
+  const sailY = tubeBaseY + 30;
+  ctx.translate(sailX, sailY);
+  ctx.rotate(wc.sailAngle * 1.2);
+  // Cord to sail
+  ctx.strokeStyle = "rgba(120, 90, 70, 0.5)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(0, 0);
+  ctx.stroke();
+  // Sail shape — a little flat leaf/paper
+  ctx.fillStyle = "#e8c98a";
+  ctx.strokeStyle = "#b08548";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -2);
+  ctx.quadraticCurveTo(4, 2, 3, 7);
+  ctx.quadraticCurveTo(0, 9, -3, 7);
+  ctx.quadraticCurveTo(-4, 2, 0, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Little calligraphy dot for decoration
+  ctx.fillStyle = "rgba(140, 80, 50, 0.7)";
+  ctx.beginPath();
+  ctx.arc(0, 4, 0.9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Gentle hint text — shown occasionally when chimes first appear and haven't been touched
+  if (wc.active && !chimeFirstTouched && wc.fadeIn >= 1 && Math.floor(frame / 60) % 8 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.45;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#d8e6f0";
+    ctx.textAlign = "center";
+    ctx.fillText("nudge 🎐", wc.x, tubeBaseY + 52);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -11461,6 +11913,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for wind chime nudges before bubbles/drag — chime hangs from the top
+  if (activeWindChime) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickWindChime(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -13184,6 +13645,11 @@ const achievements: Achievement[] = [
     icon: "☕", unlockMessage: "A true cocoa connoisseur~! Every mug warms your soul! ☕💖✨",
     condition: () => totalCocoasDrunk >= 10, unlocked: false,
   },
+  {
+    id: "chime_keeper", name: "Chime Keeper", description: "Nudge the wind chimes 15 times",
+    icon: "🎐", unlockMessage: "The wind chimes sing your name~! A keeper of the breeze! 🎐🌬️✨",
+    condition: () => totalChimeTaps >= 15, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -14053,6 +14519,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#c8d8e8";
+  ctx.fillText("WIND CHIMES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🎐 ${totalChimeTaps} taps (${totalChimeSessions} visits)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -14518,6 +14994,9 @@ interface SaveData {
   totalCocoasDrunk: number;
   totalCocoaSips: number;
   cocoaFirstSip: boolean;
+  totalChimeTaps: number;
+  totalChimeSessions: number;
+  chimeFirstTouched: boolean;
   version: number;
 }
 
@@ -14616,6 +15095,9 @@ function buildSaveData(): SaveData {
     totalCocoasDrunk,
     totalCocoaSips,
     cocoaFirstSip,
+    totalChimeTaps,
+    totalChimeSessions,
+    chimeFirstTouched,
     version: 1,
   };
 }
@@ -14978,6 +15460,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).cocoaFirstSip === "boolean") {
     cocoaFirstSip = (data as SaveData).cocoaFirstSip;
+  }
+  if (typeof (data as SaveData).totalChimeTaps === "number") {
+    totalChimeTaps = (data as SaveData).totalChimeTaps;
+  }
+  if (typeof (data as SaveData).totalChimeSessions === "number") {
+    totalChimeSessions = (data as SaveData).totalChimeSessions;
+  }
+  if (typeof (data as SaveData).chimeFirstTouched === "boolean") {
+    chimeFirstTouched = (data as SaveData).chimeFirstTouched;
   }
 
   // Restore diary
@@ -17480,6 +17971,9 @@ function update(): void {
   // Hot cocoa update (depends on campfire state too)
   updateCocoa();
 
+  // Wind chimes update (during windy weather)
+  updateWindChime();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -18632,6 +19126,9 @@ function draw(): void {
   drawMarshmallow();
   // Hot cocoa mug beside the fire (on the ground)
   drawCocoa();
+
+  // Wind chimes hanging from the top during windy weather (drawn behind the pet)
+  drawWindChime();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
