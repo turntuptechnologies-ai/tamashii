@@ -3,6 +3,35 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.93.0] — 2026-04-17 — Autumn Leaf Pile
+
+### Added
+- **Leaf pile on the ground** — during autumn, a cozy pile of fallen leaves slowly gathers to the side of the pet. The pile appears during morning/afternoon/evening in any non-precipitating weather and grows one leaf at a time.
+- **Gradual accumulation** — every ~3-6 seconds a new autumn-colored leaf flutters onto the stack, tiered into rough pyramid layers (4 leaves per tier). Max pile size: 26 leaves.
+- **Windy weather speeds growth** — during windy autumn days, leaves land ~55% faster so the pile builds visibly faster
+- **Click to jump in** — once the pile reaches at least 6 leaves it becomes "jumpable". Clicking triggers a **big leaf-scatter burst**: every leaf on the pile plus 6-10 bonus leaves launch up and outward as tumbling leaf particles using the existing seasonal leaf physics
+- **Directional blow** — blow direction skews away from the click position (click left side → leaves scatter right), so it feels physical. Windy weather gives scattered leaves extra horizontal momentum
+- **Crunchy sound** — procedural high-pass-filtered noise burst with occasional "crunch" spikes, scaled in length/volume by the number of leaves in the pile (bigger pile → louder crunch)
+- **Squash animation** — after a jump the pile briefly squashes flat and springs back, giving a tactile "landed-on" feedback
+- **Refill cycle** — after a jump the pile empties but immediately starts gathering leaves again, so you can keep coming back
+- **6 autumn colors per leaf** — each pile leaf uses one of six warm autumn tones (orange, crimson, amber, red, burnt sienna, deep brown) for a lively mottled pile
+- **Tiny twigs** — once the pile has 4+ leaves a little brown twig pokes out, and a second twig appears at 10+ leaves, for extra woodland detail
+- **Soft sway & shadow** — gentle breathing sway + ground shadow whose size grows with the pile
+- **Contextual speeches** — 8 jump speeches like "Wheeeee~ leaf party! 🍂✨", "*crunch crunch* so crispy! 🍂", "Diving into fall~! 🍂💨", plus 3 growth speeches that play when the pile is about half full
+- **Rewards per jump** — +3 happiness, +1 care point, +2 friendship XP
+- **Gentle hint** — faint "jump 🍁" text blinks above a jumpable pile until the player has jumped at least once, then disappears forever
+- **Weather/time/sleep transitions** — pile fades in over 90 frames when it spawns, fades out over 120 frames when autumn ends, weather turns to rain/storm/snow, or the pet goes to sleep
+- **Dream template** — "leafpile" added to DREAM_TEMPLATES so sleeping after jumping yields dreams of "a mountain of crunchy leaves~", "swirling leaf parade~", "autumn forever~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks: "*mumble*... crunch crunch... so cozy...", "Zzz... swimming in leaves... wheee...", "*snore*... bigger pile... next time..."
+- **Contextual dream icons** — dailyActivityLog now recognizes "leafpile" and biases dream icons toward flower/heart/star when the pet sleeps after jumping
+- **First-jump diary milestone** — a dated diary entry recording the first leaf-pile jump with the number of leaves scattered
+- **Leaf Jumper achievement** — jump into 10 leaf piles to unlock achievement #68 (🍁)
+- **Stats tracking** — total jumps and total leaves scattered displayed in the WEATHER section of the stats panel
+- **Full persistence** — totalLeafPileJumps, totalLeavesScattered, and leafPileFirstJump saved across sessions
+- **Total achievements: 68**
+
+**Why this feature:** The seasonal weather-visual arc started with **winter** (snowman + campfire + marshmallow + cocoa), moved to **windy** (wind chime), and then **sunny spring/summer daytime** (dandelion puff). **Autumn** was still the only major season without its own dedicated interactive element — NEXT.md specifically flagged "leaf pile during autumn windy" as a natural next step. The leaf pile completes the four-season coverage and leans into autumn's defining sensory experience: kicking through crunchy leaves. Mechanically it mirrors the dandelion (gradual growth → click → burst) but inverts the emotional beat: the dandelion is airy and wistful, the leaf pile is heavy, crunchy, and exuberant. The windy-weather speed-up also creates a subtle meta-link to the wind chime from v0.91 — both features respond to the same wind system but in different ways.
+
 ## [v0.92.0] — 2026-04-17 — Dandelion Puff
 
 ### Added

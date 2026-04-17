@@ -428,6 +428,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "cocoa", icons: [["heart", "food", "heart"], ["food", "flower", "heart"]], captions: ["a river of cocoa~", "chocolate clouds~", "warm mugs forever~"] },
   { activity: "chime", icons: [["star", "music", "star"], ["music", "heart", "music"]], captions: ["a wind-bell melody~", "singing breeze~", "tinkling lullaby~"] },
   { activity: "dandelion", icons: [["flower", "star", "flower"], ["flower", "heart", "butterfly"]], captions: ["a meadow of wishes~", "seeds floating on dreams~", "a thousand little hopes~"] },
+  { activity: "leafpile", icons: [["flower", "star", "heart"], ["butterfly", "flower", "star"]], captions: ["a mountain of crunchy leaves~", "swirling leaf parade~", "autumn forever~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -527,6 +528,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... one... more... wish...",
     "Zzz... seeds flying... so high...",
     "*snore*... pfft... so fluffy...",
+  ],
+  leafpile: [
+    "*mumble*... crunch crunch... so cozy...",
+    "Zzz... swimming in leaves... wheee...",
+    "*snore*... bigger pile... next time...",
   ],
 };
 
@@ -3575,6 +3581,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("photo")) contextIcons.push("flower", "butterfly");
   if (dailyActivityLog.includes("fireflies")) contextIcons.push("star", "moon", "butterfly");
   if (dailyActivityLog.includes("dandelion")) contextIcons.push("flower", "butterfly", "flower");
+  if (dailyActivityLog.includes("leafpile")) contextIcons.push("flower", "heart", "star");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -9987,6 +9994,370 @@ function drawDandelionSeeds(): void {
   }
 }
 
+// --- Autumn Leaf Pile ---
+// During autumn, a pile of fallen leaves slowly gathers on the ground next to the pet. The pile
+// accumulates one leaf at a time (faster during windy weather) and can be clicked to trigger a
+// big leaf-jumping burst — the pet "dives in" and the stack explodes into tumbling leaf particles.
+// This completes the seasonal weather-visual arc: winter snowman, windy wind chime, sunny dandelion,
+// now autumn leaf pile.
+interface LeafPileLeaf {
+  offsetX: number;   // local offset from pile center
+  offsetY: number;   // local stack height (negative = higher)
+  tilt: number;      // rotation
+  colorIndex: number;
+  size: number;
+}
+
+interface LeafPile {
+  x: number;
+  y: number;           // ground anchor
+  leaves: LeafPileLeaf[];
+  capacity: number;    // max leaves for this pile instance
+  growTimer: number;   // frames until next leaf lands
+  fadeIn: number;
+  fadeOut: number;
+  active: boolean;
+  jumpAnim: number;    // 0-1, post-jump squash/recover animation
+  sway: number;        // gentle sway phase
+}
+
+let leafPile: LeafPile | null = null;
+let totalLeafPileJumps = 0;
+let totalLeavesScattered = 0;
+let leafPileFirstJump = false;
+const LEAF_PILE_FADE_IN = 90;
+const LEAF_PILE_FADE_OUT = 120;
+const LEAF_PILE_MIN_JUMP_LEAVES = 6;   // need at least this many leaves to be jumpable
+const LEAF_PILE_GROW_MIN = 180;         // ~3s between leaves
+const LEAF_PILE_GROW_MAX = 360;         // ~6s between leaves
+const LEAF_PILE_CAPACITY = 26;          // max leaves per pile before it stops growing
+const LEAF_PILE_COLORS = ["#E8722A", "#D4451A", "#F0A030", "#C83030", "#B86A2C", "#8B3A1A"];
+
+const LEAF_PILE_JUMP_SPEECHES = [
+  "Wheeeee~ leaf party! 🍂✨",
+  "*crunch crunch* so crispy! 🍂",
+  "Autumn confetti burst~! 🍁🎉",
+  "Diving into fall~! 🍂💨",
+  "The leaves are everywhere! 🍁🍂",
+  "Swoosh~! All tumbled up~ 🍂",
+  "Crunchy crunchy crunch! 🍁",
+  "Leaf shower~! 🍂💖",
+];
+
+const LEAF_PILE_GROWING_SPEECHES = [
+  "The pile is getting bigger~ 🍂",
+  "More leaves are falling~ 🍁",
+  "Look, a little leaf tower~! 🍂✨",
+];
+
+function playLeafPileJumpSound(leafCount: number): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Crunchy rustle — bursts of filtered noise. More leaves = longer, louder rustle.
+  const dur = 0.35 + Math.min(0.45, leafCount * 0.02);
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.22));
+    // Add little "crunch" spikes
+    const crunch = Math.random() < 0.015 ? (Math.random() * 2 - 1) * 1.4 : 0;
+    data[i] = ((Math.random() * 2 - 1) * 0.7 + crunch) * env;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 1800;
+  filter.Q.value = 0.7;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.22, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + dur);
+}
+
+function canSpawnLeafPile(): boolean {
+  const isDaytimeish = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon" || currentTimeOfDay === "evening";
+  const goodWeather = currentWeather !== "stormy" && currentWeather !== "rainy" && currentWeather !== "snowy";
+  return currentSeason === "autumn" && isDaytimeish && goodWeather && !isSleeping;
+}
+
+function spawnLeafPile(): void {
+  if (leafPile) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  // Position on the left side of the pet (opposite side from dandelion-default-right tendency)
+  // but clamp so it never overlaps the snowman/campfire regions (right side).
+  const side = Math.random() < 0.6 ? -1 : 1;
+  const offset = w * 0.22 + Math.random() * w * 0.08;
+  const sx = (w / 2) + side * offset;
+  leafPile = {
+    x: Math.max(40, Math.min(w - 40, sx)),
+    y: h / 2 + 50 + Math.random() * 8,
+    leaves: [],
+    capacity: LEAF_PILE_CAPACITY,
+    growTimer: LEAF_PILE_GROW_MIN + Math.floor(Math.random() * (LEAF_PILE_GROW_MAX - LEAF_PILE_GROW_MIN)),
+    fadeIn: 0,
+    fadeOut: 1,
+    active: true,
+    jumpAnim: 0,
+    sway: Math.random() * Math.PI * 2,
+  };
+}
+
+function addLeafToPile(pile: LeafPile): void {
+  if (pile.leaves.length >= pile.capacity) return;
+  // Each added leaf nestles onto the stack with a deterministic jitter pattern
+  const idx = pile.leaves.length;
+  // Layer index — every 3-4 leaves form a horizontal tier, stacking upward
+  const tier = Math.floor(idx / 4);
+  const inTier = idx % 4;
+  // Pyramid narrowing: base tier is widest
+  const tierWidth = Math.max(4, 18 - tier * 3);
+  const offsetX = (inTier - 1.5) * (tierWidth / 2) + (Math.random() - 0.5) * 3;
+  const offsetY = -tier * 2.2 - (Math.random() * 1.2);
+  pile.leaves.push({
+    offsetX,
+    offsetY,
+    tilt: (Math.random() - 0.5) * Math.PI * 0.6,
+    colorIndex: Math.floor(Math.random() * LEAF_PILE_COLORS.length),
+    size: 3.6 + Math.random() * 1.2,
+  });
+}
+
+function jumpOnLeafPile(pile: LeafPile, clickX: number): void {
+  const leafCount = pile.leaves.length;
+  if (leafCount < LEAF_PILE_MIN_JUMP_LEAVES) return;
+
+  // Scatter: each leaf on the pile becomes a flying particle plus some bonus leaves
+  const bonus = 6 + Math.floor(Math.random() * 5);
+  const blowDir = clickX < pile.x ? 1 : -1;
+  const windBoost = currentWeather === "windy" ? 1.6 : 0;
+  const centerX = pile.x;
+  const centerY = pile.y - 6;
+  for (let i = 0; i < leafCount; i++) {
+    const leaf = pile.leaves[i];
+    const lx = centerX + leaf.offsetX;
+    const ly = centerY + leaf.offsetY;
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.1;
+    const speed = 1.4 + Math.random() * 1.8;
+    particles.push({
+      x: lx,
+      y: ly,
+      vx: Math.cos(angle) * speed * blowDir + (Math.random() - 0.5) * 0.6 + windBoost * 0.4,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 220 + Math.floor(Math.random() * 100),
+      maxLife: 300,
+      size: leaf.size + 1.2,
+      type: "leaf",
+    });
+  }
+  for (let i = 0; i < bonus; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.8;
+    const speed = 1.0 + Math.random() * 2.0;
+    particles.push({
+      x: centerX + (Math.random() - 0.5) * 12,
+      y: centerY + (Math.random() - 0.5) * 4,
+      vx: Math.cos(angle) * speed * blowDir + (Math.random() - 0.5) * 0.4 + windBoost * 0.5,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 240 + Math.floor(Math.random() * 120),
+      maxLife: 360,
+      size: 3.5 + Math.random() * 2,
+      type: "leaf",
+    });
+  }
+
+  totalLeafPileJumps++;
+  totalLeavesScattered += leafCount + bonus;
+  pile.leaves = []; // pile is empty now — will begin filling again
+  pile.jumpAnim = 1;
+  pile.growTimer = LEAF_PILE_GROW_MIN; // new leaves start landing soon
+
+  playLeafPileJumpSound(leafCount);
+
+  petHappiness = Math.min(100, petHappiness + 3);
+  totalCarePoints += 1;
+  addFriendshipXP(2);
+
+  const speech = LEAF_PILE_JUMP_SPEECHES[Math.floor(Math.random() * LEAF_PILE_JUMP_SPEECHES.length)];
+  queueSpeechBubble(speech, 160);
+
+  if (!leafPileFirstJump) {
+    leafPileFirstJump = true;
+    addDiaryEntry("milestone", "🍁", `Jumped into my very first leaf pile~! Leaves went everywhere! 🍂✨ (${leafCount} leaves scattered!)`);
+  }
+
+  logDailyActivity("leafpile");
+  checkAchievements();
+  saveGame();
+}
+
+function tryClickLeafPile(clickX: number, clickY: number): boolean {
+  if (!leafPile || !leafPile.active) return false;
+  if (leafPile.leaves.length < LEAF_PILE_MIN_JUMP_LEAVES) return false;
+  const pile = leafPile;
+  // Hit box grows with pile height
+  const tierCount = Math.ceil(pile.leaves.length / 4);
+  const pileHeight = 6 + tierCount * 3;
+  const pileWidth = 22;
+  const dx = clickX - pile.x;
+  const dy = clickY - (pile.y - pileHeight * 0.4);
+  // Elliptical hit region
+  if ((dx * dx) / (pileWidth * pileWidth) + (dy * dy) / (pileHeight * pileHeight) < 1) {
+    jumpOnLeafPile(pile, clickX);
+    return true;
+  }
+  return false;
+}
+
+function updateLeafPile(): void {
+  const ok = canSpawnLeafPile();
+
+  // Spawn occasionally when conditions allow and no pile is present
+  if (!leafPile && ok && Math.random() < 0.002) {
+    spawnLeafPile();
+  }
+
+  if (!leafPile) return;
+  const pile = leafPile;
+  pile.sway += 0.02;
+
+  // Fade-in while active
+  if (pile.active && pile.fadeIn < 1) {
+    pile.fadeIn = Math.min(1, pile.fadeIn + 1 / LEAF_PILE_FADE_IN);
+  }
+
+  // Jump animation decay
+  if (pile.jumpAnim > 0) {
+    pile.jumpAnim = Math.max(0, pile.jumpAnim - 0.04);
+  }
+
+  // Grow — one leaf at a time
+  if (pile.active && pile.leaves.length < pile.capacity) {
+    pile.growTimer--;
+    if (pile.growTimer <= 0) {
+      addLeafToPile(pile);
+      // Windy weather makes leaves fall faster
+      const windFactor = currentWeather === "windy" ? 0.55 : 1;
+      const base = LEAF_PILE_GROW_MIN + Math.floor(Math.random() * (LEAF_PILE_GROW_MAX - LEAF_PILE_GROW_MIN));
+      pile.growTimer = Math.max(60, Math.floor(base * windFactor));
+      // Rare gentle speech as the pile grows (once per pile, around halfway)
+      if (pile.leaves.length === Math.floor(pile.capacity * 0.55) && Math.random() < 0.35) {
+        const s = LEAF_PILE_GROWING_SPEECHES[Math.floor(Math.random() * LEAF_PILE_GROWING_SPEECHES.length)];
+        queueSpeechBubble(s, 140);
+      }
+    }
+  }
+
+  // Weather/time/sleep transitions → fade out
+  if (!ok && pile.active) {
+    pile.active = false;
+  }
+
+  // Fade out + remove
+  if (!pile.active) {
+    pile.fadeOut = Math.max(0, pile.fadeOut - 1 / LEAF_PILE_FADE_OUT);
+    if (pile.fadeOut <= 0) {
+      leafPile = null;
+    }
+  }
+}
+
+function drawLeafPileLeaf(cx: number, cy: number, leaf: LeafPileLeaf, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx + leaf.offsetX, cy + leaf.offsetY);
+  ctx.rotate(leaf.tilt);
+  // Small bezier leaf shape (similar to drawLeaf)
+  const w = leaf.size * 0.85;
+  const h = leaf.size * 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, -h / 2);
+  ctx.bezierCurveTo(w, -h / 4, w, h / 4, 0, h / 2);
+  ctx.bezierCurveTo(-w, h / 4, -w, -h / 4, 0, -h / 2);
+  ctx.fillStyle = LEAF_PILE_COLORS[leaf.colorIndex % LEAF_PILE_COLORS.length];
+  ctx.fill();
+  // Center vein
+  ctx.strokeStyle = "rgba(80, 40, 15, 0.55)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(0, -h / 2 + 0.6);
+  ctx.lineTo(0, h / 2 - 0.6);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLeafPile(): void {
+  if (!leafPile) return;
+  const pile = leafPile;
+  const alpha = pile.fadeIn * pile.fadeOut;
+  if (alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Soft ground shadow under the pile
+  const tierCount = Math.max(1, Math.ceil(pile.leaves.length / 4));
+  const shadowR = 14 + tierCount * 1.5;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+  ctx.beginPath();
+  ctx.ellipse(pile.x, pile.y + 2, shadowR, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Jump-anim squash: scale down briefly after a jump, then recover
+  const squash = pile.jumpAnim;
+  const scaleX = 1 + squash * 0.3;
+  const scaleY = 1 - squash * 0.35;
+  const centerY = pile.y - 4;
+  ctx.translate(pile.x, centerY);
+  ctx.scale(scaleX, scaleY);
+  ctx.translate(-pile.x, -centerY);
+
+  // Sway — subtle breathing of the pile
+  const swayX = Math.sin(pile.sway) * 0.6;
+
+  // Draw pile leaves in order (bottom up)
+  for (const leaf of pile.leaves) {
+    drawLeafPileLeaf(pile.x + swayX, centerY, leaf, alpha);
+  }
+
+  // A couple of little brown twigs poking out for visual charm (only when pile has any leaves)
+  if (pile.leaves.length >= 4) {
+    ctx.strokeStyle = "rgba(90, 55, 25, 0.75)";
+    ctx.lineWidth = 0.8;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(pile.x - 9 + swayX, centerY - 1);
+    ctx.lineTo(pile.x - 14 + swayX, centerY - 5);
+    ctx.stroke();
+    if (pile.leaves.length >= 10) {
+      ctx.beginPath();
+      ctx.moveTo(pile.x + 7 + swayX, centerY - 3);
+      ctx.lineTo(pile.x + 13 + swayX, centerY - 7);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+
+  // Gentle hint text above a jumpable pile until the player has jumped once
+  if (!leafPileFirstJump && pile.leaves.length >= LEAF_PILE_MIN_JUMP_LEAVES && pile.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    const topY = pile.y - 4 - tierCount * 2.2 - 8;
+    ctx.fillText("jump 🍁", pile.x, topY);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -12400,6 +12771,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for leaf pile jumps before bubbles/drag
+  if (leafPile) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickLeafPile(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -14133,6 +14513,11 @@ const achievements: Achievement[] = [
     icon: "🌼", unlockMessage: "Every seed carried a wish~! The meadow blooms with hope! 🌼🌬️✨",
     condition: () => totalDandelionsPuffed >= 10, unlocked: false,
   },
+  {
+    id: "leaf_jumper", name: "Leaf Jumper", description: "Jump into 10 autumn leaf piles",
+    icon: "🍁", unlockMessage: "The leaves scatter at your arrival~! A true autumn acrobat! 🍁🍂✨",
+    condition: () => totalLeafPileJumps >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -15022,6 +15407,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E8722A";
+  ctx.fillText("LEAF PILES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🍁 ${totalLeafPileJumps} jumps (${totalLeavesScattered} leaves)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -15493,6 +15888,9 @@ interface SaveData {
   totalDandelionsPuffed: number;
   totalDandelionWishes: number;
   dandelionFirstPuff: boolean;
+  totalLeafPileJumps: number;
+  totalLeavesScattered: number;
+  leafPileFirstJump: boolean;
   version: number;
 }
 
@@ -15597,6 +15995,9 @@ function buildSaveData(): SaveData {
     totalDandelionsPuffed,
     totalDandelionWishes,
     dandelionFirstPuff,
+    totalLeafPileJumps,
+    totalLeavesScattered,
+    leafPileFirstJump,
     version: 1,
   };
 }
@@ -15977,6 +16378,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).dandelionFirstPuff === "boolean") {
     dandelionFirstPuff = (data as SaveData).dandelionFirstPuff;
+  }
+  if (typeof (data as SaveData).totalLeafPileJumps === "number") {
+    totalLeafPileJumps = (data as SaveData).totalLeafPileJumps;
+  }
+  if (typeof (data as SaveData).totalLeavesScattered === "number") {
+    totalLeavesScattered = (data as SaveData).totalLeavesScattered;
+  }
+  if (typeof (data as SaveData).leafPileFirstJump === "boolean") {
+    leafPileFirstJump = (data as SaveData).leafPileFirstJump;
   }
 
   // Restore diary
@@ -18485,6 +18895,9 @@ function update(): void {
   // Dandelion puff update (during sunny daytime in spring/summer)
   updateDandelions();
 
+  // Autumn leaf pile update (during autumn daytime/evening)
+  updateLeafPile();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -19643,6 +20056,9 @@ function draw(): void {
 
   // Dandelions on the ground (drawn behind the pet)
   drawDandelions();
+
+  // Autumn leaf pile on the ground (drawn behind the pet)
+  drawLeafPile();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
