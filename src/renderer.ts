@@ -429,6 +429,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "chime", icons: [["star", "music", "star"], ["music", "heart", "music"]], captions: ["a wind-bell melody~", "singing breeze~", "tinkling lullaby~"] },
   { activity: "dandelion", icons: [["flower", "star", "flower"], ["flower", "heart", "butterfly"]], captions: ["a meadow of wishes~", "seeds floating on dreams~", "a thousand little hopes~"] },
   { activity: "leafpile", icons: [["flower", "star", "heart"], ["butterfly", "flower", "star"]], captions: ["a mountain of crunchy leaves~", "swirling leaf parade~", "autumn forever~"] },
+  { activity: "squirrel", icons: [["food", "heart", "food"], ["star", "food", "flower"]], captions: ["a forest of acorns~", "playing with squirrels~", "a cozy nut stash~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -533,6 +534,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... crunch crunch... so cozy...",
     "Zzz... swimming in leaves... wheee...",
     "*snore*... bigger pile... next time...",
+  ],
+  squirrel: [
+    "*mumble*... fluffy tail... so soft...",
+    "Zzz... sharing acorns... with friends...",
+    "*snore*... another one... dropped one...",
   ],
 };
 
@@ -3582,6 +3588,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("fireflies")) contextIcons.push("star", "moon", "butterfly");
   if (dailyActivityLog.includes("dandelion")) contextIcons.push("flower", "butterfly", "flower");
   if (dailyActivityLog.includes("leafpile")) contextIcons.push("flower", "heart", "star");
+  if (dailyActivityLog.includes("squirrel")) contextIcons.push("food", "heart", "flower");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -10358,6 +10365,670 @@ function drawLeafPile(): void {
   }
 }
 
+// --- Autumn Squirrel Visitor + Acorns ---
+// During autumn, a tiny squirrel occasionally scampers in from one edge, pauses to look around while
+// its fluffy tail swishes, drops 2-4 acorns on the ground, then scampers back off the way it came.
+// Each acorn can be clicked to collect it. Every 10 acorns triggers a little celebration.
+// This is a new *character* interaction — the first since the butterfly companion — and is distinct
+// from the leaf pile: instead of accumulating → burst, it's fleeting visitor → collect-before-despawn.
+
+interface Acorn {
+  x: number;
+  groundY: number;    // final resting y on ground
+  y: number;          // current y (animates during drop bounce)
+  vy: number;         // vertical velocity during drop
+  bounce: number;     // remaining bounce energy (0-1)
+  spin: number;       // cap rotation at rest
+  life: number;       // frames remaining before despawn
+  fadeIn: number;
+  fadeOut: number;
+  active: boolean;
+  sway: number;       // gentle rest sway phase
+}
+
+type SquirrelState = "entering" | "pausing" | "dropping" | "leaving";
+
+interface Squirrel {
+  x: number;
+  y: number;
+  vx: number;
+  dir: 1 | -1;           // facing: 1 = right, -1 = left
+  state: SquirrelState;
+  stateTimer: number;
+  targetX: number;       // where to pause
+  runPhase: number;      // hop cycle 0..2π
+  tailSway: number;
+  dropCountdown: number; // frames until next acorn drop while "dropping"
+  acornsToDrop: number;
+  fadeIn: number;
+  fadeOut: number;
+  visible: boolean;
+}
+
+let squirrel: Squirrel | null = null;
+const acorns: Acorn[] = [];
+let totalAcornsCollected = 0;
+let totalSquirrelVisits = 0;
+let squirrelFirstSeen = false;
+let acornFirstCollected = false;
+
+const SQUIRREL_FADE_IN = 30;
+const SQUIRREL_FADE_OUT = 40;
+const SQUIRREL_SPEED = 1.6;
+const SQUIRREL_PAUSE_MIN = 120;   // 2s
+const SQUIRREL_PAUSE_MAX = 220;   // ~3.7s
+const ACORN_LIFE = 2200;          // ~36s before despawn
+const ACORN_FADE_IN = 20;
+const ACORN_FADE_OUT = 60;
+const ACORN_MAX_ON_GROUND = 10;
+
+const SQUIRREL_SIGHT_SPEECHES = [
+  "Look~ a squirrel! 🐿️✨",
+  "Oh! Tiny furry friend! 🐿️💖",
+  "A squirrel visitor~! 🐿️🍂",
+  "Eek! Cute tail! 🐿️",
+  "Hello little squirrel~! 🐿️",
+];
+
+const SQUIRREL_DROP_SPEECHES = [
+  "It dropped an acorn~! 🌰",
+  "Ooh! Acorn delivery! 🌰✨",
+  "A gift from the squirrel~! 🌰💖",
+  "*plop* a shiny acorn! 🌰",
+];
+
+const ACORN_COLLECT_SPEECHES = [
+  "An acorn~! Mine! 🌰✨",
+  "*scoop* treasure! 🌰💖",
+  "Tiny autumn jewel~! 🌰🍂",
+  "Collected! 🌰",
+  "So smooth and cute~ 🌰",
+  "For my stash! 🌰💭",
+];
+
+const ACORN_BONUS_SPEECHES = [
+  "Ten acorns! A fine collection~! 🌰✨",
+  "My stash is growing! 🌰🐿️💖",
+  "Enough for a winter feast~! 🌰🍂✨",
+];
+
+function playAcornDropSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft "plop" — low-pass filtered short sine
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(220, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.14, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.2);
+}
+
+function playAcornCollectSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Cute little ascending bloop
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(620, t);
+  osc.frequency.exponentialRampToValueAtTime(980, t + 0.12);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.09, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.18);
+}
+
+function playAcornBonusChime(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Ascending E-G-B sparkle
+  const freqs = [659.25, 783.99, 987.77];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.08, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.32);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.34);
+  }
+}
+
+function playSquirrelScamperTick(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Tiny pitter-patter: a short high-passed noise burst
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.05), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.015));
+    data[i] = (Math.random() * 2 - 1) * env;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 2500;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.05, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.06);
+}
+
+function canSpawnSquirrel(): boolean {
+  if (squirrel) return false;
+  if (acorns.length >= ACORN_MAX_ON_GROUND) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "autumn") return false;
+  const isDaytimeish = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon" || currentTimeOfDay === "evening";
+  if (!isDaytimeish) return false;
+  if (currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy") return false;
+  return true;
+}
+
+function spawnSquirrel(): void {
+  if (squirrel) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const fromLeft = Math.random() < 0.5;
+  const dir: 1 | -1 = fromLeft ? 1 : -1;
+  const startX = fromLeft ? -14 : w + 14;
+  // Pause somewhere on the side opposite the entry
+  const offset = w * 0.22 + Math.random() * w * 0.14;
+  const targetX = fromLeft ? (w / 2) - offset + Math.random() * 20 : (w / 2) + offset - Math.random() * 20;
+  const groundY = h / 2 + 52 + Math.random() * 4;
+  squirrel = {
+    x: startX,
+    y: groundY,
+    vx: dir * SQUIRREL_SPEED,
+    dir,
+    state: "entering",
+    stateTimer: 600, // safety timeout
+    targetX: Math.max(30, Math.min(w - 30, targetX)),
+    runPhase: 0,
+    tailSway: 0,
+    dropCountdown: 0,
+    acornsToDrop: 2 + Math.floor(Math.random() * 3), // 2-4 acorns
+    fadeIn: 0,
+    fadeOut: 1,
+    visible: true,
+  };
+  totalSquirrelVisits++;
+}
+
+function dropAcornFromSquirrel(sq: Squirrel): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 54 + Math.random() * 3;
+  // Drop slightly behind where squirrel is facing (from its hind)
+  const ax = sq.x - sq.dir * (3 + Math.random() * 4) + (Math.random() - 0.5) * 3;
+  acorns.push({
+    x: Math.max(10, Math.min(w - 10, ax)),
+    groundY,
+    y: sq.y - 4,
+    vy: -1.2 - Math.random() * 0.6,
+    bounce: 1,
+    spin: (Math.random() - 0.5) * 0.5,
+    life: ACORN_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    active: true,
+    sway: Math.random() * Math.PI * 2,
+  });
+  playAcornDropSound();
+  // Small chance for a drop speech
+  if (Math.random() < 0.35) {
+    const s = SQUIRREL_DROP_SPEECHES[Math.floor(Math.random() * SQUIRREL_DROP_SPEECHES.length)];
+    queueSpeechBubble(s, 140);
+  }
+}
+
+function tryClickAcorn(clickX: number, clickY: number): boolean {
+  for (let i = 0; i < acorns.length; i++) {
+    const a = acorns[i];
+    if (!a.active) continue;
+    const dx = clickX - a.x;
+    const dy = clickY - (a.y - 3);
+    // Generous circular hitbox (~6px radius)
+    if (dx * dx + dy * dy < 36) {
+      collectAcorn(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectAcorn(index: number): void {
+  const a = acorns[index];
+  if (!a || !a.active) return;
+  a.active = false;
+  // Immediately remove via fade-out set to fast
+  acorns.splice(index, 1);
+  totalAcornsCollected++;
+
+  playAcornCollectSound();
+
+  // Small sparkle-ish particle burst
+  for (let i = 0; i < 5; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.2;
+    const speed = 0.8 + Math.random() * 1.2;
+    particles.push({
+      x: a.x,
+      y: a.y - 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 40 + Math.floor(Math.random() * 20),
+      maxLife: 60,
+      size: 2 + Math.random() * 1.5,
+      type: "sparkle",
+    });
+  }
+
+  const isBonus = totalAcornsCollected % 10 === 0;
+  if (isBonus) {
+    petHappiness = Math.min(100, petHappiness + 5);
+    totalCarePoints += 2;
+    addFriendshipXP(3);
+    playAcornBonusChime();
+    const s = ACORN_BONUS_SPEECHES[Math.floor(Math.random() * ACORN_BONUS_SPEECHES.length)];
+    queueSpeechBubble(s, 180);
+    // Extra sparkles for the milestone
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.0 + Math.random() * 1.6;
+      particles.push({
+        x: a.x,
+        y: a.y - 4,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 0.4,
+        life: 50 + Math.floor(Math.random() * 30),
+        maxLife: 80,
+        size: 2 + Math.random() * 2,
+        type: "sparkle",
+      });
+    }
+    addDiaryEntry("milestone", "🌰", `Collected ${totalAcornsCollected} acorns total~! My little stash is growing! 🐿️✨`);
+  } else {
+    petHappiness = Math.min(100, petHappiness + 2);
+    totalCarePoints += 1;
+    addFriendshipXP(1);
+    const s = ACORN_COLLECT_SPEECHES[Math.floor(Math.random() * ACORN_COLLECT_SPEECHES.length)];
+    queueSpeechBubble(s, 140);
+  }
+
+  if (!acornFirstCollected) {
+    acornFirstCollected = true;
+    addDiaryEntry("milestone", "🌰", "Picked up my very first acorn~! Left by a tiny squirrel visitor! 🐿️🍂✨");
+  }
+
+  logDailyActivity("squirrel");
+  checkAchievements();
+  saveGame();
+}
+
+function updateSquirrel(): void {
+  // Spawn chance
+  if (!squirrel && canSpawnSquirrel() && Math.random() < 0.0008) {
+    spawnSquirrel();
+  }
+
+  // Update acorns (independent of squirrel — they persist after squirrel leaves)
+  for (let i = acorns.length - 1; i >= 0; i--) {
+    const a = acorns[i];
+    // Drop physics
+    if (a.y < a.groundY) {
+      a.vy += 0.18; // gravity
+      a.y += a.vy;
+      if (a.y >= a.groundY) {
+        a.y = a.groundY;
+        if (a.bounce > 0.25 && Math.abs(a.vy) > 1) {
+          a.vy = -a.vy * 0.4;
+          a.bounce *= 0.5;
+        } else {
+          a.vy = 0;
+          a.bounce = 0;
+        }
+      }
+    }
+    a.sway += 0.04;
+    if (a.fadeIn < 1) a.fadeIn = Math.min(1, a.fadeIn + 1 / ACORN_FADE_IN);
+    a.life--;
+    if (a.life <= 0 || !a.active) {
+      a.fadeOut = Math.max(0, a.fadeOut - 1 / ACORN_FADE_OUT);
+      if (a.fadeOut <= 0) {
+        acorns.splice(i, 1);
+      }
+    } else if (a.life < ACORN_FADE_OUT) {
+      a.fadeOut = a.life / ACORN_FADE_OUT;
+    }
+  }
+
+  if (!squirrel) return;
+  const sq = squirrel;
+  sq.tailSway += 0.15;
+  sq.stateTimer--;
+
+  // Fade-in ramp
+  if (sq.fadeIn < 1) sq.fadeIn = Math.min(1, sq.fadeIn + 1 / SQUIRREL_FADE_IN);
+
+  if (sq.state === "entering") {
+    sq.runPhase += 0.35;
+    // Scamper toward target
+    sq.x += sq.vx;
+    // Occasional scamper tick sound
+    if (Math.floor(sq.runPhase / Math.PI) !== Math.floor((sq.runPhase - 0.35) / Math.PI) && Math.random() < 0.5) {
+      playSquirrelScamperTick();
+    }
+    // Check arrival
+    if ((sq.dir === 1 && sq.x >= sq.targetX) || (sq.dir === -1 && sq.x <= sq.targetX)) {
+      sq.state = "pausing";
+      sq.stateTimer = SQUIRREL_PAUSE_MIN + Math.floor(Math.random() * (SQUIRREL_PAUSE_MAX - SQUIRREL_PAUSE_MIN));
+      sq.vx = 0;
+      if (!squirrelFirstSeen) {
+        squirrelFirstSeen = true;
+        addDiaryEntry("milestone", "🐿️", "A tiny squirrel came to visit~! It looked at me with bright eyes before scampering off! 🐿️🍂");
+      }
+      // Speech when it pauses (first time visible)
+      if (Math.random() < 0.7) {
+        const s = SQUIRREL_SIGHT_SPEECHES[Math.floor(Math.random() * SQUIRREL_SIGHT_SPEECHES.length)];
+        queueSpeechBubble(s, 150);
+      }
+    }
+  } else if (sq.state === "pausing") {
+    // Idle hop — small runPhase motion
+    sq.runPhase += 0.02;
+    if (sq.stateTimer <= 0) {
+      sq.state = "dropping";
+      sq.dropCountdown = 20;
+      sq.stateTimer = 400; // safety
+    }
+  } else if (sq.state === "dropping") {
+    sq.runPhase += 0.04;
+    sq.dropCountdown--;
+    if (sq.dropCountdown <= 0 && sq.acornsToDrop > 0) {
+      dropAcornFromSquirrel(sq);
+      sq.acornsToDrop--;
+      sq.dropCountdown = 22 + Math.floor(Math.random() * 18);
+    }
+    if (sq.acornsToDrop <= 0) {
+      sq.state = "leaving";
+      sq.stateTimer = 600;
+      // Flip direction to head back the way we came
+      sq.dir = (sq.dir * -1) as 1 | -1;
+      sq.vx = sq.dir * SQUIRREL_SPEED;
+    }
+  } else if (sq.state === "leaving") {
+    sq.runPhase += 0.35;
+    sq.x += sq.vx;
+    if (Math.floor(sq.runPhase / Math.PI) !== Math.floor((sq.runPhase - 0.35) / Math.PI) && Math.random() < 0.5) {
+      playSquirrelScamperTick();
+    }
+    // Off-screen check
+    if (sq.x < -20 || sq.x > canvas.width + 20) {
+      sq.fadeOut = Math.max(0, sq.fadeOut - 1 / SQUIRREL_FADE_OUT);
+      if (sq.fadeOut <= 0) {
+        squirrel = null;
+        return;
+      }
+    }
+  }
+
+  // Safety: if the squirrel lingers way too long (e.g. stuck), fade it out
+  if (sq.stateTimer <= 0 && sq.state !== "leaving") {
+    sq.state = "leaving";
+    sq.stateTimer = 600;
+    sq.vx = sq.dir * SQUIRREL_SPEED;
+  }
+
+  // Weather/sleep transitions → fade out early
+  if (isSleeping || currentSeason !== "autumn" || currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy") {
+    sq.state = "leaving";
+    sq.vx = sq.dir * SQUIRREL_SPEED;
+  }
+}
+
+function drawAcorn(a: Acorn): void {
+  const alpha = a.fadeIn * a.fadeOut;
+  if (alpha <= 0.01) return;
+  const swayX = Math.sin(a.sway) * 0.4;
+  const x = a.x + swayX;
+  const y = a.y;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // Ground shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+  ctx.beginPath();
+  ctx.ellipse(x, a.groundY + 1.5, 3.4, 1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(x, y - 3);
+  ctx.rotate(a.spin);
+
+  // Nut body (tan oval)
+  const bodyGrad = ctx.createLinearGradient(-2.5, 0, 2.5, 2.5);
+  bodyGrad.addColorStop(0, "#d8a96a");
+  bodyGrad.addColorStop(0.55, "#b88040");
+  bodyGrad.addColorStop(1, "#8c5a26");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 2.6, 3.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Subtle body highlight
+  ctx.fillStyle = "rgba(255, 240, 210, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(-1, 0.5, 0.8, 1.6, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cap (dark brown dome, slightly wider)
+  const capGrad = ctx.createLinearGradient(-3, -3, 3, 0);
+  capGrad.addColorStop(0, "#6b3a1a");
+  capGrad.addColorStop(1, "#3d2010");
+  ctx.fillStyle = capGrad;
+  ctx.beginPath();
+  ctx.arc(0, -1.3, 3, Math.PI, Math.PI * 2);
+  ctx.lineTo(2.7, -0.7);
+  ctx.lineTo(-2.7, -0.7);
+  ctx.closePath();
+  ctx.fill();
+  // Cap texture — tiny dots
+  ctx.fillStyle = "rgba(255, 220, 180, 0.28)";
+  ctx.beginPath();
+  ctx.arc(-1.3, -2.2, 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0.4, -2.8, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(1.5, -1.9, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny stem on top
+  ctx.strokeStyle = "#3a2210";
+  ctx.lineWidth = 0.6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(0, -3.2);
+  ctx.lineTo(0.3, -4.3);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Gentle hint text above first acorn until first collect
+  if (!acornFirstCollected && a.fadeIn >= 1 && a.life > ACORN_FADE_OUT + 20 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("pick 🌰", x, a.groundY - 10);
+    ctx.restore();
+  }
+}
+
+function drawSquirrel(): void {
+  if (!squirrel) return;
+  const sq = squirrel;
+  const alpha = sq.fadeIn * sq.fadeOut;
+  if (alpha <= 0.01) return;
+
+  // Hop cycle — bounce while moving
+  const isMoving = sq.state === "entering" || sq.state === "leaving";
+  const hopAmp = isMoving ? 1.6 : 0.0;
+  const hop = isMoving ? Math.abs(Math.sin(sq.runPhase)) * hopAmp : Math.sin(sq.runPhase) * 0.4;
+  const bodyX = sq.x;
+  const bodyY = sq.y - hop;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // Ground shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+  ctx.beginPath();
+  ctx.ellipse(bodyX, sq.y + 2, 6 - hop * 0.5, 1.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(bodyX, bodyY);
+  ctx.scale(sq.dir, 1);
+
+  // Fluffy tail — big bushy curl behind the body, sways while paused
+  const tailAngle = sq.state === "pausing" ? Math.sin(sq.tailSway * 0.6) * 0.35 + 0.2 : Math.sin(sq.tailSway * 0.5) * 0.2 + 0.1;
+  ctx.save();
+  ctx.translate(-5, -2);
+  ctx.rotate(tailAngle);
+  // Bushy tail: stacked ovals for fur clumps
+  const tailGrad = ctx.createLinearGradient(-2, 0, 4, 0);
+  tailGrad.addColorStop(0, "#8a5a2b");
+  tailGrad.addColorStop(0.7, "#c9833f");
+  tailGrad.addColorStop(1, "#e8b075");
+  ctx.fillStyle = tailGrad;
+  // Main tail curve
+  ctx.beginPath();
+  ctx.ellipse(0, -3, 2.6, 5.2, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-1.2, -6.5, 2.2, 3.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-2.5, -8.6, 2.0, 2.4, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Fluffy tip highlight
+  ctx.fillStyle = "rgba(255, 235, 200, 0.45)";
+  ctx.beginPath();
+  ctx.ellipse(-2.7, -9.5, 1.2, 1.4, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Back haunch / body
+  const bodyGrad = ctx.createLinearGradient(-4, -5, 6, 4);
+  bodyGrad.addColorStop(0, "#a66a30");
+  bodyGrad.addColorStop(1, "#6b3f18");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(-1, -1, 5, 3.4, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tummy (lighter cream)
+  ctx.fillStyle = "#f2d6a8";
+  ctx.beginPath();
+  ctx.ellipse(1, 1.2, 2.4, 1.6, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = "#a66a30";
+  ctx.beginPath();
+  ctx.ellipse(4, -2.4, 2.6, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Muzzle / cheek
+  ctx.fillStyle = "#f2d6a8";
+  ctx.beginPath();
+  ctx.ellipse(5.2, -1.6, 1.3, 1.0, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears (pointy, tufted)
+  ctx.fillStyle = "#7a4a20";
+  ctx.beginPath();
+  ctx.moveTo(3.4, -4.2);
+  ctx.lineTo(3.1, -5.6);
+  ctx.lineTo(4.3, -4.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(4.8, -4.3);
+  ctx.lineTo(4.9, -5.7);
+  ctx.lineTo(5.7, -4.4);
+  ctx.closePath();
+  ctx.fill();
+  // Inner ear
+  ctx.fillStyle = "#d48a58";
+  ctx.beginPath();
+  ctx.ellipse(3.7, -4.7, 0.3, 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye — big dark shiny
+  ctx.fillStyle = "#1a0e06";
+  ctx.beginPath();
+  ctx.arc(5.1, -2.7, 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  // Eye glint
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(5.3, -2.9, 0.22, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny nose
+  ctx.fillStyle = "#5a2a18";
+  ctx.beginPath();
+  ctx.arc(6.3, -1.8, 0.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Front paws (small, together)
+  ctx.fillStyle = "#5a361a";
+  const pawOffset = isMoving ? Math.sin(sq.runPhase + Math.PI) * 0.8 : 0;
+  ctx.beginPath();
+  ctx.ellipse(3.2, 2.4 + pawOffset, 0.9, 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(4.4, 2.6 - pawOffset, 0.9, 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Back paws — larger
+  ctx.fillStyle = "#4a2a14";
+  const bpawOffset = isMoving ? Math.sin(sq.runPhase) * 0.6 : 0;
+  ctx.beginPath();
+  ctx.ellipse(-2.4, 2.0 + bpawOffset, 1.4, 1.0, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawAcorns(): void {
+  for (const a of acorns) drawAcorn(a);
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -12780,6 +13451,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for acorn pickups before bubbles/drag
+  if (acorns.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickAcorn(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -14518,6 +15198,11 @@ const achievements: Achievement[] = [
     icon: "🍁", unlockMessage: "The leaves scatter at your arrival~! A true autumn acrobat! 🍁🍂✨",
     condition: () => totalLeafPileJumps >= 10, unlocked: false,
   },
+  {
+    id: "acorn_collector", name: "Acorn Collector", description: "Collect 15 acorns from squirrel visitors",
+    icon: "🌰", unlockMessage: "A fine stash of autumn treasures~! The squirrel has blessed your hoard! 🌰🐿️✨",
+    condition: () => totalAcornsCollected >= 15, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -15417,6 +16102,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#b88040";
+  ctx.fillText("ACORNS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌰 ${totalAcornsCollected} picked (${totalSquirrelVisits} squirrels)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -15891,6 +16586,10 @@ interface SaveData {
   totalLeafPileJumps: number;
   totalLeavesScattered: number;
   leafPileFirstJump: boolean;
+  totalAcornsCollected: number;
+  totalSquirrelVisits: number;
+  squirrelFirstSeen: boolean;
+  acornFirstCollected: boolean;
   version: number;
 }
 
@@ -15998,6 +16697,10 @@ function buildSaveData(): SaveData {
     totalLeafPileJumps,
     totalLeavesScattered,
     leafPileFirstJump,
+    totalAcornsCollected,
+    totalSquirrelVisits,
+    squirrelFirstSeen,
+    acornFirstCollected,
     version: 1,
   };
 }
@@ -16387,6 +17090,18 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).leafPileFirstJump === "boolean") {
     leafPileFirstJump = (data as SaveData).leafPileFirstJump;
+  }
+  if (typeof (data as SaveData).totalAcornsCollected === "number") {
+    totalAcornsCollected = (data as SaveData).totalAcornsCollected;
+  }
+  if (typeof (data as SaveData).totalSquirrelVisits === "number") {
+    totalSquirrelVisits = (data as SaveData).totalSquirrelVisits;
+  }
+  if (typeof (data as SaveData).squirrelFirstSeen === "boolean") {
+    squirrelFirstSeen = (data as SaveData).squirrelFirstSeen;
+  }
+  if (typeof (data as SaveData).acornFirstCollected === "boolean") {
+    acornFirstCollected = (data as SaveData).acornFirstCollected;
   }
 
   // Restore diary
@@ -18898,6 +19613,9 @@ function update(): void {
   // Autumn leaf pile update (during autumn daytime/evening)
   updateLeafPile();
 
+  // Autumn squirrel visitor + acorn collection
+  updateSquirrel();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -20059,6 +20777,12 @@ function draw(): void {
 
   // Autumn leaf pile on the ground (drawn behind the pet)
   drawLeafPile();
+
+  // Acorns on the ground (drawn behind the pet, before the squirrel)
+  drawAcorns();
+
+  // Squirrel visitor (drawn behind the pet so it scampers visibly around it)
+  drawSquirrel();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);

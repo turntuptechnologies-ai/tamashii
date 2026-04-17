@@ -3,6 +3,35 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.94.0] — 2026-04-17 — Autumn Squirrel Visitor + Acorns
+
+### Added
+- **Squirrel visitor** — during autumn daytime/evening (any non-precipitating weather), a tiny brown squirrel occasionally scampers in from one edge of the canvas, pauses in view to look around and swish its big fluffy tail, drops a handful of acorns on the ground, then turns and scampers back off the way it came
+- **Hop-cycle scampering** — the squirrel uses a sine-based hop-and-run animation, bouncing up and down while moving; small procedural "pitter-patter" high-pass noise ticks play in rhythm with the hop cycle
+- **Tail swish while paused** — when the squirrel stops in the middle of the canvas, its bushy tri-segment tail gently sways with a slightly bigger amplitude than during running, giving a clear "I'm hanging out" vs "I'm running" contrast
+- **Detailed art** — pointed tufted ears with inner-ear highlight, big dark shiny eye with white glint, tiny dark nose, cream muzzle, warm brown body with cream tummy, separate front paws that alternate during running, and a bushy three-lobed tail with a fluffy cream tip
+- **Directional awareness** — the squirrel is mirrored horizontally based on its current facing direction; on arrival it flips to head back the way it came
+- **2-4 acorns per visit** — during the "dropping" phase the squirrel drops one acorn at a time from behind its body every ~22-40 frames, each with a soft "plop" sound (sine + exponential decay from 220→90Hz)
+- **Acorn drop physics** — each acorn launches up a little, gravity-falls onto the ground with a tiny bounce, and then settles with a gentle sway
+- **Acorn art** — classic cartoon acorn: tan-amber oval nut body with a subtle highlight, a dark-brown dome cap with textured speckles and a tiny dark stem curling up on top, plus a ground-shadow ellipse
+- **Click to collect** — each acorn has a generous circular hitbox; clicking picks it up, plays an ascending bloop (620→980Hz sine), spawns 5 sparkle particles, and rewards +2 happiness / +1 care / +1 friendship XP
+- **Every-10 milestone bonus** — every 10th acorn collected triggers a bigger reward (+5 happiness / +2 care / +3 friendship XP), a soft ascending E-G-B sparkle chime, 10 extra sparkle particles, a milestone diary entry noting the running total, and a special "a fine collection~!" speech
+- **Acorn lifecycle** — acorns fade in over ~20 frames, sit on the ground for ~36 seconds, then fade out over 60 frames if uncollected, so the ground doesn't get cluttered
+- **Up to 10 acorns on ground** — if too many acorns are uncollected, no new squirrel visit spawns until the player picks some up
+- **Speech pools** — 5 sighting speeches ("Look~ a squirrel! 🐿️✨"), 4 drop speeches ("It dropped an acorn~! 🌰"), 6 collect speeches ("An acorn~! Mine! 🌰✨"), and 3 milestone speeches ("Ten acorns! A fine collection~! 🌰✨")
+- **Gentle hint text** — a faint "pick 🌰" label blinks above the first acorn until the player has collected one at least once, then disappears forever
+- **Weather/sleep transitions** — if weather turns bad, the season changes away from autumn, or the pet goes to sleep while a squirrel is mid-visit, the squirrel turns tail and leaves immediately
+- **Dream template** — added "squirrel" to DREAM_TEMPLATES so sleeping after a squirrel encounter yields dreams of "a forest of acorns~", "playing with squirrels~", "a cozy nut stash~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks: "*mumble*... fluffy tail... so soft...", "Zzz... sharing acorns... with friends...", "*snore*... another one... dropped one..."
+- **Contextual dream icons** — dailyActivityLog now recognizes "squirrel" and biases dream icons toward food/heart/flower after acorn collection
+- **First-visit diary milestone** — recorded the first time a squirrel ever visits and also the first time an acorn is picked up, as two separate milestone entries
+- **Acorn Collector achievement** — collect 15 acorns to unlock achievement #69 (🌰)
+- **Stats tracking** — total acorns collected and total squirrel visits displayed in the WEATHER section of the stats panel between LEAF PILES and LIGHTNING BOLTS
+- **Full persistence** — totalAcornsCollected, totalSquirrelVisits, squirrelFirstSeen, and acornFirstCollected saved across sessions
+- **Total achievements: 69**
+
+**Why this feature:** The last several cycles have been heavy on seasonal *environmental* visuals (snowman → campfire → marshmallow → cocoa → wind chime → dandelion → leaf pile). NEXT.md explicitly listed "Acorn collecting — squirrel companion drops acorns that can be collected during autumn" as a candidate, and it's the first chance in a long while to introduce a *new character* — the first since the butterfly companion way back. Unlike the leaf pile, which is a static object that gradually accumulates then bursts on click, the squirrel is a *fleeting visitor* with a clear arc (enter → pause → drop → leave) and acorns are a *collect-before-they-despawn* mechanic. Together with the leaf pile, autumn now has **two complementary interactions**: stationary pile-jumping and fleeting creature-encounters. The every-10 milestone bonus creates a rewarding long-term goal parallel to the per-acorn mini-reward, and the squirrel's brief visits prevent the autumn canvas from feeling too busy. The cute creature rendering (pointed tufted ears, big fluffy tail, hop-cycle scamper) intentionally feels warm and storybook-like, in the same emotional register as the butterfly.
+
 ## [v0.93.0] — 2026-04-17 — Autumn Leaf Pile
 
 ### Added

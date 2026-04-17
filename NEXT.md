@@ -3,27 +3,28 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.93.0 — Autumn Leaf Pile (2026-04-17)
+## Last completed: v0.94.0 — Autumn Squirrel Visitor + Acorns (2026-04-17)
 
 ### What was done
-- Added a **leaf pile** that gradually accumulates on the ground during autumn daytime/evening (any non-precipitating weather). Clicking the pile once it has 6+ leaves triggers a big scatter burst using existing leaf particle physics.
-- Mechanically mirrors the dandelion: gradual growth → click → burst. But emotionally opposite: dandelion is airy/wistful, leaf pile is heavy/crunchy/exuberant.
-- Completes the four-season weather-visual arc: **winter** (snowman/campfire cluster), **windy** (wind chime), **sunny spring/summer daytime** (dandelion), **autumn** (leaf pile).
-- Windy weather speeds pile growth ~55% — creates a subtle link to the wind chime feature.
-- 26-leaf capacity, 6 autumn colors, tiered pyramid layering, squash animation on jump, crunchy high-pass noise with intensity scaled by pile size.
-- Achievement #68 "Leaf Jumper" for 10 jumps.
-- Total achievements: 68.
-- Renderer grew to ~20,935 lines (+~370 lines for the feature).
+- Added a **visiting squirrel character** that scampers in from one side of the canvas during autumn daytime/evening, pauses to swish its tail, drops 2-4 acorns, then scampers back off the way it came.
+- Added **collectable acorns** — each dropped acorn sits on the ground for ~36 seconds. Click to pick it up for +2 happy / +1 care / +1 XP, with sparkle particles and a cute ascending bloop sound. Every 10th acorn triggers a bigger milestone reward: +5 happy / +2 care / +3 XP, a special E-G-B chime, extra sparkles, and a diary milestone.
+- This is the **first new character** since the butterfly companion — a fleeting visitor, distinct from the static leaf pile. Autumn now has two complementary interactions.
+- Achievement #69 "Acorn Collector" for 15 acorns.
+- Total achievements: 69.
+- Renderer grew to ~21,488 lines (+~550 lines).
 
 ### Thoughts for next cycle
-- **Pet leaps into the pile visual** — currently the pet doesn't physically animate when the leaves scatter. Could hook into the bounce/squish system so the pet does a little hop-and-land during the burst, syncing with the squash animation.
-- **Mushroom ring** — tiny ring of mushrooms that sprouts in autumn/morning, click individual caps for a "poof" of spore particles. Fits the autumn theme, different micro-interaction from the pile.
-- **Raking animation** — mini-game where the player swipes or clicks to rake scattered leaves back into the pile. Extends the leaf pile.
-- **S'mores combo** — still pending from v0.89's marshmallow cycle: 3 perfect marshmallow roasts → unlock a s'more treat (graham+chocolate+marshmallow) the next time cocoa spawns.
-- **Pet approaches campfire / leaf pile** — pet walks toward interactive objects and sits closer to them.
-- **Dandelion chain reaction** — blowing one dandelion could faintly puff a nearby one with small probability.
-- **Butterfly lands on dandelion or leaf pile** — existing butterfly companion could alight briefly for speech/affection boost.
-- **Seasonal festivals** — harvest moon in autumn (already have autumn now, could add a glowing full moon event), winter solstice, spring equinox, summer solstice with unique decorations.
+- **Pet chases the squirrel** — when the squirrel appears, the pet could walk/scamper toward it (a short burst of wander-behavior override) and the squirrel could react to pet proximity (flinch / dart further).
+- **Squirrel steals/retrieves an acorn** — small chance the squirrel briefly sniffs a leftover acorn and snatches it back, creating friendly rivalry.
+- **Butterfly lands on squirrel's tail** — cross-feature interaction — briefly, the butterfly rests on the squirrel's tail while it pauses.
+- **Acorn inventory screen** — a little hoard view showing the total acorn count with a basket visual, maybe accessed from the stats panel.
+- **Hedgehog visitor for winter** — a second small visitor in winter season, paralleling the squirrel. Rolls up/unrolls, leaves tiny pinecones.
+- **Mushroom ring** — from previous NEXT.md, still pending. Autumn/morning feature, click caps for a spore poof.
+- **Raking animation / clean-up** — extends the leaf pile concept with a way to rake scattered leaves back.
+- **S'mores combo** — still pending from the marshmallow cycle: 3 perfect roasts → unlock a s'more treat the next time cocoa spawns.
+- **Pet approaches campfire / leaf pile / squirrel** — pet walks toward interactive objects and sits closer to them.
+- **Harvest moon festival** — special autumn-night event: oversized orange moon, lantern glows around the edges, unique mooncake item.
+- **Seasonal festivals** — winter solstice, spring equinox, summer solstice with unique decorations.
 - **Wind streaks on the chime** — faint horizontal wind-streak particles from the chime's sail during gusts.
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head at night.
 - **Constellation lore** — clicking a completed constellation shows a short mythical story overlay.
@@ -39,27 +40,25 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Dream diary** — a separate section in the diary recording dream captions from each night.
 - **Lucid dreaming** — rare event where clicking a dream scene triggers a mini dream interaction.
 - **Winter tea party variant** — tea ceremony that happens during snowy weather.
-- **Acorn collecting** — squirrel companion drops acorns that can be collected during autumn.
 
 ### Current architecture notes
-- Renderer is now ~20,935 lines.
-- Leaf pile feature lives immediately after the Dandelion block and before `WEATHER_CHANGE_MIN` (starts around line 9990 in the post-dandelion region).
-- `LeafPile` + `LeafPileLeaf` interfaces. `LeafPile` has `x, y, leaves[], capacity, growTimer, fadeIn, fadeOut, active, jumpAnim, sway`. `LeafPileLeaf` has `offsetX, offsetY, tilt, colorIndex, size`.
-- Key functions: `spawnLeafPile()`, `addLeafToPile()`, `jumpOnLeafPile(pile, clickX)`, `tryClickLeafPile(clickX, clickY)`, `updateLeafPile()`, `drawLeafPile()`, `drawLeafPileLeaf()`, `canSpawnLeafPile()`, `playLeafPileJumpSound(leafCount)`.
-- Only one leaf pile exists at a time (single-instance, stored as `leafPile: LeafPile | null`).
-- Spawn condition: `autumn && (morning||afternoon||evening) && (!stormy && !rainy && !snowy) && !isSleeping`. Random chance per frame while no pile exists: 0.002.
-- Position: groundY = `canvas.height / 2 + 50 + rand(0-8)`. x = canvas center ± (22-30% of width), 60% biased to left side.
-- Growth timer: 180-360 frames, multiplied by 0.55 during windy. Capacity = 26 leaves.
-- Leaf layout: tiered (4 per tier). Tier width narrows by ~3px per tier so it forms a rough pyramid.
-- Click hit box: elliptical, 22px wide, height = 6 + tierCount * 3.
-- Minimum 6 leaves required to be jumpable.
-- Jump scatter: every pile leaf becomes a "leaf" type particle + 6-10 bonus particles. Physics uses existing `type === "leaf"` particle handling (tumbling, gentle gravity, gusts).
-- Sound: `playLeafPileJumpSound(leafCount)` — high-pass-filtered (1800Hz) noise with occasional crunch spikes, duration 0.35s + leafCount*0.02 (capped at 0.8s).
-- Rendering order: leaf pile drawn **behind pet** (right after dandelions, before toy). Particles are drawn in the main particle pass (above pet).
-- Click routing: inserted immediately after `tryClickDandelion` in the event handler.
-- `logDailyActivity("leafpile")` called on each jump; `getContextualDreamIcons()` biases toward flower+heart+star icons when this activity is logged.
-- Save version still 1; added fields: `totalLeafPileJumps`, `totalLeavesScattered`, `leafPileFirstJump`.
-- Total achievements: 68.
-- dailyActivityLog now tracks 21 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile.
-- Dream templates + sleep-talks extended to include "leafpile".
-- Stats panel WEATHER section now shows leaf pile stats between DANDELIONS and LIGHTNING BOLTS entries.
+- Renderer is now ~21,488 lines.
+- Squirrel + acorn feature lives immediately after the Leaf Pile block and before `WEATHER_CHANGE_MIN` (starts around line 10371, just after the `drawLeafPile()` closing brace).
+- `Squirrel` + `Acorn` interfaces. `Squirrel` has `x, y, vx, dir, state, stateTimer, targetX, runPhase, tailSway, dropCountdown, acornsToDrop, fadeIn, fadeOut, visible`. `Acorn` has `x, y, groundY, vy, bounce, spin, life, fadeIn, fadeOut, active, sway`.
+- Only one squirrel exists at a time (single-instance, `squirrel: Squirrel | null = null`). Up to 10 acorns on the ground at once.
+- Spawn condition: `autumn && (morning||afternoon||evening) && (not stormy/rainy/snowy) && !isSleeping && acorns.length < 10 && !squirrel`. Random chance per frame: 0.0008 (less frequent than leafpile).
+- Key functions: `spawnSquirrel()`, `dropAcornFromSquirrel(sq)`, `tryClickAcorn(clickX, clickY)`, `collectAcorn(index)`, `updateSquirrel()` (handles both squirrel AND acorn updates), `drawSquirrel()`, `drawAcorn(a)`, `drawAcorns()`, `canSpawnSquirrel()`, `playAcornDropSound()`, `playAcornCollectSound()`, `playAcornBonusChime()`, `playSquirrelScamperTick()`.
+- Squirrel states: `entering` → `pausing` → `dropping` → `leaving`. Dropping handles one acorn at a time with a countdown timer between drops.
+- Scamper speed: 1.6 px/frame. Pause duration: 120-220 frames (2-3.7s).
+- Acorn drop spawns slightly behind the squirrel's facing direction. Falls with gravity (0.18/frame²), bounces once if impact velocity is high.
+- Acorn lifecycle: fadeIn (20f) → 2200 frames life → fadeOut (60f) when uncollected, or immediate removal on click with sparkle particle burst.
+- Click hit box on acorn: 6px-radius circular (dx² + dy² < 36).
+- Click routing: inserted immediately after `tryClickLeafPile` in the event handler.
+- Rendering order: `drawLeafPile()` → `drawAcorns()` → `drawSquirrel()` → `drawToy(cx, cy)`. Both squirrel and acorns drawn **behind pet**.
+- `logDailyActivity("squirrel")` called on each acorn collect; `getContextualDreamIcons()` biases toward food/heart/flower icons when this activity is logged.
+- Save version still 1; added fields: `totalAcornsCollected`, `totalSquirrelVisits`, `squirrelFirstSeen`, `acornFirstCollected`.
+- Total achievements: 69.
+- dailyActivityLog now tracks 22 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile, squirrel.
+- Dream templates + sleep-talks extended to include "squirrel".
+- Stats panel WEATHER section now shows acorn stats between LEAF PILES and LIGHTNING BOLTS entries.
+- Two diary milestones per player: first squirrel visit (🐿️) and first acorn collected (🌰).
