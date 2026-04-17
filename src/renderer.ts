@@ -427,6 +427,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "marshmallow", icons: [["star", "heart", "star"], ["food", "star", "food"]], captions: ["golden marshmallows~", "sticky sweet dreams~", "roasting with friends~"] },
   { activity: "cocoa", icons: [["heart", "food", "heart"], ["food", "flower", "heart"]], captions: ["a river of cocoa~", "chocolate clouds~", "warm mugs forever~"] },
   { activity: "chime", icons: [["star", "music", "star"], ["music", "heart", "music"]], captions: ["a wind-bell melody~", "singing breeze~", "tinkling lullaby~"] },
+  { activity: "dandelion", icons: [["flower", "star", "flower"], ["flower", "heart", "butterfly"]], captions: ["a meadow of wishes~", "seeds floating on dreams~", "a thousand little hopes~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -521,6 +522,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... tinkle tinkle... pretty song...",
     "Zzz... the wind is singing... la la...",
     "*snore*... bells in the breeze... mmm...",
+  ],
+  dandelion: [
+    "*mumble*... one... more... wish...",
+    "Zzz... seeds flying... so high...",
+    "*snore*... pfft... so fluffy...",
   ],
 };
 
@@ -3568,6 +3574,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("music")) contextIcons.push("music", "music");
   if (dailyActivityLog.includes("photo")) contextIcons.push("flower", "butterfly");
   if (dailyActivityLog.includes("fireflies")) contextIcons.push("star", "moon", "butterfly");
+  if (dailyActivityLog.includes("dandelion")) contextIcons.push("flower", "butterfly", "flower");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -9518,6 +9525,468 @@ function drawWindChime(): void {
   ctx.restore();
 }
 
+// --- Dandelion Puff ---
+// During sunny (or lightly cloudy) daytime in spring or summer, little dandelions sprout on the
+// ground. They start as a young yellow flower, ripen into a white fluffy puff, and invite you to
+// click and blow the seeds away. Each puff occasionally carries a wish, continuing the wishing
+// lineage established by shooting stars — but gentle and daytime-friendly.
+interface DandelionSeed {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  rotation: number;
+  rotSpeed: number;
+  wobblePhase: number;
+}
+
+type DandelionStage = "young" | "puff" | "puffed";
+
+interface Dandelion {
+  x: number;
+  y: number;
+  stage: DandelionStage;
+  age: number;             // frames alive
+  ripenAt: number;          // frames until young → puff transition
+  fadeIn: number;           // 0→1 on spawn
+  fadeOut: number;          // 1→0 on despawn
+  active: boolean;          // false while fading out
+  sway: number;             // phase for gentle stem sway
+}
+
+const dandelions: Dandelion[] = [];
+const dandelionSeeds: DandelionSeed[] = [];
+let totalDandelionsPuffed = 0;
+let totalDandelionWishes = 0;
+let dandelionFirstPuff = false;
+const DANDELION_MAX = 2;
+const DANDELION_FADE_IN = 60;
+const DANDELION_FADE_OUT = 90;
+const DANDELION_RIPEN_MIN = 420;  // ~7s youth
+const DANDELION_RIPEN_MAX = 900;  // ~15s youth
+const DANDELION_IDLE_LIFETIME = 3600; // ~60s before an un-puffed puff fades away
+
+const DANDELION_PUFF_SPEECHES = [
+  "Pffft~ make a wish! 🌼✨",
+  "Whooooo~ look at them fly! 🌱💨",
+  "Off to wishland~! 🌬️✨",
+  "Seed confetti! 🎉🌼",
+  "Tell the breeze our secret~ 💭",
+  "Wheee~ dandelion fluff! 🌼",
+  "Bye-bye little seeds~ 💫",
+  "Every one is a wish~! 🌼💖",
+];
+
+const DANDELION_WISHES = [
+  "I wish for endless snacks~! 🍪",
+  "I wish every day was sunny~! ☀️",
+  "I wish we could fly together~! 🕊️",
+  "I wish for the softest bed~! 🛏️",
+  "I wish for bigger dreams~! 💭",
+  "I wish you'd stay forever~! 💖",
+  "I wish for a rainbow tomorrow~! 🌈",
+  "I wish the flowers sang for us~! 🌸🎶",
+];
+
+function playDandelionPuffSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Breathy "pfft" — short filtered noise burst
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.5), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.16));
+    data[i] = (Math.random() * 2 - 1) * env * 0.6;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 900;
+  filter.Q.value = 1.4;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.16, t + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.5);
+}
+
+function playDandelionWishChime(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft ascending magical chime — D5 A5 F#6
+  const notes = [587, 880, 1480];
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.03, t);
+  master.connect(audioCtx.destination);
+  notes.forEach((freq, i) => {
+    const start = t + 0.15 + i * 0.12;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.8, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.9);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + 1.0);
+  });
+}
+
+function canSpawnDandelion(): boolean {
+  const isDayHours = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon";
+  const goodWeather = currentWeather === "sunny" || currentWeather === "cloudy";
+  const goodSeason = currentSeason === "spring" || currentSeason === "summer";
+  return isDayHours && goodWeather && goodSeason && !isSleeping;
+}
+
+function spawnDandelion(): void {
+  if (dandelions.length >= DANDELION_MAX) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 48 + Math.random() * 10;
+  // Spawn to either side of pet center, but not directly beneath
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const offset = w * 0.18 + Math.random() * w * 0.18;
+  const sx = (w / 2) + side * offset;
+  // Reject positions that overlap an existing dandelion
+  for (const existing of dandelions) {
+    if (Math.abs(existing.x - sx) < 28) return;
+  }
+  dandelions.push({
+    x: Math.max(28, Math.min(w - 28, sx)),
+    y: groundY,
+    stage: "young",
+    age: 0,
+    ripenAt: DANDELION_RIPEN_MIN + Math.floor(Math.random() * (DANDELION_RIPEN_MAX - DANDELION_RIPEN_MIN)),
+    fadeIn: 0,
+    fadeOut: 1,
+    active: true,
+    sway: Math.random() * Math.PI * 2,
+  });
+}
+
+function blowDandelion(d: Dandelion, clickX: number): void {
+  if (d.stage !== "puff") return;
+  // Seed count scales with a little randomness — fluffier puffs send more seeds
+  const count = 22 + Math.floor(Math.random() * 10);
+  // If windy weather is active, seeds carry further in a consistent direction
+  const windBias = currentWeather === "windy" ? (Math.random() < 0.5 ? -1 : 1) * 1.8 : 0;
+  // Blow direction: roughly away from where the player clicked
+  const blowDir = clickX < d.x ? 1 : -1;
+  const hx = d.x;
+  const hy = d.y - 20;
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.85;
+    const speed = 0.9 + Math.random() * 1.6;
+    dandelionSeeds.push({
+      x: hx + (Math.random() - 0.5) * 6,
+      y: hy + (Math.random() - 0.5) * 3,
+      vx: Math.cos(angle) * speed * blowDir + windBias * 0.25 + (Math.random() - 0.5) * 0.4,
+      vy: Math.sin(angle) * speed - 0.4,
+      life: 0,
+      maxLife: 220 + Math.floor(Math.random() * 140),
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.04,
+      wobblePhase: Math.random() * Math.PI * 2,
+    });
+  }
+  d.stage = "puffed";
+  d.active = false;
+  // Let fadeOut decay from 1 over ~90 frames (already `active=false` triggers the decay below)
+
+  totalDandelionsPuffed++;
+  playDandelionPuffSound();
+
+  // Rewards
+  petHappiness = Math.min(100, petHappiness + 2);
+  totalCarePoints += 1;
+  addFriendshipXP(1);
+
+  // 25% chance to trigger a wish — extra rewards
+  const gotWish = Math.random() < 0.25;
+  if (gotWish) {
+    totalDandelionWishes++;
+    setTimeout(() => playDandelionWishChime(), 120);
+    const wish = DANDELION_WISHES[Math.floor(Math.random() * DANDELION_WISHES.length)];
+    queueSpeechBubble(wish, 180);
+    petHappiness = Math.min(100, petHappiness + 3);
+    addFriendshipXP(2);
+  } else {
+    const speech = DANDELION_PUFF_SPEECHES[Math.floor(Math.random() * DANDELION_PUFF_SPEECHES.length)];
+    queueSpeechBubble(speech, 140);
+  }
+
+  if (!dandelionFirstPuff) {
+    dandelionFirstPuff = true;
+    addDiaryEntry("milestone", "🌼", `Blew the seeds off my very first dandelion~! ${gotWish ? "And the wind carried a wish with them! 🌬️✨" : "So many little wishes floating away! 🌬️🌼"}`);
+  }
+
+  logDailyActivity("dandelion");
+  checkAchievements();
+  saveGame();
+}
+
+function tryClickDandelion(clickX: number, clickY: number): boolean {
+  for (const d of dandelions) {
+    if (!d.active || d.stage !== "puff") continue;
+    const hx = d.x + Math.sin(d.sway) * 1.5;
+    const hy = d.y - 20;
+    const dx = clickX - hx;
+    const dy = clickY - hy;
+    if (dx * dx + dy * dy < 14 * 14) {
+      blowDandelion(d, clickX);
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateDandelions(): void {
+  const ok = canSpawnDandelion();
+  // Spawn new dandelions occasionally when conditions allow
+  if (ok && dandelions.length < DANDELION_MAX && Math.random() < 0.0018) {
+    spawnDandelion();
+  }
+
+  for (let i = dandelions.length - 1; i >= 0; i--) {
+    const d = dandelions[i];
+    d.age++;
+    d.sway += 0.025;
+
+    // Fade-in while active
+    if (d.active && d.fadeIn < 1) {
+      d.fadeIn = Math.min(1, d.fadeIn + 1 / DANDELION_FADE_IN);
+    }
+
+    // Ripen from young flower to puff
+    if (d.active && d.stage === "young" && d.age >= d.ripenAt) {
+      d.stage = "puff";
+    }
+
+    // Auto-despawn if puff sits around un-clicked for too long
+    if (d.active && d.stage === "puff" && d.age >= d.ripenAt + DANDELION_IDLE_LIFETIME) {
+      d.active = false;
+    }
+
+    // If weather turns unfavorable, begin gentle retreat
+    if (!ok && d.active) {
+      d.active = false;
+    }
+
+    // Fade out and remove
+    if (!d.active) {
+      d.fadeOut = Math.max(0, d.fadeOut - 1 / DANDELION_FADE_OUT);
+      if (d.fadeOut <= 0) {
+        dandelions.splice(i, 1);
+      }
+    }
+  }
+
+  // Update seed particles
+  for (let i = dandelionSeeds.length - 1; i >= 0; i--) {
+    const s = dandelionSeeds[i];
+    s.life++;
+    s.wobblePhase += 0.08;
+    // Wobble-drift gives the seeds an airy, chaotic flight pattern
+    s.vx += Math.sin(s.wobblePhase) * 0.015;
+    s.vy += 0.004;  // very slight gravity (parachute effect)
+    s.vy *= 0.996;
+    s.vx *= 0.998;
+    s.x += s.vx;
+    s.y += s.vy;
+    s.rotation += s.rotSpeed;
+    if (s.life > s.maxLife || s.y > canvas.height + 14 || s.x < -14 || s.x > canvas.width + 14) {
+      dandelionSeeds.splice(i, 1);
+    }
+  }
+}
+
+function drawDandelion(d: Dandelion): void {
+  const alpha = d.fadeIn * d.fadeOut;
+  if (alpha <= 0.01) return;
+  const stemLen = 20;
+  const headY = d.y - stemLen;
+  const swayX = Math.sin(d.sway) * 1.5;
+  const hx = d.x + swayX;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Shadow under the base
+  ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + 1.5, 6, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Stem — slightly curves with sway
+  ctx.strokeStyle = "#6ea05a";
+  ctx.lineWidth = 1.3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(d.x, d.y);
+  ctx.quadraticCurveTo(d.x + swayX * 0.5, d.y - stemLen * 0.5, hx, headY);
+  ctx.stroke();
+
+  // Two jagged leaves near the base
+  ctx.fillStyle = "#6aa052";
+  ctx.beginPath();
+  ctx.moveTo(d.x - 1, d.y - 3);
+  ctx.quadraticCurveTo(d.x - 6, d.y - 7, d.x - 9, d.y - 2);
+  ctx.quadraticCurveTo(d.x - 6, d.y - 1, d.x - 1, d.y - 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(d.x + 1, d.y - 5);
+  ctx.quadraticCurveTo(d.x + 5, d.y - 9, d.x + 8, d.y - 4);
+  ctx.quadraticCurveTo(d.x + 5, d.y - 2, d.x + 1, d.y - 3);
+  ctx.closePath();
+  ctx.fill();
+  // Leaf midribs
+  ctx.strokeStyle = "rgba(70, 110, 60, 0.6)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(d.x - 1, d.y - 2);
+  ctx.lineTo(d.x - 7, d.y - 4);
+  ctx.moveTo(d.x + 1, d.y - 4);
+  ctx.lineTo(d.x + 6, d.y - 6);
+  ctx.stroke();
+
+  if (d.stage === "young") {
+    // Yellow flower — overlapping petal ellipses arranged radially
+    const petalCount = 14;
+    const outerR = 5.2;
+    ctx.fillStyle = "#f3c73a";
+    for (let k = 0; k < petalCount; k++) {
+      const a = (k / petalCount) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.ellipse(hx + Math.cos(a) * (outerR - 1.2), headY + Math.sin(a) * (outerR - 1.2), 1.4, 2.4, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Inner disc
+    ctx.fillStyle = "#d8a024";
+    ctx.beginPath();
+    ctx.arc(hx, headY, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight dot
+    ctx.fillStyle = "rgba(255, 240, 180, 0.6)";
+    ctx.beginPath();
+    ctx.arc(hx - 0.8, headY - 0.8, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (d.stage === "puff") {
+    // White fluffy puff — soft halo plus radial pappus fibers
+    const puffR = 8;
+    const grad = ctx.createRadialGradient(hx, headY, 0, hx, headY, puffR + 2);
+    grad.addColorStop(0, "rgba(255, 255, 255, 0.92)");
+    grad.addColorStop(0.7, "rgba(250, 250, 250, 0.55)");
+    grad.addColorStop(1, "rgba(240, 240, 240, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(hx, headY, puffR + 2, 0, Math.PI * 2);
+    ctx.fill();
+    // Radial fibers
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.lineWidth = 0.5;
+    const fibers = 28;
+    for (let k = 0; k < fibers; k++) {
+      const a = (k / fibers) * Math.PI * 2 + Math.sin(d.sway + k * 0.5) * 0.05;
+      const r1 = 1.5;
+      const r2 = puffR;
+      ctx.beginPath();
+      ctx.moveTo(hx + Math.cos(a) * r1, headY + Math.sin(a) * r1);
+      ctx.lineTo(hx + Math.cos(a) * r2, headY + Math.sin(a) * r2);
+      ctx.stroke();
+      // Tip fluff dot
+      ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+      ctx.beginPath();
+      ctx.arc(hx + Math.cos(a) * r2, headY + Math.sin(a) * r2, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Central seed head
+    ctx.fillStyle = "#b08d64";
+    ctx.beginPath();
+    ctx.arc(hx, headY, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Gentle hint text above the first un-touched dandelion
+    if (!dandelionFirstPuff && d.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.font = "7px monospace";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.fillText("puff 🌼", hx, headY - puffR - 4);
+      ctx.restore();
+    }
+  } else {
+    // Puffed — empty receptacle only
+    ctx.fillStyle = "#a07850";
+    ctx.beginPath();
+    ctx.arc(hx, headY, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDandelions(): void {
+  for (const d of dandelions) {
+    drawDandelion(d);
+  }
+}
+
+function drawDandelionSeed(s: DandelionSeed): void {
+  const t = s.life / s.maxLife;
+  const alpha = t < 0.85 ? 1 : Math.max(0, 1 - (t - 0.85) / 0.15);
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(s.rotation);
+  ctx.globalAlpha = alpha * 0.9;
+  // Pappus — radial fibers
+  ctx.strokeStyle = "rgba(250, 250, 250, 0.85)";
+  ctx.lineWidth = 0.6;
+  const spokes = 7;
+  for (let k = 0; k < spokes; k++) {
+    const a = (k / spokes) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a) * 3.5, Math.sin(a) * 3.5);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 3.5, Math.sin(a) * 3.5, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Short thread from pappus down to seed body
+  ctx.strokeStyle = "rgba(200, 180, 140, 0.85)";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 4);
+  ctx.stroke();
+  // Seed body — tiny brown oval
+  ctx.fillStyle = "rgba(130, 100, 70, 0.95)";
+  ctx.beginPath();
+  ctx.ellipse(0, 4.3, 0.8, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDandelionSeeds(): void {
+  for (const s of dandelionSeeds) {
+    drawDandelionSeed(s);
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -11922,6 +12391,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for dandelion puffs before bubbles/drag
+  if (dandelions.length > 0) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickDandelion(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -13650,6 +14128,11 @@ const achievements: Achievement[] = [
     icon: "🎐", unlockMessage: "The wind chimes sing your name~! A keeper of the breeze! 🎐🌬️✨",
     condition: () => totalChimeTaps >= 15, unlocked: false,
   },
+  {
+    id: "dandelion_wisher", name: "Dandelion Wisher", description: "Puff 10 dandelions into the wind",
+    icon: "🌼", unlockMessage: "Every seed carried a wish~! The meadow blooms with hope! 🌼🌬️✨",
+    condition: () => totalDandelionsPuffed >= 10, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -14529,6 +15012,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#f3c73a";
+  ctx.fillText("DANDELIONS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌼 ${totalDandelionsPuffed} puffed (${totalDandelionWishes} wishes)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -14997,6 +15490,9 @@ interface SaveData {
   totalChimeTaps: number;
   totalChimeSessions: number;
   chimeFirstTouched: boolean;
+  totalDandelionsPuffed: number;
+  totalDandelionWishes: number;
+  dandelionFirstPuff: boolean;
   version: number;
 }
 
@@ -15098,6 +15594,9 @@ function buildSaveData(): SaveData {
     totalChimeTaps,
     totalChimeSessions,
     chimeFirstTouched,
+    totalDandelionsPuffed,
+    totalDandelionWishes,
+    dandelionFirstPuff,
     version: 1,
   };
 }
@@ -15469,6 +15968,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).chimeFirstTouched === "boolean") {
     chimeFirstTouched = (data as SaveData).chimeFirstTouched;
+  }
+  if (typeof (data as SaveData).totalDandelionsPuffed === "number") {
+    totalDandelionsPuffed = (data as SaveData).totalDandelionsPuffed;
+  }
+  if (typeof (data as SaveData).totalDandelionWishes === "number") {
+    totalDandelionWishes = (data as SaveData).totalDandelionWishes;
+  }
+  if (typeof (data as SaveData).dandelionFirstPuff === "boolean") {
+    dandelionFirstPuff = (data as SaveData).dandelionFirstPuff;
   }
 
   // Restore diary
@@ -17974,6 +18482,9 @@ function update(): void {
   // Wind chimes update (during windy weather)
   updateWindChime();
 
+  // Dandelion puff update (during sunny daytime in spring/summer)
+  updateDandelions();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -19130,6 +19641,9 @@ function draw(): void {
   // Wind chimes hanging from the top during windy weather (drawn behind the pet)
   drawWindChime();
 
+  // Dandelions on the ground (drawn behind the pet)
+  drawDandelions();
+
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
 
@@ -19385,6 +19899,9 @@ function draw(): void {
 
   // Morning dew drops (ground-level, above particles)
   drawDewDrops();
+
+  // Dandelion seeds floating through the air (above everything ground-level)
+  drawDandelionSeeds();
 
   // Message in a bottle (ground-level, drifting)
   drawMessageBottle();

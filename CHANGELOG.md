@@ -3,6 +3,33 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.92.0] — 2026-04-17 — Dandelion Puff
+
+### Added
+- **Dandelions on the ground** — during sunny (or lightly cloudy) daytime in spring or summer, small dandelions sprout on the ground beside the pet. Up to 2 at a time, positioned to the left and right of center so they don't obscure anything.
+- **Two-stage life cycle** — each dandelion starts as a **young yellow flower** with 14 radial petals and an amber-brown inner disc, then after ~7-15 seconds ripens into a **white fluffy seed puff** with 28 radial pappus fibers, a soft radial halo gradient, and a central brown seed head
+- **Click to puff** — clicking a ripe puff releases **22-32 seed particles** that drift up and outward on tiny wobble-drift physics (parachute-like slight gravity, sine-wave wind wobble, gentle rotation). The blow direction skews away from where you clicked (click the left side → seeds blow right and vice versa) so it feels physical
+- **Wind-aware seeds** — if the weather is windy, seed particles inherit a strong directional bias so the whole cloud streams across the canvas instead of just dispersing
+- **Realistic dandelion seeds** — each seed is drawn as a 7-spoke radial pappus (fluff) with tiny white dots at the fiber tips, a short thread down to a small brown seed body
+- **Breathy puff sound** — procedural bandpass-filtered noise burst (~0.5s) when you blow a dandelion, mimicking a soft "pfft"
+- **Wish chance** — 25% of puffs trigger a **granted wish**: a soft ascending magical chime (D5→A5→F#6) plays shortly after the puff, a themed wish speech appears ("I wish for endless snacks~!", "I wish we could fly together~!"), and you get +3 bonus happiness + 2 bonus friendship XP on top of the normal reward
+- **Regular rewards** — each puff: +2 happiness, +1 care point, +1 friendship XP; wish puffs add +3 happiness, +2 friendship XP, and increment a separate wish counter
+- **7 puff speeches + 8 wish messages** — contextual reactions like "Pffft~ make a wish! 🌼✨", "Off to wishland~! 🌬️✨", "Tell the breeze our secret~ 💭"
+- **Gentle stem sway** — the stem and flower head gently wobble left-to-right with a quadratic bezier curve, giving the dandelion a soft wind-in-the-meadow feel
+- **Two jagged leaves** — each dandelion has hand-drawn jagged base leaves with subtle midrib strokes for botanical detail
+- **Graceful weather/time transitions** — dandelions fade in over 60 frames when they spawn, ripen smoothly, and fade out over 90 frames when weather turns bad, night falls, or the pet goes to sleep. Un-puffed puffs naturally despawn after ~60 seconds so the meadow stays fresh
+- **Gentle hint** — a faint "puff 🌼" text blinks above the first ripe dandelion until it's been puffed at least once, then disappears forever
+- **Contextual speech + first-puff diary entry** — the first time you blow a dandelion, a milestone diary entry records whether it carried a wish or just sparkles
+- **Dream template** — added "dandelion" to DREAM_TEMPLATES so sleeping after puffing yields dreams of "a meadow of wishes~", "seeds floating on dreams~", "a thousand little hopes~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks for dandelion: "*mumble*... one... more... wish...", "Zzz... seeds flying... so high...", "*snore*... pfft... so fluffy..."
+- **Contextual dream icons** — dailyActivityLog now recognizes "dandelion" and biases dream icons toward flowers + butterflies when the pet sleeps after a puff session
+- **Dandelion Wisher achievement** — puff 10 dandelions to unlock achievement #67 (🌼)
+- **Stats tracking** — total dandelions puffed and total wishes granted displayed in the WEATHER section of the stats panel
+- **Full persistence** — totalDandelionsPuffed, totalDandelionWishes, and dandelionFirstPuff saved across sessions
+- **Total achievements: 67**
+
+**Why this feature:** The wind chime from v0.91 gave windy weather a visible, interactive personality. That felt like an invitation to do the same for **sunny spring/summer daytime**, which has been the "default" weather with no dedicated interactive element — a whole season's worth of days where the canvas just sat under a quiet sun. Dandelions are the perfect answer: they're a classic symbol of outdoor childhood wonder, they blend interactive play (click → puff) with ambient meditation (watching the seeds drift), and they continue the app's **wishing lineage** — shooting-star wishes at night, now dandelion wishes in the daytime. The 25% wish rate means each puff is a small gamble: mostly just a pretty sight, but occasionally a secret granted. The seed particles drift slowly enough to watch without being visually noisy, and the wind-aware flight physics means windy days produce noticeably different, more dramatic puffs. NEXT.md had this under "seasonal weather visuals beyond chimes" — specifically mentioning dandelion puffs during sunny spring daytime as a natural next step after the wind chime.
+
 ## [v0.91.0] — 2026-04-17 — Visual Wind Chimes 🧬 Mutation
 
 ### Added
