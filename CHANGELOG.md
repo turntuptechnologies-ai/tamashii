@@ -3,6 +3,32 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.96.0] — 2026-04-18 — Fairy Visitor
+
+### Added
+- **Fairy sprite visitor** — when a fairy ring is completed, a tiny glowing fairy now rises out of the ring and dances above it as the magical reward payoff. She spawns ~30 frames after the completion chime, fades in over 60 frames, and dances for up to 12 seconds before drifting politely up and away.
+- **Figure-8 flight pattern** — the fairy flies a Lissajous figure-8 orbit (ampX 14 × ampY 6) centered ~22 px above the ring. Her phase progresses at 0.035 rad/frame, tracing a gentle looping dance that reads as weightless and otherworldly. She mirrors her sprite based on horizontal motion direction so she always "faces" where she's flying.
+- **Rapid wing flap** — two pairs of translucent shimmery wings (back-pair behind body, front-pair in front) flutter at ~0.55 rad/frame. Wing spread lerps between 0.45x and 1.3x based on `|sin(wingPhase)|` for a real insect-wing flutter cadence.
+- **Tiny storybook art** — golden-haired fairy with a dress/tunic, delicate skin-toned head + eye + blush + glint, hanging arms + legs, hair strand falling to the side, and a bright wing shimmer dot. Whole sprite is ~6×7 px of pixel-dense detail — a clear readable character at a tiny scale.
+- **4 color variants** — randomized on spawn: classic pink (hue 340), cyan (200), mint (130), gold (50). Body, wings, halo, and dress trim all tint from the same hue so each fairy feels like a distinct individual.
+- **Pulsing halo glow** — a soft radial halo breathes around the fairy at `10 + sin(frame * 0.1) * 1.0` px radius, additive-blended from 50% center alpha fading to 0 at the edge. Halo hue matches body hue.
+- **Continuous sparkle trail** — fairy emits a downward-drifting sparkle particle every 6 frames while dancing (using the existing sparkle particle system), producing a gentle fairy-dust snowfall below her.
+- **Soft ambient twinkle** — subtle high-sine ping (G6/C7/E7 randomly, with ±2% detune) plays every ~70-160 frames while dancing, creating a quiet "you can hear the fairy" audio layer without dominating.
+- **Click to greet** — clicking within ~10 px of the fairy triggers a greeting/blessing: bright ascending D6-F#6-A6-D7 sine bell arpeggio + a 3.5k Hz shimmer at the top, 16 rainbow sparkle particles burst outward, +3 happiness / +2 care / +3 friendship XP, and a contextual speech ("A fairy blessing~! 🧚💖", "She kissed my nose~! 🧚✨")
+- **Greeting sends her zooming up** — on click the fairy's `flyAway` mode activates with a strong upward velocity (-1.9 to -2.5 vy), leaving a dense sparkle trail every 3 frames as she ascends. She fades out once she leaves the canvas.
+- **Natural departure** — if you don't greet her, she gracefully enters flyAway mode after 12 seconds of dancing with a slower upward drift. Fairy also retreats politely if the pet goes to sleep.
+- **Gentle hint** — a faint blinking "greet 🧚" label floats just above the fairy until the player has greeted one at least once, then disappears forever.
+- **First-sighting & first-greet diary milestones** — two separate dated diary entries record the first time a fairy ever appears ("A tiny fairy rose out of my fairy ring~!") and the first time one is greeted ("She zoomed up into the sky with a trail of stars!").
+- **Dream template** — added "fairy" to DREAM_TEMPLATES so sleeping after greeting a fairy yields dreams of "dancing with fairies~", "tiny glowing friends~", "fairy blessings~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks for fairy: "*mumble*... sparkle kiss... on my nose...", "Zzz... fairy dance... faster faster...", "*snore*... she blessed me... hehe..."
+- **Contextual dream icons** — dailyActivityLog now recognizes "fairy" and biases dream icons toward heart + star + butterfly when the pet sleeps after a fairy encounter
+- **Fairy Friend achievement** — greet 3 fairies to unlock achievement #71 (🧚‍♀️). The name is intentionally distinct from the existing "Fairy Ring Keeper" (ring completions) so each represents a different accomplishment.
+- **Stats tracking** — fairies greeted + fairies seen displayed in the WEATHER section of the stats panel in a dedicated FAIRIES row between FAIRY RINGS and LIGHTNING BOLTS
+- **Full persistence** — totalFairiesSeen, totalFairiesGreeted, fairyFirstSeen, and fairyFirstGreeted saved across sessions
+- **Total achievements: 71**
+
+**Why this feature:** Last cycle (v0.95 mushroom ring) introduced the fairy-ring completion event — a multi-step puzzle where poofing every mushroom unlocks a magical rainbow payoff. NEXT.md explicitly suggested "Fairy visitor — *after* a fairy ring is completed, a tiny fairy sprite could briefly dance above the ring (similar arc to the squirrel — fleeting character)." That's exactly what this cycle delivers: a small storybook character that appears *as a consequence* of the previous feature, extending the fairy-ring magic into a secondary tangible reward. Mechanically the fairy is the first character in the game tied to a *completion trigger* rather than a spawn condition — she doesn't roll the dice each frame like the squirrel or the leaf pile; she only appears when the player has *earned* her by completing a ring. This creates a rare, precious encounter rhythm: complete ring → magical burst → fairy emerges → quick decision to greet her or just watch her dance before she leaves. The 4 color variants give her the replay-value of "which fairy will I see this time?", and the click-to-greet creates a separate long-term goal (Fairy Friend achievement) parallel to the ring-completion achievement. The figure-8 dance pattern, pulsing halo, and sparkle trail intentionally lean into "storybook fairy" visual clichés at a tiny pixel scale — making the character feel instantly recognizable even at 6×7 px. Audio-wise the ambient twinkles + the bright ascending greeting bells extend the existing fairy-ring chime into a mini-vocabulary of "fairy sounds" the player now associates with the ring completion arc.
+
 ## [v0.95.0] — 2026-04-18 — Mushroom Ring (Fairy Ring)
 
 ### Added

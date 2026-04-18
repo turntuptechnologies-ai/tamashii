@@ -431,6 +431,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "leafpile", icons: [["flower", "star", "heart"], ["butterfly", "flower", "star"]], captions: ["a mountain of crunchy leaves~", "swirling leaf parade~", "autumn forever~"] },
   { activity: "squirrel", icons: [["food", "heart", "food"], ["star", "food", "flower"]], captions: ["a forest of acorns~", "playing with squirrels~", "a cozy nut stash~"] },
   { activity: "mushroom", icons: [["flower", "butterfly", "star"], ["star", "flower", "butterfly"]], captions: ["a forest of fairy rings~", "dancing with sprites~", "little toadstool village~"] },
+  { activity: "fairy", icons: [["star", "butterfly", "heart"], ["heart", "star", "butterfly"]], captions: ["dancing with fairies~", "tiny glowing friends~", "fairy blessings~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -545,6 +546,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... spore poof... hehe...",
     "Zzz... tiny fairies... hi there...",
     "*snore*... all the toadstools... in a ring...",
+  ],
+  fairy: [
+    "*mumble*... sparkle kiss... on my nose...",
+    "Zzz... fairy dance... faster faster...",
+    "*snore*... she blessed me... hehe...",
   ],
 };
 
@@ -3596,6 +3602,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("leafpile")) contextIcons.push("flower", "heart", "star");
   if (dailyActivityLog.includes("squirrel")) contextIcons.push("food", "heart", "flower");
   if (dailyActivityLog.includes("mushroom")) contextIcons.push("flower", "butterfly", "star");
+  if (dailyActivityLog.includes("fairy")) contextIcons.push("heart", "star", "butterfly");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -11070,6 +11077,7 @@ interface MushroomRing {
   completionGlow: number;     // 0..1 — magical glow intensity after completion
   completionTimer: number;    // frames since completion (drives the glow ring)
   sparkleRingRadius: number;  // expanding magical ring radius after completion
+  fairySpawned: boolean;      // whether the reward fairy has been summoned this completion
 }
 
 let mushroomRing: MushroomRing | null = null;
@@ -11248,6 +11256,7 @@ function spawnMushroomRing(): void {
     completionGlow: 0,
     completionTimer: 0,
     sparkleRingRadius: 0,
+    fairySpawned: false,
   };
   if (!mushroomRingFirstSeen) {
     mushroomRingFirstSeen = true;
@@ -11401,6 +11410,11 @@ function updateMushroomRing(): void {
     ring.completionTimer++;
     // Expanding sparkle ring radius
     ring.sparkleRingRadius += 0.8;
+    // Summon the reward fairy a moment after the completion chime
+    if (!ring.fairySpawned && ring.completionTimer === FAIRY_SPAWN_DELAY) {
+      ring.fairySpawned = true;
+      spawnFairy(ring.cx, ring.cy);
+    }
     // Subtle continuous sparkles fountain while glowing
     if (ring.completionTimer < 60 && frame % 4 === 0) {
       const a = Math.random() * Math.PI * 2;
@@ -11609,6 +11623,456 @@ function drawMushroomRing(): void {
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.fillText("poof 🍄", ring.cx, ring.cy - 18);
+    ctx.restore();
+  }
+}
+
+// --- Fairy Visitor (reward after completing a fairy ring) ---
+interface Fairy {
+  x: number;
+  y: number;
+  cx: number;            // dance-orbit center x
+  cy: number;            // dance-orbit center y (above the ring)
+  phase: number;         // drives figure-8 flight pattern
+  wingPhase: number;     // wing-flap phase (fast)
+  bodyHue: number;       // 0..3 color variant (pink/cyan/mint/gold)
+  life: number;          // frames remaining before natural departure
+  fadeIn: number;
+  fadeOut: number;
+  greeted: boolean;      // player has clicked/greeted
+  flyAway: boolean;      // triggered on greet or natural end
+  flyAwayVx: number;
+  flyAwayVy: number;
+  trailTimer: number;    // throttles trail sparkles
+  twinkleTimer: number;  // throttles ambient twinkle sound
+  facing: number;        // -1 or 1, mirrors sprite based on motion
+  hintShown: boolean;    // whether the "greet 🧚" hint has ever shown for this fairy
+}
+
+let fairy: Fairy | null = null;
+let totalFairiesGreeted = 0;
+let totalFairiesSeen = 0;
+let fairyFirstSeen = false;
+let fairyFirstGreeted = false;
+
+const FAIRY_FADE_IN = 60;
+const FAIRY_FADE_OUT = 90;
+const FAIRY_LIFE = 720;          // ~12s dance before natural departure
+const FAIRY_SPAWN_DELAY = 30;    // frames after fairy ring completion before fairy appears
+
+const FAIRY_SIGHT_SPEECHES = [
+  "A fairy~! 🧚✨",
+  "Eeee~ tiny sparkles! 🧚💫",
+  "Look, she's dancing~! 🧚",
+  "Magic is real~! 🧚✨",
+  "A little fairy friend~ 🧚💖",
+  "She came out of the ring~! 🧚🍄",
+];
+
+const FAIRY_GREET_SPEECHES = [
+  "A fairy blessing~! 🧚💖",
+  "She kissed my nose~! 🧚✨",
+  "So warm and sparkly~! 🧚",
+  "Thank you, fairy~! 🧚💫",
+  "Goodbye lovely one~! 🧚🌟",
+  "Come back soon, fairy~! 🧚🍄",
+];
+
+function playFairyTwinkle(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Short high sine ping — fairy twinkle. Subtle so it doesn't dominate.
+  const freqs = [1568, 2093, 2637]; // G6, C7, E7
+  const i = Math.floor(Math.random() * freqs.length);
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = freqs[i] * (0.98 + Math.random() * 0.04);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.018, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.32);
+}
+
+function playFairyBlessing(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Bright ascending magical bells: D6, F#6, A6, D7
+  const freqs = [1174.66, 1479.98, 1760, 2349.32];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.06;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.06, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.55);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.6);
+  }
+  // Extra high shimmer
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 3520;
+  const sg = audioCtx.createGain();
+  const sStart = t + 0.35;
+  sg.gain.setValueAtTime(0, sStart);
+  sg.gain.linearRampToValueAtTime(0.025, sStart + 0.05);
+  sg.gain.exponentialRampToValueAtTime(0.001, sStart + 0.5);
+  shimmer.connect(sg);
+  sg.connect(audioCtx.destination);
+  shimmer.start(sStart);
+  shimmer.stop(sStart + 0.55);
+}
+
+function spawnFairy(ringCx: number, ringCy: number): void {
+  if (fairy) return;
+  const cx = ringCx;
+  const cy = ringCy - 22;   // dance ~22px above ring center
+  fairy = {
+    x: ringCx,
+    y: ringCy - 4,          // start near the ring, rises into position
+    cx,
+    cy,
+    phase: 0,
+    wingPhase: 0,
+    bodyHue: Math.floor(Math.random() * 4),
+    life: FAIRY_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    greeted: false,
+    flyAway: false,
+    flyAwayVx: 0,
+    flyAwayVy: 0,
+    trailTimer: 0,
+    twinkleTimer: 30 + Math.floor(Math.random() * 40),
+    facing: Math.random() < 0.5 ? -1 : 1,
+    hintShown: false,
+  };
+  totalFairiesSeen++;
+  if (!fairyFirstSeen) {
+    fairyFirstSeen = true;
+    addDiaryEntry("milestone", "🧚", "A tiny fairy rose out of my fairy ring~! She danced just for me! 🍄🧚✨");
+  }
+  if (Math.random() < 0.9) {
+    const s = FAIRY_SIGHT_SPEECHES[Math.floor(Math.random() * FAIRY_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 150);
+  }
+  // Save so the stats persist even if player closes the app mid-visit
+  saveGame();
+}
+
+function tryClickFairy(clickX: number, clickY: number): boolean {
+  if (!fairy) return false;
+  if (fairy.fadeIn < 0.4) return false;
+  if (fairy.greeted) return false;
+  const dx = clickX - fairy.x;
+  const dy = clickY - fairy.y;
+  const hitR = 10;
+  if (dx * dx + dy * dy < hitR * hitR) {
+    greetFairy();
+    return true;
+  }
+  return false;
+}
+
+function greetFairy(): void {
+  if (!fairy || fairy.greeted) return;
+  const f = fairy;
+  f.greeted = true;
+  f.flyAway = true;
+  f.flyAwayVx = (Math.random() - 0.5) * 0.4;
+  f.flyAwayVy = -1.9 - Math.random() * 0.6;
+  totalFairiesGreeted++;
+
+  petHappiness = Math.min(100, petHappiness + 3);
+  totalCarePoints += 2;
+  addFriendshipXP(3);
+
+  playFairyBlessing();
+
+  // Burst of rainbow sparkle particles around the fairy
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 0.6 + Math.random() * 1.8;
+    particles.push({
+      x: f.x,
+      y: f.y,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.5,
+      life: 40 + Math.floor(Math.random() * 30),
+      maxLife: 70,
+      size: 1.6 + Math.random() * 1.6,
+      type: "sparkle",
+    });
+  }
+
+  const s = FAIRY_GREET_SPEECHES[Math.floor(Math.random() * FAIRY_GREET_SPEECHES.length)];
+  queueSpeechBubble(s, 180);
+
+  if (!fairyFirstGreeted) {
+    fairyFirstGreeted = true;
+    addDiaryEntry("milestone", "🧚", "I greeted my first fairy~! She zoomed up into the sky with a trail of stars! 🧚✨");
+  }
+
+  logDailyActivity("fairy");
+  checkAchievements();
+  saveGame();
+}
+
+function updateFairy(): void {
+  if (!fairy) return;
+  const f = fairy;
+
+  // Fade in ramp
+  if (f.fadeIn < 1) f.fadeIn = Math.min(1, f.fadeIn + 1 / FAIRY_FADE_IN);
+
+  // Wings always flutter fast
+  f.wingPhase += 0.55;
+
+  if (f.flyAway) {
+    // Flying off (after greet OR natural end)
+    f.flyAwayVy *= 0.99;
+    f.flyAwayVx *= 0.99;
+    f.x += f.flyAwayVx;
+    f.y += f.flyAwayVy;
+    // Trail sparkles while flying away
+    f.trailTimer--;
+    if (f.trailTimer <= 0) {
+      particles.push({
+        x: f.x + (Math.random() - 0.5) * 2,
+        y: f.y + (Math.random() - 0.5) * 2,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: 0.2 + Math.random() * 0.3,
+        life: 30 + Math.floor(Math.random() * 20),
+        maxLife: 50,
+        size: 1.2 + Math.random() * 0.8,
+        type: "sparkle",
+      });
+      f.trailTimer = 3;
+    }
+    // Fade out once flown far enough, then despawn
+    if (f.y < 10 || f.x < -10 || f.x > canvas.width + 10) {
+      f.fadeOut = Math.max(0, f.fadeOut - 1 / FAIRY_FADE_OUT);
+      if (f.fadeOut <= 0) {
+        fairy = null;
+        return;
+      }
+    }
+    return;
+  }
+
+  // Figure-8 dance around (cx, cy): x = sin(phase)*ampX, y = sin(2*phase)*ampY
+  f.phase += 0.035;
+  const ampX = 14;
+  const ampY = 6;
+  const dx = Math.sin(f.phase) * ampX;
+  const dy = Math.sin(f.phase * 2) * ampY;
+  const newX = f.cx + dx;
+  const newY = f.cy + dy;
+  // Update facing based on horizontal motion direction
+  if (newX > f.x + 0.05) f.facing = 1;
+  else if (newX < f.x - 0.05) f.facing = -1;
+  f.x = newX;
+  f.y = newY;
+
+  // Occasional soft twinkle tone
+  f.twinkleTimer--;
+  if (f.twinkleTimer <= 0) {
+    playFairyTwinkle();
+    f.twinkleTimer = 70 + Math.floor(Math.random() * 90);
+  }
+
+  // Continuous sparkle trail below fairy
+  f.trailTimer--;
+  if (f.trailTimer <= 0) {
+    particles.push({
+      x: f.x + (Math.random() - 0.5) * 3,
+      y: f.y + 2 + Math.random() * 2,
+      vx: (Math.random() - 0.5) * 0.2,
+      vy: 0.3 + Math.random() * 0.3,
+      life: 25 + Math.floor(Math.random() * 15),
+      maxLife: 40,
+      size: 0.9 + Math.random() * 0.9,
+      type: "sparkle",
+    });
+    f.trailTimer = 6;
+  }
+
+  // Natural lifespan countdown
+  f.life--;
+  if (f.life <= 0) {
+    // Natural departure: drift gently upward
+    f.flyAway = true;
+    f.flyAwayVx = (Math.random() - 0.5) * 0.3;
+    f.flyAwayVy = -1.4 - Math.random() * 0.4;
+    return;
+  } else if (f.life < FAIRY_FADE_OUT) {
+    f.fadeOut = f.life / FAIRY_FADE_OUT;
+  }
+
+  // If pet sleeps, leave politely
+  if (isSleeping) {
+    f.life = Math.min(f.life, FAIRY_FADE_OUT);
+  }
+}
+
+function drawFairy(): void {
+  if (!fairy) return;
+  const f = fairy;
+  const alpha = f.fadeIn * f.fadeOut;
+  if (alpha <= 0.01) return;
+
+  const hues = [340, 200, 130, 50]; // pink, cyan, mint, gold
+  const hue = hues[f.bodyHue % 4];
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(f.x, f.y);
+
+  // Outer glow halo (pulsing)
+  const haloR = 10 + Math.sin(frame * 0.1) * 1.0;
+  const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, haloR);
+  halo.addColorStop(0, `hsla(${hue}, 100%, 85%, ${0.5 * alpha})`);
+  halo.addColorStop(0.45, `hsla(${hue}, 100%, 70%, ${0.22 * alpha})`);
+  halo.addColorStop(1, `hsla(${hue}, 100%, 70%, 0)`);
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mirror based on facing
+  ctx.scale(f.facing, 1);
+
+  const wingFlap = Math.abs(Math.sin(f.wingPhase));
+  const wingSpread = 0.45 + wingFlap * 0.85;
+
+  // Back wings (behind body) — pair on the back side
+  ctx.save();
+  ctx.fillStyle = `hsla(${hue}, 100%, 90%, 0.55)`;
+  ctx.strokeStyle = `hsla(${hue}, 100%, 85%, 0.7)`;
+  ctx.lineWidth = 0.4;
+  // Upper back wing
+  ctx.beginPath();
+  ctx.ellipse(-2.8, -2.2, 3.4 * wingSpread, 2.1, -0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Lower back wing
+  ctx.beginPath();
+  ctx.ellipse(-2.2, 0.4, 2.6 * wingSpread, 1.5, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // Body (tiny dress/tunic)
+  ctx.fillStyle = `hsl(${hue}, 70%, 65%)`;
+  ctx.beginPath();
+  ctx.moveTo(-1.2, 0);
+  ctx.lineTo(1.4, 0);
+  ctx.lineTo(1.0, 2.6);
+  ctx.lineTo(-0.9, 2.6);
+  ctx.closePath();
+  ctx.fill();
+  // Dress trim highlight
+  ctx.fillStyle = `hsla(${hue}, 100%, 92%, 0.7)`;
+  ctx.fillRect(-0.9, 0, 2.2, 0.4);
+  // Dress shadow at the bottom
+  ctx.fillStyle = `hsla(${hue}, 60%, 45%, 0.35)`;
+  ctx.fillRect(-0.9, 2.2, 2.0, 0.5);
+
+  // Head
+  ctx.fillStyle = "#ffe8d0";
+  ctx.beginPath();
+  ctx.arc(0.15, -1.5, 1.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hair / golden crown-of-hair
+  ctx.fillStyle = "#f5d97b";
+  ctx.beginPath();
+  ctx.arc(0.15, -2.1, 1.35, Math.PI * 1.0, Math.PI * 2.0);
+  ctx.fill();
+  // Hair strand falling to side
+  ctx.beginPath();
+  ctx.ellipse(-1.15, -1.3, 0.4, 1.0, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny eye (facing-forward side)
+  ctx.fillStyle = "#201018";
+  ctx.beginPath();
+  ctx.arc(0.55, -1.35, 0.28, 0, Math.PI * 2);
+  ctx.fill();
+  // Eye glint
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(0.65, -1.45, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cheek blush
+  ctx.fillStyle = "rgba(255, 120, 150, 0.45)";
+  ctx.beginPath();
+  ctx.arc(0.85, -1.0, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny arms (hanging / drifting)
+  ctx.strokeStyle = "#ffe8d0";
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(-0.9, 0.3);
+  ctx.lineTo(-1.4, 1.5);
+  ctx.moveTo(1.1, 0.3);
+  ctx.lineTo(1.6, 1.5);
+  ctx.stroke();
+
+  // Legs (tiny)
+  ctx.strokeStyle = "#ffe8d0";
+  ctx.lineWidth = 0.55;
+  ctx.beginPath();
+  ctx.moveTo(-0.3, 2.6);
+  ctx.lineTo(-0.3, 3.4);
+  ctx.moveTo(0.5, 2.6);
+  ctx.lineTo(0.5, 3.4);
+  ctx.stroke();
+
+  // Front wings (in front of body) — flash with specular highlight
+  ctx.save();
+  ctx.fillStyle = `hsla(${hue}, 100%, 92%, 0.62)`;
+  ctx.strokeStyle = `hsla(${hue}, 100%, 85%, 0.8)`;
+  ctx.lineWidth = 0.4;
+  // Upper front wing
+  ctx.beginPath();
+  ctx.ellipse(2.6, -2.1, 3.5 * wingSpread, 2.2, 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Lower front wing
+  ctx.beginPath();
+  ctx.ellipse(2.0, 0.4, 2.7 * wingSpread, 1.5, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Wing shimmer dot
+  ctx.fillStyle = `hsla(${hue}, 100%, 100%, 0.8)`;
+  ctx.beginPath();
+  ctx.arc(3.0, -2.3, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+
+  // Hint text above the fairy (first time only) — draw in world space above her
+  if (!fairyFirstGreeted && !f.greeted && f.fadeIn >= 1 && Math.floor(frame / 45) % 4 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("greet 🧚", f.x, f.y - 10);
     ctx.restore();
   }
 }
@@ -14044,6 +14508,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for fairy greet (fairy hovers above the mushroom ring, so check before ring)
+  if (fairy) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickFairy(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mushroom ring poofs before bubbles/drag
   if (mushroomRing) {
     const rect = canvas.getBoundingClientRect();
@@ -15801,6 +16274,11 @@ const achievements: Achievement[] = [
     icon: "🧚", unlockMessage: "The fairies have chosen you~! A keeper of their magical rings! 🧚🍄✨",
     condition: () => totalFairyRingsCompleted >= 5, unlocked: false,
   },
+  {
+    id: "fairy_friend", name: "Fairy Friend", description: "Greet 3 fairies summoned from your rings",
+    icon: "🧚‍♀️", unlockMessage: "Sworn sister of the fae~! The fairies will always remember you! 🧚‍♀️💖✨",
+    condition: () => totalFairiesGreeted >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -16720,6 +17198,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFB0E0";
+  ctx.fillText("FAIRIES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🧚 ${totalFairiesGreeted} greeted (${totalFairiesSeen} seen)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -17202,6 +17690,10 @@ interface SaveData {
   totalFairyRingsCompleted: number;
   mushroomRingFirstSeen: boolean;
   fairyRingFirstCompleted: boolean;
+  totalFairiesSeen: number;
+  totalFairiesGreeted: number;
+  fairyFirstSeen: boolean;
+  fairyFirstGreeted: boolean;
   version: number;
 }
 
@@ -17317,6 +17809,10 @@ function buildSaveData(): SaveData {
     totalFairyRingsCompleted,
     mushroomRingFirstSeen,
     fairyRingFirstCompleted,
+    totalFairiesSeen,
+    totalFairiesGreeted,
+    fairyFirstSeen,
+    fairyFirstGreeted,
     version: 1,
   };
 }
@@ -17727,6 +18223,18 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).mushroomRingFirstSeen === "boolean") {
     mushroomRingFirstSeen = (data as SaveData).mushroomRingFirstSeen;
+  }
+  if (typeof (data as SaveData).totalFairiesSeen === "number") {
+    totalFairiesSeen = (data as SaveData).totalFairiesSeen;
+  }
+  if (typeof (data as SaveData).totalFairiesGreeted === "number") {
+    totalFairiesGreeted = (data as SaveData).totalFairiesGreeted;
+  }
+  if (typeof (data as SaveData).fairyFirstSeen === "boolean") {
+    fairyFirstSeen = (data as SaveData).fairyFirstSeen;
+  }
+  if (typeof (data as SaveData).fairyFirstGreeted === "boolean") {
+    fairyFirstGreeted = (data as SaveData).fairyFirstGreeted;
   }
   if (typeof (data as SaveData).fairyRingFirstCompleted === "boolean") {
     fairyRingFirstCompleted = (data as SaveData).fairyRingFirstCompleted;
@@ -20247,6 +20755,9 @@ function update(): void {
   // Autumn mushroom ring (fairy ring)
   updateMushroomRing();
 
+  // Fairy visitor (spawned after a fairy ring completes)
+  updateFairy();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -21690,6 +22201,9 @@ function draw(): void {
 
   // Butterfly companion (drawn above particles, below speech bubble)
   drawButterfly();
+
+  // Fairy visitor (drawn above particles + butterfly, below speech bubble)
+  drawFairy();
 
   // Nightlight (beside sleeping pet, below dream bubbles)
   drawNightlight();
