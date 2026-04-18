@@ -432,6 +432,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "squirrel", icons: [["food", "heart", "food"], ["star", "food", "flower"]], captions: ["a forest of acorns~", "playing with squirrels~", "a cozy nut stash~"] },
   { activity: "mushroom", icons: [["flower", "butterfly", "star"], ["star", "flower", "butterfly"]], captions: ["a forest of fairy rings~", "dancing with sprites~", "little toadstool village~"] },
   { activity: "fairy", icons: [["star", "butterfly", "heart"], ["heart", "star", "butterfly"]], captions: ["dancing with fairies~", "tiny glowing friends~", "fairy blessings~"] },
+  { activity: "harvest_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of golden lanterns~", "moonlit harvest festival~", "dancing under the big orange moon~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -551,6 +552,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... sparkle kiss... on my nose...",
     "Zzz... fairy dance... faster faster...",
     "*snore*... she blessed me... hehe...",
+  ],
+  harvest_moon: [
+    "*mumble*... big golden moon... so pretty...",
+    "Zzz... lanterns floating... lighting... up...",
+    "*snore*... harvest blessing... warm glow...",
   ],
 };
 
@@ -12077,6 +12083,597 @@ function drawFairy(): void {
   }
 }
 
+// --- Harvest Moon Festival (autumn-night special event) ---
+interface HarvestLantern {
+  x: number;             // base hanging x
+  y: number;             // base hanging y (vertical resting position)
+  swayPhase: number;     // individual sway phase (independent per lantern)
+  swaySpeed: number;     // per-lantern sway speed variation
+  lit: boolean;          // has player clicked to light?
+  litAnim: number;       // 0 → 1 bloom animation after lighting
+  hue: number;           // 0..3 color variant (red / orange / gold / warm-cream)
+  sparkleTimer: number;  // throttle for lit ambient sparkles
+}
+
+interface HarvestMoonFestival {
+  moonCx: number;        // moon final center x
+  moonCy: number;        // moon final center y (top-of-sky)
+  moonRadius: number;    // moon visual radius (oversized)
+  riseProgress: number;  // 0 → 1 rise-in ease
+  life: number;          // frames remaining before natural despawn
+  fadeIn: number;
+  fadeOut: number;
+  lanterns: HarvestLantern[];
+  blessed: boolean;      // all lanterns lit → moon blessing triggered
+  blessGlow: number;     // decaying glow intensity after blessing
+  blessTimer: number;    // frames since blessing
+  ambientSparkleTimer: number; // throttle for post-bless continuous sparkles
+}
+
+let harvestMoonFestival: HarvestMoonFestival | null = null;
+let totalHarvestMoonsSeen = 0;
+let totalHarvestLanternsLit = 0;
+let totalHarvestMoonsBlessed = 0;
+let harvestMoonFirstSeen = false;
+let harvestMoonFirstBlessed = false;
+
+const HARVEST_MOON_FADE_IN = 180;         // 3s fade-in
+const HARVEST_MOON_FADE_OUT = 180;        // 3s fade-out
+const HARVEST_MOON_LIFE = 7200;           // ~2 minutes natural lifespan
+const HARVEST_MOON_RISE_DURATION = 600;   // ~10s moon rise animation
+
+// Hue/saturation/lightness per lantern variant
+const LANTERN_HUES = [
+  { hue: 8, sat: 75, light: 52 },    // red
+  { hue: 24, sat: 85, light: 58 },   // orange
+  { hue: 42, sat: 80, light: 62 },   // gold
+  { hue: 52, sat: 70, light: 72 },   // warm cream
+];
+
+const HARVEST_MOON_SIGHT_SPEECHES = [
+  "The harvest moon~! 🌕✨",
+  "Look how big and golden~! 🌕",
+  "So warm in the sky~! 🌕🍂",
+  "A festival moon~! 🌕🏮",
+  "Lanterns are floating up high~! 🏮",
+  "Autumn night magic~! 🌕✨",
+];
+
+const HARVEST_LANTERN_LIT_SPEECHES = [
+  "Another one~! 🏮",
+  "So pretty glowing~ 🏮✨",
+  "One by one they shine~ 🏮",
+  "Warm little lights~! 🏮💛",
+  "Keep going, light them all~! 🏮",
+];
+
+const HARVEST_MOON_BLESS_SPEECHES = [
+  "The harvest moon blesses me~! 🌕✨",
+  "All the lanterns are shining~! 🏮🌕",
+  "Moonlight festival~! 🌕🏮💖",
+  "The autumn sky dances~! 🌕✨",
+  "A golden blessing~! 🌕🏮",
+];
+
+function playLanternLitSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft warm temple-bell chime: A5 + E6 stacked
+  const freqs = [880, 1318.5];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.05, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.6);
+  }
+  // A low warm fundamental for body
+  const low = audioCtx.createOscillator();
+  low.type = "sine";
+  low.frequency.value = 440;
+  const lgain = audioCtx.createGain();
+  lgain.gain.setValueAtTime(0, t);
+  lgain.gain.linearRampToValueAtTime(0.025, t + 0.02);
+  lgain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  low.connect(lgain);
+  lgain.connect(audioCtx.destination);
+  low.start(t);
+  low.stop(t + 0.55);
+}
+
+function playHarvestMoonBlessing(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Golden pentatonic arpeggio: C5, E5, G5, C6, E6, G6
+  const freqs = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.09;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.08, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.7);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.75);
+  }
+  // High golden shimmer on top
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 3136; // G7
+  const sgain = audioCtx.createGain();
+  const sStart = t + 0.6;
+  sgain.gain.setValueAtTime(0, sStart);
+  sgain.gain.linearRampToValueAtTime(0.04, sStart + 0.08);
+  sgain.gain.exponentialRampToValueAtTime(0.001, sStart + 0.9);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(sStart);
+  shimmer.stop(sStart + 0.95);
+}
+
+function canSpawnHarvestMoonFestival(): boolean {
+  if (harvestMoonFestival) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "autumn") return false;
+  if (currentTimeOfDay !== "night") return false;
+  if (currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy") return false;
+  return true;
+}
+
+function spawnHarvestMoonFestival(): void {
+  if (harvestMoonFestival) return;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Moon: oversized golden-orange orb in upper-right sky
+  const moonCx = w * (0.65 + Math.random() * 0.15);
+  const moonCy = h * 0.18 + Math.random() * 8;
+  const moonRadius = 22 + Math.random() * 4;
+
+  // 3-5 lanterns spread across the upper area
+  const lanternCount = 3 + Math.floor(Math.random() * 3);
+  const lanterns: HarvestLantern[] = [];
+  const spacing = w / (lanternCount + 1);
+  for (let i = 0; i < lanternCount; i++) {
+    const baseX = spacing * (i + 1) + (Math.random() - 0.5) * 10;
+    const baseY = 18 + Math.random() * 36;
+    lanterns.push({
+      x: baseX,
+      y: baseY,
+      swayPhase: Math.random() * Math.PI * 2,
+      swaySpeed: 0.020 + Math.random() * 0.015,
+      lit: false,
+      litAnim: 0,
+      hue: Math.floor(Math.random() * 4),
+      sparkleTimer: 40 + Math.floor(Math.random() * 30),
+    });
+  }
+
+  harvestMoonFestival = {
+    moonCx,
+    moonCy,
+    moonRadius,
+    riseProgress: 0,
+    life: HARVEST_MOON_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    lanterns,
+    blessed: false,
+    blessGlow: 0,
+    blessTimer: 0,
+    ambientSparkleTimer: 0,
+  };
+
+  totalHarvestMoonsSeen++;
+
+  if (!harvestMoonFirstSeen) {
+    harvestMoonFirstSeen = true;
+    addDiaryEntry("milestone", "🌕", "A giant harvest moon rose over my world~! Paper lanterns floated in the sky, waiting to be lit! 🌕🏮✨");
+  }
+
+  if (Math.random() < 0.9) {
+    const s = HARVEST_MOON_SIGHT_SPEECHES[Math.floor(Math.random() * HARVEST_MOON_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 180);
+  }
+
+  saveGame();
+}
+
+function getLanternSwayX(l: HarvestLantern): number {
+  return l.x + Math.sin(l.swayPhase) * 3;
+}
+
+function tryClickHarvestLantern(clickX: number, clickY: number): boolean {
+  if (!harvestMoonFestival) return false;
+  const fest = harvestMoonFestival;
+  if (fest.fadeIn < 0.4) return false;
+  if (fest.blessed) return false;
+  for (let i = 0; i < fest.lanterns.length; i++) {
+    const l = fest.lanterns[i];
+    if (l.lit) continue;
+    const sx = getLanternSwayX(l);
+    // Lantern body is roughly 9w × 12h, centered horizontally at sx, vertically around l.y + 5
+    const dx = clickX - sx;
+    const dy = clickY - (l.y + 5);
+    if (dx * dx / (7 * 7) + dy * dy / (10 * 10) < 1) {
+      lightHarvestLantern(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function lightHarvestLantern(index: number): void {
+  if (!harvestMoonFestival) return;
+  const fest = harvestMoonFestival;
+  const l = fest.lanterns[index];
+  if (!l || l.lit) return;
+  l.lit = true;
+  l.litAnim = 0;
+  totalHarvestLanternsLit++;
+
+  playLanternLitSound();
+
+  // Sparkle bloom from the lantern
+  const sx = getLanternSwayX(l);
+  for (let i = 0; i < 8; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 0.5 + Math.random() * 1.2;
+    particles.push({
+      x: sx,
+      y: l.y + 5,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.3,
+      life: 30 + Math.floor(Math.random() * 20),
+      maxLife: 50,
+      size: 1.4 + Math.random() * 1.2,
+      type: "sparkle",
+    });
+  }
+
+  petHappiness = Math.min(100, petHappiness + 1);
+  addFriendshipXP(1);
+
+  if (Math.random() < 0.5) {
+    const s = HARVEST_LANTERN_LIT_SPEECHES[Math.floor(Math.random() * HARVEST_LANTERN_LIT_SPEECHES.length)];
+    queueSpeechBubble(s, 120);
+  }
+
+  // Check for complete blessing
+  const allLit = fest.lanterns.every(x => x.lit);
+  if (allLit) {
+    blessHarvestMoon();
+  }
+
+  logDailyActivity("harvest_moon");
+  checkAchievements();
+  saveGame();
+}
+
+function blessHarvestMoon(): void {
+  if (!harvestMoonFestival || harvestMoonFestival.blessed) return;
+  const fest = harvestMoonFestival;
+  fest.blessed = true;
+  fest.blessGlow = 1;
+  fest.blessTimer = 0;
+  totalHarvestMoonsBlessed++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  addFriendshipXP(5);
+
+  playHarvestMoonBlessing();
+
+  // Golden sparkle fountain radiating from the moon
+  for (let i = 0; i < 28; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.0 + Math.random() * 2.2;
+    particles.push({
+      x: fest.moonCx + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      y: fest.moonCy + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 70 + Math.floor(Math.random() * 40),
+      maxLife: 110,
+      size: 2 + Math.random() * 2.3,
+      type: "sparkle",
+    });
+  }
+
+  const s = HARVEST_MOON_BLESS_SPEECHES[Math.floor(Math.random() * HARVEST_MOON_BLESS_SPEECHES.length)];
+  queueSpeechBubble(s, 240);
+
+  if (!harvestMoonFirstBlessed) {
+    harvestMoonFirstBlessed = true;
+    addDiaryEntry("milestone", "🌕", "I lit every lantern under the harvest moon~! The sky answered with a golden blessing! 🌕🏮✨");
+  } else {
+    addDiaryEntry("milestone", "🌕", `Harvest moon blessing #${totalHarvestMoonsBlessed}~! Every lantern shining bright! 🌕🏮`);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateHarvestMoonFestival(): void {
+  // Very rare spawn during autumn night
+  if (!harvestMoonFestival && canSpawnHarvestMoonFestival() && Math.random() < 0.00012) {
+    spawnHarvestMoonFestival();
+  }
+
+  if (!harvestMoonFestival) return;
+  const fest = harvestMoonFestival;
+
+  // Fade-in ramp
+  if (fest.fadeIn < 1) fest.fadeIn = Math.min(1, fest.fadeIn + 1 / HARVEST_MOON_FADE_IN);
+
+  // Moon rise
+  if (fest.riseProgress < 1) {
+    fest.riseProgress = Math.min(1, fest.riseProgress + 1 / HARVEST_MOON_RISE_DURATION);
+  }
+
+  // Sway + ambient sparkles for lit lanterns
+  for (const l of fest.lanterns) {
+    l.swayPhase += l.swaySpeed;
+    if (l.lit) {
+      if (l.litAnim < 1) l.litAnim = Math.min(1, l.litAnim + 0.04);
+      l.sparkleTimer--;
+      if (l.sparkleTimer <= 0) {
+        const sx = getLanternSwayX(l);
+        particles.push({
+          x: sx + (Math.random() - 0.5) * 3,
+          y: l.y + 10 + Math.random() * 2,
+          vx: (Math.random() - 0.5) * 0.15,
+          vy: 0.2 + Math.random() * 0.2,
+          life: 30 + Math.floor(Math.random() * 15),
+          maxLife: 45,
+          size: 0.9 + Math.random() * 0.6,
+          type: "sparkle",
+        });
+        l.sparkleTimer = 40 + Math.floor(Math.random() * 30);
+      }
+    }
+  }
+
+  // Post-bless glow decay + celebratory continuous sparkles
+  if (fest.blessed) {
+    fest.blessTimer++;
+    if (fest.blessGlow > 0) fest.blessGlow = Math.max(0, fest.blessGlow - 0.008);
+    fest.ambientSparkleTimer--;
+    if (fest.blessTimer < 120 && fest.ambientSparkleTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = fest.moonRadius + Math.random() * 18;
+      particles.push({
+        x: fest.moonCx + Math.cos(angle) * r,
+        y: fest.moonCy + Math.sin(angle) * r,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.3 + Math.random() * 0.3,
+        life: 40 + Math.floor(Math.random() * 25),
+        maxLife: 65,
+        size: 1.4 + Math.random() * 1.2,
+        type: "sparkle",
+      });
+      fest.ambientSparkleTimer = 3;
+    }
+  }
+
+  // Natural lifespan
+  fest.life--;
+
+  // Early end: weather/season/time turns unfavorable, pet sleeps (unless blessing playing out)
+  const inappropriate =
+    currentTimeOfDay !== "night" ||
+    currentSeason !== "autumn" ||
+    currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy";
+  if ((inappropriate || isSleeping) && !fest.blessed) {
+    fest.life = Math.min(fest.life, HARVEST_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= HARVEST_MOON_FADE_OUT) {
+    fest.fadeOut = Math.max(0, fest.life / HARVEST_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= 0) {
+    harvestMoonFestival = null;
+  }
+}
+
+function drawHarvestMoonSky(): void {
+  if (!harvestMoonFestival) return;
+  const fest = harvestMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  // Ease-out rise: moon starts 50px below resting position
+  const easedRise = 1 - Math.pow(1 - fest.riseProgress, 3);
+  const riseOffset = (1 - easedRise) * 50;
+  const mx = fest.moonCx;
+  const my = fest.moonCy + riseOffset;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Outer breathing halo
+  const haloR = fest.moonRadius * (2.2 + Math.sin(frame * 0.02) * 0.15);
+  const halo = ctx.createRadialGradient(mx, my, fest.moonRadius * 0.9, mx, my, haloR);
+  halo.addColorStop(0, "rgba(255, 200, 110, 0.45)");
+  halo.addColorStop(0.5, "rgba(255, 150, 70, 0.18)");
+  halo.addColorStop(1, "rgba(255, 120, 40, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(mx, my, haloR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Post-bless bright outer glow
+  if (fest.blessed && fest.blessGlow > 0) {
+    const bhalo = ctx.createRadialGradient(mx, my, fest.moonRadius, mx, my, fest.moonRadius * 3.5);
+    bhalo.addColorStop(0, `rgba(255, 230, 150, ${0.35 * fest.blessGlow})`);
+    bhalo.addColorStop(1, "rgba(255, 200, 100, 0)");
+    ctx.fillStyle = bhalo;
+    ctx.beginPath();
+    ctx.arc(mx, my, fest.moonRadius * 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Moon disk — radial gradient warm amber to deep orange
+  const moonGrad = ctx.createRadialGradient(
+    mx - fest.moonRadius * 0.25, my - fest.moonRadius * 0.25, 0,
+    mx, my, fest.moonRadius
+  );
+  moonGrad.addColorStop(0, "#FFE8A0");
+  moonGrad.addColorStop(0.5, "#F2B060");
+  moonGrad.addColorStop(0.85, "#D4803A");
+  moonGrad.addColorStop(1, "#A45820");
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(mx, my, fest.moonRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Crater details (subtle darker spots for character)
+  ctx.fillStyle = "rgba(130, 70, 30, 0.28)";
+  ctx.beginPath();
+  ctx.arc(mx - fest.moonRadius * 0.35, my - fest.moonRadius * 0.15, fest.moonRadius * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(mx + fest.moonRadius * 0.2, my + fest.moonRadius * 0.3, fest.moonRadius * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(mx + fest.moonRadius * 0.35, my - fest.moonRadius * 0.3, fest.moonRadius * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Upper-left highlight (specular)
+  ctx.fillStyle = "rgba(255, 240, 180, 0.35)";
+  ctx.beginPath();
+  ctx.arc(mx - fest.moonRadius * 0.3, my - fest.moonRadius * 0.35, fest.moonRadius * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHarvestLantern(l: HarvestLantern, baseAlpha: number): void {
+  const palette = LANTERN_HUES[l.hue % LANTERN_HUES.length];
+  const sx = getLanternSwayX(l);
+  const sy = l.y;
+  const ease = l.lit ? l.litAnim : 0;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Hanging string from top of canvas down to lantern
+  ctx.strokeStyle = "rgba(60, 40, 30, 0.45)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(sx, 0);
+  ctx.lineTo(sx, sy - 1);
+  ctx.stroke();
+
+  ctx.translate(sx, sy);
+
+  // Top wooden cap
+  ctx.fillStyle = "#4A3020";
+  ctx.beginPath();
+  ctx.ellipse(0, -1, 4, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer glow halo (only when lit)
+  if (l.lit && ease > 0.05) {
+    const haloR = 10 + ease * 5;
+    const halo = ctx.createRadialGradient(0, 5, 0, 0, 5, haloR);
+    halo.addColorStop(0, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light + 20}%, ${0.5 * ease})`);
+    halo.addColorStop(0.5, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, ${0.22 * ease})`);
+    halo.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 5, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Paper body — rounded oval
+  const bodyColor = l.lit
+    ? `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`
+    : "#6A5040";
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(0, 5, 4.5, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dark bands top and bottom
+  ctx.fillStyle = "#3A281A";
+  ctx.fillRect(-4.5, -0.3, 9, 1);
+  ctx.fillRect(-4.5, 10.3, 9, 1);
+
+  // Vertical paper ribs
+  ctx.strokeStyle = l.lit
+    ? `hsla(${palette.hue}, ${palette.sat}%, ${Math.max(30, palette.light - 25)}%, 0.55)`
+    : "rgba(40, 30, 20, 0.45)";
+  ctx.lineWidth = 0.3;
+  for (let i = -3; i <= 3; i += 2) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 10);
+    ctx.stroke();
+  }
+
+  // Inner bright core glow when lit
+  if (l.lit && ease > 0.1) {
+    const glowGrad = ctx.createRadialGradient(0, 5, 0, 0, 5, 4);
+    glowGrad.addColorStop(0, `hsla(${palette.hue}, 100%, 90%, ${0.65 * ease})`);
+    glowGrad.addColorStop(1, `hsla(${palette.hue}, 100%, 70%, 0)`);
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(0, 5, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Gold tassel dangle
+  ctx.strokeStyle = "#C8A060";
+  ctx.lineWidth = 0.55;
+  ctx.beginPath();
+  ctx.moveTo(0, 11);
+  ctx.lineTo(0, 14);
+  ctx.stroke();
+  ctx.fillStyle = "#E8C070";
+  ctx.beginPath();
+  ctx.arc(0, 14.3, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHarvestLanterns(): void {
+  if (!harvestMoonFestival) return;
+  const fest = harvestMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  for (const l of fest.lanterns) {
+    drawHarvestLantern(l, baseAlpha);
+  }
+
+  // Hint text above the first unlit lantern until player has blessed their first festival
+  const firstUnlit = fest.lanterns.find(x => !x.lit);
+  if (!harvestMoonFirstBlessed && firstUnlit && !fest.blessed && fest.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("light 🏮", getLanternSwayX(firstUnlit), firstUnlit.y - 4);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -14517,6 +15114,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for harvest moon lantern lighting (lanterns hang in the upper air)
+  if (harvestMoonFestival) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickHarvestLantern(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mushroom ring poofs before bubbles/drag
   if (mushroomRing) {
     const rect = canvas.getBoundingClientRect();
@@ -16279,6 +16885,11 @@ const achievements: Achievement[] = [
     icon: "🧚‍♀️", unlockMessage: "Sworn sister of the fae~! The fairies will always remember you! 🧚‍♀️💖✨",
     condition: () => totalFairiesGreeted >= 3, unlocked: false,
   },
+  {
+    id: "moon_blessed", name: "Moon Blessed", description: "Light every lantern under a harvest moon",
+    icon: "🌕", unlockMessage: "The harvest moon blesses you~! An autumn festival in your heart! 🌕🏮✨",
+    condition: () => totalHarvestMoonsBlessed >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -17208,6 +17819,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#F2B060";
+  ctx.fillText("HARVEST MOON", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌕 ${totalHarvestMoonsBlessed} blessed (${totalHarvestLanternsLit} lanterns)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -17694,6 +18315,11 @@ interface SaveData {
   totalFairiesGreeted: number;
   fairyFirstSeen: boolean;
   fairyFirstGreeted: boolean;
+  totalHarvestMoonsSeen: number;
+  totalHarvestLanternsLit: number;
+  totalHarvestMoonsBlessed: number;
+  harvestMoonFirstSeen: boolean;
+  harvestMoonFirstBlessed: boolean;
   version: number;
 }
 
@@ -17813,6 +18439,11 @@ function buildSaveData(): SaveData {
     totalFairiesGreeted,
     fairyFirstSeen,
     fairyFirstGreeted,
+    totalHarvestMoonsSeen,
+    totalHarvestLanternsLit,
+    totalHarvestMoonsBlessed,
+    harvestMoonFirstSeen,
+    harvestMoonFirstBlessed,
     version: 1,
   };
 }
@@ -18238,6 +18869,21 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).fairyRingFirstCompleted === "boolean") {
     fairyRingFirstCompleted = (data as SaveData).fairyRingFirstCompleted;
+  }
+  if (typeof (data as SaveData).totalHarvestMoonsSeen === "number") {
+    totalHarvestMoonsSeen = (data as SaveData).totalHarvestMoonsSeen;
+  }
+  if (typeof (data as SaveData).totalHarvestLanternsLit === "number") {
+    totalHarvestLanternsLit = (data as SaveData).totalHarvestLanternsLit;
+  }
+  if (typeof (data as SaveData).totalHarvestMoonsBlessed === "number") {
+    totalHarvestMoonsBlessed = (data as SaveData).totalHarvestMoonsBlessed;
+  }
+  if (typeof (data as SaveData).harvestMoonFirstSeen === "boolean") {
+    harvestMoonFirstSeen = (data as SaveData).harvestMoonFirstSeen;
+  }
+  if (typeof (data as SaveData).harvestMoonFirstBlessed === "boolean") {
+    harvestMoonFirstBlessed = (data as SaveData).harvestMoonFirstBlessed;
   }
 
   // Restore diary
@@ -20758,6 +21404,9 @@ function update(): void {
   // Fairy visitor (spawned after a fairy ring completes)
   updateFairy();
 
+  // Harvest moon festival (autumn-night special event)
+  updateHarvestMoonFestival();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -21886,6 +22535,9 @@ function draw(): void {
   // Comet (sky layer, behind pet)
   drawComet();
 
+  // Harvest moon (sky layer, behind pet) — autumn-night special event
+  drawHarvestMoonSky();
+
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
 
@@ -22204,6 +22856,9 @@ function draw(): void {
 
   // Fairy visitor (drawn above particles + butterfly, below speech bubble)
   drawFairy();
+
+  // Harvest moon lanterns (hanging in upper air, above pet and fairy)
+  drawHarvestLanterns();
 
   // Nightlight (beside sleeping pet, below dream bubbles)
   drawNightlight();
