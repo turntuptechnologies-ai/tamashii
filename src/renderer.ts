@@ -430,6 +430,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "dandelion", icons: [["flower", "star", "flower"], ["flower", "heart", "butterfly"]], captions: ["a meadow of wishes~", "seeds floating on dreams~", "a thousand little hopes~"] },
   { activity: "leafpile", icons: [["flower", "star", "heart"], ["butterfly", "flower", "star"]], captions: ["a mountain of crunchy leaves~", "swirling leaf parade~", "autumn forever~"] },
   { activity: "squirrel", icons: [["food", "heart", "food"], ["star", "food", "flower"]], captions: ["a forest of acorns~", "playing with squirrels~", "a cozy nut stash~"] },
+  { activity: "mushroom", icons: [["flower", "butterfly", "star"], ["star", "flower", "butterfly"]], captions: ["a forest of fairy rings~", "dancing with sprites~", "little toadstool village~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -539,6 +540,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... fluffy tail... so soft...",
     "Zzz... sharing acorns... with friends...",
     "*snore*... another one... dropped one...",
+  ],
+  mushroom: [
+    "*mumble*... spore poof... hehe...",
+    "Zzz... tiny fairies... hi there...",
+    "*snore*... all the toadstools... in a ring...",
   ],
 };
 
@@ -3589,6 +3595,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("dandelion")) contextIcons.push("flower", "butterfly", "flower");
   if (dailyActivityLog.includes("leafpile")) contextIcons.push("flower", "heart", "star");
   if (dailyActivityLog.includes("squirrel")) contextIcons.push("food", "heart", "flower");
+  if (dailyActivityLog.includes("mushroom")) contextIcons.push("flower", "butterfly", "star");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -11029,6 +11036,583 @@ function drawAcorns(): void {
   for (const a of acorns) drawAcorn(a);
 }
 
+// ============================================================================
+// MUSHROOM RING (FAIRY RING)
+// ----------------------------------------------------------------------------
+// A small circle of toadstool mushrooms that occasionally appears on the ground
+// during autumn daytime/evening. Click each cap to release a spore poof (+small
+// reward). Once every cap in the ring has been poofed, a fairy-ring magical
+// event triggers: a rainbow sparkle ring, an arpeggio chime, and a bigger
+// reward. The ring then glows for a few seconds and fades out.
+// ============================================================================
+
+interface Mushroom {
+  offsetX: number;    // offset from ring center (ellipse position)
+  offsetY: number;    // offset from ring center (depth)
+  scale: number;      // size variation (0.85 - 1.15)
+  capHue: number;     // 0=classic red, 1=orange-red, 2=deep crimson
+  spots: { x: number; y: number; r: number }[]; // pre-baked white spots on cap
+  poofed: boolean;    // has been clicked
+  poofAnim: number;   // 0..1 animation progress after poof (cap squishes/tilts)
+  wobble: number;     // gentle sway phase
+}
+
+interface MushroomRing {
+  cx: number;         // ring center x
+  cy: number;         // ring center y (ground line)
+  radiusX: number;    // ellipse horizontal radius
+  radiusY: number;    // ellipse vertical radius (for perspective)
+  mushrooms: Mushroom[];
+  life: number;       // frames remaining before natural despawn
+  fadeIn: number;
+  fadeOut: number;
+  completed: boolean;         // all mushrooms poofed
+  completionGlow: number;     // 0..1 — magical glow intensity after completion
+  completionTimer: number;    // frames since completion (drives the glow ring)
+  sparkleRingRadius: number;  // expanding magical ring radius after completion
+}
+
+let mushroomRing: MushroomRing | null = null;
+let totalMushroomsPoofed = 0;
+let totalFairyRingsCompleted = 0;
+let mushroomRingFirstSeen = false;
+let fairyRingFirstCompleted = false;
+
+const MUSHROOM_RING_FADE_IN = 90;
+const MUSHROOM_RING_FADE_OUT = 120;
+const MUSHROOM_RING_LIFE = 5400;    // ~90s before natural despawn
+const MUSHROOM_RING_COMPLETION_HOLD = 300; // ~5s magical glow after completion
+
+const MUSHROOM_POOF_SPEECHES = [
+  "*poof*~ spore cloud! 🍄✨",
+  "A tiny puff~! 🍄",
+  "Spooore~! 🍄💨",
+  "Eeek~ so bouncy! 🍄",
+  "Little mushroom puff~ 🍄",
+  "*boop* poof! 🍄✨",
+];
+
+const FAIRY_RING_COMPLETE_SPEECHES = [
+  "Fairy ring magic~! ✨🍄",
+  "Whoaaa~ the fairies! 🧚🍄✨",
+  "A ring of wonder~! 🍄🌈✨",
+  "The forest whispers~! 🍄✨",
+];
+
+const MUSHROOM_SIGHT_SPEECHES = [
+  "Oh~ a mushroom circle! 🍄",
+  "Look, little toadstools~! 🍄✨",
+  "Fairies must live here~ 🧚",
+  "A spooky ring~! 🍄🍂",
+];
+
+function playMushroomPoofSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft breathy "poof": short noise with band-pass + gentle pitch drop
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.12), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.05));
+    data[i] = (Math.random() * 2 - 1) * env;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(900, t);
+  filter.frequency.exponentialRampToValueAtTime(400, t + 0.1);
+  filter.Q.value = 2;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.09, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.15);
+  // Little higher "boop" on top for cuteness
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(560, t);
+  osc.frequency.exponentialRampToValueAtTime(380, t + 0.1);
+  const ogain = audioCtx.createGain();
+  ogain.gain.setValueAtTime(0, t);
+  ogain.gain.linearRampToValueAtTime(0.04, t + 0.01);
+  ogain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  osc.connect(ogain);
+  ogain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.14);
+}
+
+function playFairyRingChime(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Magical ascending arpeggio: C5-E5-G5-C6-E6
+  const freqs = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.07, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.5);
+  }
+  // Shimmer: high sine at end
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 2093;
+  const sgain = audioCtx.createGain();
+  const sStart = t + 0.45;
+  sgain.gain.setValueAtTime(0, sStart);
+  sgain.gain.linearRampToValueAtTime(0.035, sStart + 0.05);
+  sgain.gain.exponentialRampToValueAtTime(0.001, sStart + 0.6);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(sStart);
+  shimmer.stop(sStart + 0.65);
+}
+
+function canSpawnMushroomRing(): boolean {
+  if (mushroomRing) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "autumn") return false;
+  const isDaytimeish = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon" || currentTimeOfDay === "evening";
+  if (!isDaytimeish) return false;
+  if (currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy") return false;
+  return true;
+}
+
+function spawnMushroomRing(): void {
+  if (mushroomRing) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  // Position the ring off to one side of the pet (avoid overlap with pet center)
+  const onLeft = Math.random() < 0.5;
+  const cx = onLeft
+    ? w * 0.22 + Math.random() * w * 0.1
+    : w * 0.78 - Math.random() * w * 0.1;
+  const cy = h / 2 + 56 + Math.random() * 4;
+  const radiusX = 18 + Math.random() * 6;
+  const radiusY = 5 + Math.random() * 1.5;
+  const count = 5 + Math.floor(Math.random() * 3); // 5, 6, or 7 mushrooms
+  const mushrooms: Mushroom[] = [];
+  const startAngle = Math.random() * Math.PI * 2;
+  for (let i = 0; i < count; i++) {
+    const angle = startAngle + (i / count) * Math.PI * 2;
+    const jitter = (Math.random() - 0.5) * 0.15;
+    const ox = Math.cos(angle + jitter) * radiusX;
+    const oy = Math.sin(angle + jitter) * radiusY;
+    const capHue = Math.floor(Math.random() * 3);
+    // Pre-bake 2-4 white spots on each cap
+    const spotCount = 2 + Math.floor(Math.random() * 3);
+    const spots = [];
+    for (let s = 0; s < spotCount; s++) {
+      spots.push({
+        x: (Math.random() - 0.5) * 3.2,
+        y: -2 - Math.random() * 1.2,
+        r: 0.35 + Math.random() * 0.35,
+      });
+    }
+    mushrooms.push({
+      offsetX: ox,
+      offsetY: oy,
+      scale: 0.85 + Math.random() * 0.3,
+      capHue,
+      spots,
+      poofed: false,
+      poofAnim: 0,
+      wobble: Math.random() * Math.PI * 2,
+    });
+  }
+  mushroomRing = {
+    cx,
+    cy,
+    radiusX,
+    radiusY,
+    mushrooms,
+    life: MUSHROOM_RING_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    completed: false,
+    completionGlow: 0,
+    completionTimer: 0,
+    sparkleRingRadius: 0,
+  };
+  if (!mushroomRingFirstSeen) {
+    mushroomRingFirstSeen = true;
+    addDiaryEntry("milestone", "🍄", "A little ring of toadstools appeared~! The fairies must be nearby! 🍄✨");
+  }
+  if (Math.random() < 0.7) {
+    const s = MUSHROOM_SIGHT_SPEECHES[Math.floor(Math.random() * MUSHROOM_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 150);
+  }
+}
+
+function tryClickMushroomRing(clickX: number, clickY: number): boolean {
+  if (!mushroomRing) return false;
+  const ring = mushroomRing;
+  // Don't allow clicks on completed rings (they're just glowing away)
+  if (ring.completed) return false;
+  // Need the ring fully visible enough to be clickable
+  if (ring.fadeIn < 0.5) return false;
+  for (let i = 0; i < ring.mushrooms.length; i++) {
+    const m = ring.mushrooms[i];
+    if (m.poofed) continue;
+    const mx = ring.cx + m.offsetX;
+    const my = ring.cy + m.offsetY;
+    // Hitbox around cap (slightly above ground line, generous radius)
+    const dx = clickX - mx;
+    const dy = clickY - (my - 4 * m.scale);
+    const hitR = 6 * m.scale;
+    if (dx * dx + dy * dy < hitR * hitR) {
+      poofMushroom(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function poofMushroom(index: number): void {
+  if (!mushroomRing) return;
+  const ring = mushroomRing;
+  const m = ring.mushrooms[index];
+  if (!m || m.poofed) return;
+  m.poofed = true;
+  m.poofAnim = 0;
+  totalMushroomsPoofed++;
+
+  const mx = ring.cx + m.offsetX;
+  const my = ring.cy + m.offsetY - 4 * m.scale;
+
+  playMushroomPoofSound();
+
+  // Spore poof particles — greenish-white upward drift
+  for (let i = 0; i < 8; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = 0.7 + Math.random() * 1.3;
+    particles.push({
+      x: mx,
+      y: my,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 40 + Math.floor(Math.random() * 20),
+      maxLife: 60,
+      size: 1.8 + Math.random() * 1.4,
+      type: "sparkle",
+    });
+  }
+
+  petHappiness = Math.min(100, petHappiness + 1);
+  addFriendshipXP(1);
+  if (Math.random() < 0.35) {
+    const s = MUSHROOM_POOF_SPEECHES[Math.floor(Math.random() * MUSHROOM_POOF_SPEECHES.length)];
+    queueSpeechBubble(s, 100);
+  }
+
+  // Check for completion
+  const allPoofed = ring.mushrooms.every(mm => mm.poofed);
+  if (allPoofed) {
+    completeFairyRing();
+  }
+
+  logDailyActivity("mushroom");
+  checkAchievements();
+  saveGame();
+}
+
+function completeFairyRing(): void {
+  if (!mushroomRing) return;
+  const ring = mushroomRing;
+  if (ring.completed) return;
+  ring.completed = true;
+  ring.completionTimer = 0;
+  ring.completionGlow = 1;
+  ring.sparkleRingRadius = 0;
+  totalFairyRingsCompleted++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  addFriendshipXP(5);
+  playFairyRingChime();
+
+  const s = FAIRY_RING_COMPLETE_SPEECHES[Math.floor(Math.random() * FAIRY_RING_COMPLETE_SPEECHES.length)];
+  queueSpeechBubble(s, 220);
+
+  // Big sparkle fountain from ring center
+  for (let i = 0; i < 24; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.0 + Math.random() * 2.0;
+    particles.push({
+      x: ring.cx + (Math.random() - 0.5) * ring.radiusX,
+      y: ring.cy - Math.random() * 6,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1.2,
+      life: 60 + Math.floor(Math.random() * 40),
+      maxLife: 100,
+      size: 2 + Math.random() * 2.2,
+      type: "sparkle",
+    });
+  }
+
+  if (!fairyRingFirstCompleted) {
+    fairyRingFirstCompleted = true;
+    addDiaryEntry("milestone", "🧚", "Completed my first fairy ring~! The air shimmered with magic! 🍄🧚✨");
+  } else {
+    addDiaryEntry("milestone", "🧚", `Fairy ring #${totalFairyRingsCompleted}~! Magic in every circle! 🍄✨`);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateMushroomRing(): void {
+  // Spawn chance
+  if (!mushroomRing && canSpawnMushroomRing() && Math.random() < 0.00035) {
+    spawnMushroomRing();
+  }
+
+  if (!mushroomRing) return;
+  const ring = mushroomRing;
+
+  // Fade-in ramp
+  if (ring.fadeIn < 1) ring.fadeIn = Math.min(1, ring.fadeIn + 1 / MUSHROOM_RING_FADE_IN);
+
+  // Individual mushroom wobble + poof animation
+  for (const m of ring.mushrooms) {
+    m.wobble += 0.04;
+    if (m.poofed && m.poofAnim < 1) {
+      m.poofAnim = Math.min(1, m.poofAnim + 1 / 30);
+    }
+  }
+
+  // Completion progression: grow sparkle ring outward and then fade
+  if (ring.completed) {
+    ring.completionTimer++;
+    // Expanding sparkle ring radius
+    ring.sparkleRingRadius += 0.8;
+    // Subtle continuous sparkles fountain while glowing
+    if (ring.completionTimer < 60 && frame % 4 === 0) {
+      const a = Math.random() * Math.PI * 2;
+      particles.push({
+        x: ring.cx + Math.cos(a) * ring.radiusX,
+        y: ring.cy + Math.sin(a) * ring.radiusY - 2,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: -0.6 - Math.random() * 0.6,
+        life: 40 + Math.floor(Math.random() * 20),
+        maxLife: 60,
+        size: 1.6 + Math.random() * 1.2,
+        type: "sparkle",
+      });
+    }
+    // After completion hold, start fade-out
+    if (ring.completionTimer > MUSHROOM_RING_COMPLETION_HOLD) {
+      ring.fadeOut = Math.max(0, ring.fadeOut - 1 / MUSHROOM_RING_FADE_OUT);
+      if (ring.fadeOut <= 0) {
+        mushroomRing = null;
+        return;
+      }
+    }
+  } else {
+    // Natural life countdown if not completed
+    ring.life--;
+    if (ring.life <= 0) {
+      ring.fadeOut = Math.max(0, ring.fadeOut - 1 / MUSHROOM_RING_FADE_OUT);
+      if (ring.fadeOut <= 0) {
+        mushroomRing = null;
+        return;
+      }
+    } else if (ring.life < MUSHROOM_RING_FADE_OUT) {
+      ring.fadeOut = ring.life / MUSHROOM_RING_FADE_OUT;
+    }
+  }
+
+  // Weather/sleep transitions → fade out early
+  if (!ring.completed && (isSleeping || currentSeason !== "autumn"
+      || currentWeather === "stormy" || currentWeather === "rainy" || currentWeather === "snowy")) {
+    ring.life = Math.min(ring.life, MUSHROOM_RING_FADE_OUT);
+  }
+}
+
+function drawMushroom(ring: MushroomRing, m: Mushroom, ringAlpha: number): void {
+  const x = ring.cx + m.offsetX + Math.sin(m.wobble) * 0.2;
+  const y = ring.cy + m.offsetY;
+  const s = m.scale;
+  // Poof animation: cap tilts/shrinks, stem remains slightly
+  let capScale = 1;
+  let capAlpha = 1;
+  let tilt = 0;
+  if (m.poofed) {
+    capScale = 1 - m.poofAnim * 0.8;
+    capAlpha = 1 - m.poofAnim;
+    tilt = m.poofAnim * 0.4;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = ringAlpha;
+
+  // Ground shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1, 3.2 * s, 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+
+  // Stem (off-white with subtle gradient)
+  const stemGrad = ctx.createLinearGradient(-1.5, -4, 1.5, 0);
+  stemGrad.addColorStop(0, "#e8dfc8");
+  stemGrad.addColorStop(1, "#c8bb9a");
+  ctx.fillStyle = stemGrad;
+  ctx.beginPath();
+  // Slightly curved stem: wider at base
+  ctx.moveTo(-1.4, 0);
+  ctx.lineTo(-1.1, -3.8);
+  ctx.lineTo(1.1, -3.8);
+  ctx.lineTo(1.4, 0);
+  ctx.closePath();
+  ctx.fill();
+  // Stem highlight
+  ctx.fillStyle = "rgba(255, 250, 230, 0.4)";
+  ctx.beginPath();
+  ctx.rect(-0.9, -3.5, 0.4, 3.2);
+  ctx.fill();
+
+  // Cap
+  if (capAlpha > 0.02) {
+    ctx.save();
+    ctx.translate(0, -3.6);
+    ctx.rotate(tilt);
+    ctx.scale(capScale, capScale);
+    ctx.globalAlpha = ringAlpha * capAlpha;
+
+    const capColors = [
+      { top: "#e84f3a", mid: "#c23020", bot: "#7a1608" },  // classic red
+      { top: "#f07a2a", mid: "#cc5210", bot: "#7a2a08" },  // orange-red
+      { top: "#c0202a", mid: "#8a1018", bot: "#5a0810" },  // deep crimson
+    ];
+    const col = capColors[m.capHue] || capColors[0];
+    const capGrad = ctx.createLinearGradient(-4, -3, 4, 1);
+    capGrad.addColorStop(0, col.top);
+    capGrad.addColorStop(0.6, col.mid);
+    capGrad.addColorStop(1, col.bot);
+    ctx.fillStyle = capGrad;
+
+    // Dome shape (semicircle with a slight skirt)
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.8, Math.PI, Math.PI * 2);
+    ctx.lineTo(3.4, 0.6);
+    ctx.lineTo(-3.4, 0.6);
+    ctx.closePath();
+    ctx.fill();
+
+    // White spots
+    ctx.fillStyle = "rgba(255, 248, 240, 0.92)";
+    for (const sp of m.spots) {
+      // Clip spots that would fall outside the dome visual bounds
+      const distSq = sp.x * sp.x + sp.y * sp.y;
+      if (distSq > 14) continue;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Subtle cap highlight
+    ctx.fillStyle = "rgba(255, 230, 200, 0.25)";
+    ctx.beginPath();
+    ctx.ellipse(-1.6, -1.8, 1.1, 0.8, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cap underside (gills hint) — thin dark line under skirt
+    ctx.strokeStyle = "rgba(40, 20, 10, 0.35)";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(-3.4, 0.6);
+    ctx.lineTo(3.4, 0.6);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawMushroomRing(): void {
+  if (!mushroomRing) return;
+  const ring = mushroomRing;
+  const alpha = ring.fadeIn * ring.fadeOut;
+  if (alpha <= 0.01) return;
+
+  // Completion glow: soft golden-rainbow ring on the ground beneath the mushrooms
+  if (ring.completed) {
+    ctx.save();
+    // Soft ground glow ellipse
+    const glowAlpha = alpha * Math.min(1, (MUSHROOM_RING_COMPLETION_HOLD - ring.completionTimer) / 120);
+    if (glowAlpha > 0.02) {
+      const glowGrad = ctx.createRadialGradient(ring.cx, ring.cy, 0, ring.cx, ring.cy, ring.radiusX * 1.8);
+      glowGrad.addColorStop(0, `rgba(255, 230, 160, ${0.35 * glowAlpha})`);
+      glowGrad.addColorStop(0.5, `rgba(210, 180, 255, ${0.22 * glowAlpha})`);
+      glowGrad.addColorStop(1, "rgba(160, 200, 255, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.ellipse(ring.cx, ring.cy, ring.radiusX * 1.8, ring.radiusY * 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Expanding sparkle ring outline (rainbow hue rotation)
+    if (ring.sparkleRingRadius > 0 && ring.sparkleRingRadius < ring.radiusX * 3) {
+      const hue = (ring.completionTimer * 4) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 80%, 75%, ${0.6 * alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(
+        ring.cx, ring.cy,
+        ring.sparkleRingRadius,
+        ring.sparkleRingRadius * (ring.radiusY / ring.radiusX),
+        0, 0, Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Ground base shadow connecting the ring together (subtle)
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.4;
+  ctx.fillStyle = "rgba(40, 30, 20, 0.2)";
+  ctx.beginPath();
+  ctx.ellipse(ring.cx, ring.cy + 1.5, ring.radiusX * 1.1, ring.radiusY * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Sort mushrooms back-to-front by offsetY so front ones overlap back ones
+  const sorted = ring.mushrooms.slice().sort((a, b) => a.offsetY - b.offsetY);
+  for (const m of sorted) {
+    drawMushroom(ring, m, alpha);
+  }
+
+  // Hint text above the ring until the first fairy ring is completed
+  if (!fairyRingFirstCompleted && !ring.completed && ring.fadeIn >= 1 && ring.life > MUSHROOM_RING_FADE_OUT + 60 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("poof 🍄", ring.cx, ring.cy - 18);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -13460,6 +14044,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for mushroom ring poofs before bubbles/drag
+  if (mushroomRing) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickMushroomRing(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for bubble pops before anything else
   if (bubbles.length > 0) {
     const rect = canvas.getBoundingClientRect();
@@ -15203,6 +15796,11 @@ const achievements: Achievement[] = [
     icon: "🌰", unlockMessage: "A fine stash of autumn treasures~! The squirrel has blessed your hoard! 🌰🐿️✨",
     condition: () => totalAcornsCollected >= 15, unlocked: false,
   },
+  {
+    id: "fairy_ring_keeper", name: "Fairy Ring Keeper", description: "Complete 5 fairy rings by poofing all mushrooms",
+    icon: "🧚", unlockMessage: "The fairies have chosen you~! A keeper of their magical rings! 🧚🍄✨",
+    condition: () => totalFairyRingsCompleted >= 5, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -16112,6 +16710,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E85070";
+  ctx.fillText("FAIRY RINGS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🍄 ${totalMushroomsPoofed} poofed (${totalFairyRingsCompleted} rings)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -16590,6 +17198,10 @@ interface SaveData {
   totalSquirrelVisits: number;
   squirrelFirstSeen: boolean;
   acornFirstCollected: boolean;
+  totalMushroomsPoofed: number;
+  totalFairyRingsCompleted: number;
+  mushroomRingFirstSeen: boolean;
+  fairyRingFirstCompleted: boolean;
   version: number;
 }
 
@@ -16701,6 +17313,10 @@ function buildSaveData(): SaveData {
     totalSquirrelVisits,
     squirrelFirstSeen,
     acornFirstCollected,
+    totalMushroomsPoofed,
+    totalFairyRingsCompleted,
+    mushroomRingFirstSeen,
+    fairyRingFirstCompleted,
     version: 1,
   };
 }
@@ -17102,6 +17718,18 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).acornFirstCollected === "boolean") {
     acornFirstCollected = (data as SaveData).acornFirstCollected;
+  }
+  if (typeof (data as SaveData).totalMushroomsPoofed === "number") {
+    totalMushroomsPoofed = (data as SaveData).totalMushroomsPoofed;
+  }
+  if (typeof (data as SaveData).totalFairyRingsCompleted === "number") {
+    totalFairyRingsCompleted = (data as SaveData).totalFairyRingsCompleted;
+  }
+  if (typeof (data as SaveData).mushroomRingFirstSeen === "boolean") {
+    mushroomRingFirstSeen = (data as SaveData).mushroomRingFirstSeen;
+  }
+  if (typeof (data as SaveData).fairyRingFirstCompleted === "boolean") {
+    fairyRingFirstCompleted = (data as SaveData).fairyRingFirstCompleted;
   }
 
   // Restore diary
@@ -19616,6 +20244,9 @@ function update(): void {
   // Autumn squirrel visitor + acorn collection
   updateSquirrel();
 
+  // Autumn mushroom ring (fairy ring)
+  updateMushroomRing();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -20783,6 +21414,9 @@ function draw(): void {
 
   // Squirrel visitor (drawn behind the pet so it scampers visibly around it)
   drawSquirrel();
+
+  // Mushroom ring / fairy ring (drawn behind the pet, on the ground)
+  drawMushroomRing();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);

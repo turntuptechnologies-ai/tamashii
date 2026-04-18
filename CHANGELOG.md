@@ -3,6 +3,29 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.95.0] — 2026-04-18 — Mushroom Ring (Fairy Ring)
+
+### Added
+- **Toadstool fairy ring** — during autumn daytime/evening (any non-precipitating weather), a small ring of 5-7 cartoon toadstool mushrooms occasionally appears on the ground off to one side of the pet, arranged in a gentle ellipse with slight perspective foreshortening
+- **Per-mushroom variety** — each mushroom has a randomized scale (0.85–1.15x), one of three cap palettes (classic red, orange-red, deep crimson), 2-4 pre-baked white cap spots, and an individual wobble phase so the ring feels alive and hand-arranged instead of mechanical
+- **Classic toadstool art** — off-white stem with a warm gradient and highlight, red gradient dome cap with speckled white spots, faint gills hint under the cap skirt, and a ground shadow beneath each mushroom; subtle collective ring shadow ties them together
+- **Click to poof** — click any mushroom cap to pop off a spore puff: 8 upward-drifting greenish-white sparkle particles, a soft breathy "poof" sound (bandpass-filtered noise + small boop on top), cap shrinks and tilts over in a 30-frame poof animation, +1 happy / +1 friendship XP per poof, and a 35% chance to trigger a cute speech ("*boop* poof! 🍄", "Spooore~! 🍄💨", "A tiny puff~! 🍄")
+- **Fairy ring completion event** — once *every* mushroom in the ring has been poofed, fairy-ring magic triggers: a **magical C-E-G-C-E ascending triangle arpeggio + high-sine shimmer**, a 24-sparkle fountain from the ring, an **expanding rainbow hue-rotating ellipse** that radiates outward from the ring over ~5 seconds, a soft golden-rainbow radial glow on the ground, +5 happiness / +3 care / +5 friendship XP, and a special celebration speech ("Fairy ring magic~! ✨🍄", "Whoaaa~ the fairies! 🧚🍄✨")
+- **Completion glow hold** — after completion, the ring glows and pulses for ~5 seconds (emitting occasional continuous sparkles during the first second) before fading out gracefully; clicks are locked during this phase so the magic plays out uninterrupted
+- **Natural lifecycle** — uncompleted rings stay on the ground for up to ~90 seconds, then fade out over 120 frames; rings fade in over 90 frames on spawn so they appear gently rather than popping in
+- **Weather/sleep reactivity** — if the pet goes to sleep, the season changes away from autumn, or the weather turns to rain/storm/snow while an uncompleted ring is alive, the ring begins fading out immediately (completed rings finish their magic undisturbed)
+- **Gentle hint text** — a faint blinking "poof 🍄" label floats above the ring until the player has completed their first fairy ring, then disappears forever
+- **First-sighting & first-completion diary milestones** — two separate dated diary entries record the first time a ring ever appears and the first time one is completed; subsequent completions add shorter "Fairy ring #N~!" entries
+- **Dream template** — added "mushroom" to DREAM_TEMPLATES so sleeping after poofing mushrooms yields dreams of "a forest of fairy rings~", "dancing with sprites~", "little toadstool village~"
+- **Sleep-talk phrases** — 3 new contextual sleep talks: "*mumble*... spore poof... hehe...", "Zzz... tiny fairies... hi there...", "*snore*... all the toadstools... in a ring..."
+- **Contextual dream icons** — dailyActivityLog now recognizes "mushroom" and biases dream icons toward flower/butterfly/star when the pet sleeps after interacting with a ring
+- **Fairy Ring Keeper achievement** — complete 5 fairy rings to unlock achievement #70 (🧚)
+- **Stats tracking** — total mushrooms poofed and total fairy rings completed displayed in the WEATHER section of the stats panel between ACORNS and LIGHTNING BOLTS
+- **Full persistence** — totalMushroomsPoofed, totalFairyRingsCompleted, mushroomRingFirstSeen, and fairyRingFirstCompleted saved across sessions
+- **Total achievements: 70**
+
+**Why this feature:** Autumn has been growing into a fully populated season — leaf pile (static accumulator), squirrel (fleeting visitor), and now **mushroom ring** — each representing a *different interaction pattern*. The leaf pile is one-click burst, the squirrel is drop-and-collect, and the mushroom ring is a **multi-step puzzle with completion reward**: you have to find and click every mushroom in the ring to unlock the magic. This adds a new "collect-all / finish-the-set" pattern that the game didn't have anywhere else (constellations are similar but are nighttime/sky-based). The multi-step nature also means the ring lingers longer and is more discoverable than squirrels (which zip away quickly) or leaf piles (which are one-and-done). The rainbow sparkle ring and the completion chime create a genuinely magical micro-moment — the kind of payoff that feels earned rather than ambient. Mushroom rings were on NEXT.md repeatedly as "mushroom ring — autumn/morning feature, click caps for a spore poof"; this cycle finally brings them to life with the fairy-ring completion layer as the twist.
+
 ## [v0.94.0] — 2026-04-17 — Autumn Squirrel Visitor + Acorns
 
 ### Added

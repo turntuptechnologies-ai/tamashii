@@ -3,27 +3,30 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.94.0 — Autumn Squirrel Visitor + Acorns (2026-04-17)
+## Last completed: v0.95.0 — Mushroom Ring / Fairy Ring (2026-04-18)
 
 ### What was done
-- Added a **visiting squirrel character** that scampers in from one side of the canvas during autumn daytime/evening, pauses to swish its tail, drops 2-4 acorns, then scampers back off the way it came.
-- Added **collectable acorns** — each dropped acorn sits on the ground for ~36 seconds. Click to pick it up for +2 happy / +1 care / +1 XP, with sparkle particles and a cute ascending bloop sound. Every 10th acorn triggers a bigger milestone reward: +5 happy / +2 care / +3 XP, a special E-G-B chime, extra sparkles, and a diary milestone.
-- This is the **first new character** since the butterfly companion — a fleeting visitor, distinct from the static leaf pile. Autumn now has two complementary interactions.
-- Achievement #69 "Acorn Collector" for 15 acorns.
-- Total achievements: 69.
-- Renderer grew to ~21,488 lines (+~550 lines).
+- Added an **autumn fairy ring of toadstools** — 5-7 classic red-cap mushrooms arranged in an ellipse on the ground, spawning occasionally during autumn daytime/evening.
+- **Click-to-poof interaction** — each mushroom caps spore-poofs on click (+1 happy, +1 XP), cap tilts and shrinks over 30 frames, greenish-white sparkle particles rise upward.
+- **Fairy ring completion event** — once every mushroom in the ring is poofed, a magical payoff triggers: ascending C-E-G-C-E triangle arpeggio + high shimmer, 24-sparkle fountain, **expanding rainbow hue-rotating ellipse** on the ground, soft golden-rainbow radial glow, +5 happy / +3 care / +5 XP. Ring then glows for ~5s before fading out.
+- Introduced a third autumn interaction pattern (*collect-all puzzle*) complementing leaf pile (burst) and squirrel (drop-and-collect).
+- Achievement #70 "Fairy Ring Keeper" — complete 5 fairy rings.
+- Total achievements: 70.
+- Renderer grew to ~22,070 lines (+~560 lines).
 
 ### Thoughts for next cycle
-- **Pet chases the squirrel** — when the squirrel appears, the pet could walk/scamper toward it (a short burst of wander-behavior override) and the squirrel could react to pet proximity (flinch / dart further).
-- **Squirrel steals/retrieves an acorn** — small chance the squirrel briefly sniffs a leftover acorn and snatches it back, creating friendly rivalry.
-- **Butterfly lands on squirrel's tail** — cross-feature interaction — briefly, the butterfly rests on the squirrel's tail while it pauses.
-- **Acorn inventory screen** — a little hoard view showing the total acorn count with a basket visual, maybe accessed from the stats panel.
-- **Hedgehog visitor for winter** — a second small visitor in winter season, paralleling the squirrel. Rolls up/unrolls, leaves tiny pinecones.
-- **Mushroom ring** — from previous NEXT.md, still pending. Autumn/morning feature, click caps for a spore poof.
-- **Raking animation / clean-up** — extends the leaf pile concept with a way to rake scattered leaves back.
-- **S'mores combo** — still pending from the marshmallow cycle: 3 perfect roasts → unlock a s'more treat the next time cocoa spawns.
-- **Pet approaches campfire / leaf pile / squirrel** — pet walks toward interactive objects and sits closer to them.
-- **Harvest moon festival** — special autumn-night event: oversized orange moon, lantern glows around the edges, unique mooncake item.
+- **Firefly-mushroom combo** — mushroom caps could glow very faintly at night (if a ring happens to survive into evening transition), creating a bioluminescent detail. Maybe fireflies pulse slightly brighter over a completed ring.
+- **Fairy visitor** — *after* a fairy ring is completed, a tiny fairy sprite could briefly dance above the ring (similar arc to the squirrel — fleeting character).
+- **Pet approaches the ring** — pet walks toward the mushroom ring and sits inside the ring after completion (short burst of wander-behavior override, similar suggestion carried over from squirrel cycle).
+- **Hedgehog visitor for winter** — a second small visitor paralleling the squirrel; rolls up/unrolls, leaves tiny pinecones.
+- **Harvest moon festival** — special autumn-night event with oversized orange moon, lantern glows, and a unique mooncake item.
+- **Squirrel steals an acorn** — small chance squirrel sniffs a leftover acorn and snatches it back (cross-feature friendly rivalry).
+- **Acorn inventory screen** — a hoard-view showing total acorn count with a basket visual, accessed from stats panel.
+- **Pet chases the squirrel** — walks/scampers toward it (short wander override); squirrel reacts to pet proximity (flinch / dart).
+- **Butterfly lands on squirrel's tail** — cross-feature interaction during the pause phase.
+- **Raking animation / clean-up** — extends leaf pile concept; a way to rake scattered leaves back into a pile.
+- **S'mores combo** — 3 perfect roasts → unlock a s'more treat next time cocoa spawns.
+- **Pet approaches campfire / leaf pile / squirrel / ring** — pet walks toward interactive objects and sits closer to them.
 - **Seasonal festivals** — winter solstice, spring equinox, summer solstice with unique decorations.
 - **Wind streaks on the chime** — faint horizontal wind-streak particles from the chime's sail during gusts.
 - **Firefly lantern** — craft a lantern from caught fireflies that glows on the pet's head at night.
@@ -42,23 +45,21 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Winter tea party variant** — tea ceremony that happens during snowy weather.
 
 ### Current architecture notes
-- Renderer is now ~21,488 lines.
-- Squirrel + acorn feature lives immediately after the Leaf Pile block and before `WEATHER_CHANGE_MIN` (starts around line 10371, just after the `drawLeafPile()` closing brace).
-- `Squirrel` + `Acorn` interfaces. `Squirrel` has `x, y, vx, dir, state, stateTimer, targetX, runPhase, tailSway, dropCountdown, acornsToDrop, fadeIn, fadeOut, visible`. `Acorn` has `x, y, groundY, vy, bounce, spin, life, fadeIn, fadeOut, active, sway`.
-- Only one squirrel exists at a time (single-instance, `squirrel: Squirrel | null = null`). Up to 10 acorns on the ground at once.
-- Spawn condition: `autumn && (morning||afternoon||evening) && (not stormy/rainy/snowy) && !isSleeping && acorns.length < 10 && !squirrel`. Random chance per frame: 0.0008 (less frequent than leafpile).
-- Key functions: `spawnSquirrel()`, `dropAcornFromSquirrel(sq)`, `tryClickAcorn(clickX, clickY)`, `collectAcorn(index)`, `updateSquirrel()` (handles both squirrel AND acorn updates), `drawSquirrel()`, `drawAcorn(a)`, `drawAcorns()`, `canSpawnSquirrel()`, `playAcornDropSound()`, `playAcornCollectSound()`, `playAcornBonusChime()`, `playSquirrelScamperTick()`.
-- Squirrel states: `entering` → `pausing` → `dropping` → `leaving`. Dropping handles one acorn at a time with a countdown timer between drops.
-- Scamper speed: 1.6 px/frame. Pause duration: 120-220 frames (2-3.7s).
-- Acorn drop spawns slightly behind the squirrel's facing direction. Falls with gravity (0.18/frame²), bounces once if impact velocity is high.
-- Acorn lifecycle: fadeIn (20f) → 2200 frames life → fadeOut (60f) when uncollected, or immediate removal on click with sparkle particle burst.
-- Click hit box on acorn: 6px-radius circular (dx² + dy² < 36).
-- Click routing: inserted immediately after `tryClickLeafPile` in the event handler.
-- Rendering order: `drawLeafPile()` → `drawAcorns()` → `drawSquirrel()` → `drawToy(cx, cy)`. Both squirrel and acorns drawn **behind pet**.
-- `logDailyActivity("squirrel")` called on each acorn collect; `getContextualDreamIcons()` biases toward food/heart/flower icons when this activity is logged.
-- Save version still 1; added fields: `totalAcornsCollected`, `totalSquirrelVisits`, `squirrelFirstSeen`, `acornFirstCollected`.
-- Total achievements: 69.
-- dailyActivityLog now tracks 22 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile, squirrel.
-- Dream templates + sleep-talks extended to include "squirrel".
-- Stats panel WEATHER section now shows acorn stats between LEAF PILES and LIGHTNING BOLTS entries.
-- Two diary milestones per player: first squirrel visit (🐿️) and first acorn collected (🌰).
+- Renderer is now ~22,070 lines.
+- Mushroom ring feature lives immediately after the squirrel/acorn block and before `WEATHER_CHANGE_MIN` (starts around line 11034, just after `drawAcorns()`).
+- `Mushroom` and `MushroomRing` interfaces. `Mushroom` has `offsetX, offsetY, scale, capHue (0/1/2), spots[], poofed, poofAnim, wobble`. `MushroomRing` has `cx, cy, radiusX, radiusY, mushrooms[], life, fadeIn, fadeOut, completed, completionGlow, completionTimer, sparkleRingRadius`.
+- Only one ring exists at a time (`mushroomRing: MushroomRing | null = null`). Spawn condition mirrors squirrel/leafpile: `autumn && daytimeish && not stormy/rainy/snowy && !isSleeping`. Spawn chance per frame: 0.00035 (rarer than squirrel at 0.0008).
+- Key functions: `canSpawnMushroomRing()`, `spawnMushroomRing()`, `tryClickMushroomRing(clickX, clickY)`, `poofMushroom(index)`, `completeFairyRing()`, `updateMushroomRing()`, `drawMushroom(ring, m, alpha)`, `drawMushroomRing()`, `playMushroomPoofSound()`, `playFairyRingChime()`.
+- Ring lifecycle: fade-in (90f) → life (~5400f = 90s) → fade-out (120f) when uncompleted, OR fade-out starts MUSHROOM_RING_COMPLETION_HOLD (300f = 5s) after completion.
+- Click hit-box per mushroom: circular `6 * m.scale` radius centered ~4 px above ground line. Completed rings reject clicks (enjoy-the-magic lock).
+- Click routing: inserted immediately after `tryClickAcorn` in the mousedown handler.
+- Rendering order: `drawAcorns()` → `drawSquirrel()` → `drawMushroomRing()` → `drawToy(cx, cy)`. Drawn behind pet.
+- Mushrooms sorted by `offsetY` back-to-front each frame so front mushrooms visually overlap back ones.
+- Completion visual uses `hsla(hue, 80%, 75%)` with `hue = (completionTimer * 4) % 360` for a subtle rainbow shift on the expanding sparkle-ring stroke.
+- `logDailyActivity("mushroom")` called on each poof; `getContextualDreamIcons()` biases toward flower/butterfly/star after mushroom activity.
+- Save version still 1; added fields: `totalMushroomsPoofed`, `totalFairyRingsCompleted`, `mushroomRingFirstSeen`, `fairyRingFirstCompleted`.
+- Total achievements: 70.
+- dailyActivityLog now tracks 23 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile, squirrel, mushroom.
+- Dream templates + sleep-talks extended to include "mushroom".
+- Stats panel WEATHER section now shows fairy ring stats between ACORNS and LIGHTNING BOLTS.
+- Two diary milestones per player: first mushroom-ring sighting (🍄) and first fairy-ring completion (🧚). Subsequent completions add shorter "Fairy ring #N~!" entries.
