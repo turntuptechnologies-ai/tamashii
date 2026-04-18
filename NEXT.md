@@ -3,33 +3,39 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.97.0 — Harvest Moon Festival (2026-04-18)
+## Last completed: v0.98.0 — Mooncake Reward Drop (2026-04-18)
 
 ### What was done
-- Added the **Harvest Moon Festival** — a rare autumn-night event combining an oversized golden-orange moon with 3-5 paper lanterns the player can light.
-- Moon spawns at `(w * 0.65-0.80, h * 0.18)` with radius 22-26 px; radial gradient warm amber → deep orange; three crater spots; upper-left specular highlight; breathing outer halo; cubic ease-out rise animation (starts 50 px below resting position, rises over 600 frames / 10 s).
-- 3-5 lanterns hang from the top of the canvas with invisible strings, each with independent sway phase + speed (0.020-0.035 rad/frame); 4 color variants (red/orange/gold/warm-cream hsla); unlit are muted brown; lit bloom with colored paper + inner core glow + outer halo via `litAnim` 0→1 at +0.04/frame.
-- Click an unlit lantern (elliptical hitbox `7 × 10 px`) to light: A5+E6 temple-bell chime + A4 fundamental, 8-particle sparkle bloom, +1 happy / +1 XP.
-- Light *every* lantern → **Harvest Moon Blessing**: C5-E5-G5-C6-E6-G6 golden pentatonic arpeggio + G7 shimmer, 28-particle fountain from the moon, bright golden halo pulse ~12s, +5 happy / +3 care / +5 XP, celebration speech.
-- Natural 2-minute lifespan; fades in/out over 180 frames each; exits early if time/season/weather turns unfavorable or pet sleeps (unless blessing already triggered — those finish undisturbed).
-- Hint text "light 🏮" above first unlit lantern until player's first full blessing.
-- Achievement #72 "Moon Blessed" — light every lantern under a harvest moon.
-- Two diary milestones (first sighting 🌕, first blessing 🌕), dream template "harvest_moon", 3 contextual sleep-talks, contextual dream-icon biasing (moon/star/heart), stats entry in WEATHER section between FAIRIES and LIGHTNING BOLTS.
-- Full persistence (totalHarvestMoonsSeen, totalHarvestLanternsLit, totalHarvestMoonsBlessed, harvestMoonFirstSeen, harvestMoonFirstBlessed).
-- Total achievements: 72.
-- Renderer grew to ~23,300 lines (+~440 lines).
+- Added the **Mooncake reward drop** — after every Harvest Moon Blessing, a traditional Chinese mooncake (月餅) now spawns at the moon's position and arcs gracefully down to the ground as a tangible harvest-night gift.
+- Mooncake arcs from the moon with a parabolic fall (quadratic ease-out on x, t² on y, plus a small `sin(t*π) * -8` hump), rotational spin during the drop (+0.08 rad/frame), and lands with a 6-particle dust puff + warm low-sine landing thump (160→90Hz).
+- Descending chime on drop: G6→E6→C6→A5 sine twinkle-glissando, 0.08s spacing, ~0.32s per tone.
+- Traditional mooncake sprite ~14×8 px: golden-brown pastry body + lighter top surface (dual radial gradients), 4-petal lotus imprint traced as quadratic Béziers from center, amber-yolk stamped center dot, 8 cream-colored fluted-edge rim dots, upper-left specular highlight.
+- Warm pulsing amber halo (`rgba(255, 200, 110, 0.4)` → transparent, 10-13px pulse) while landed + active; inviting "share 🥮" hint blinking above until first share.
+- Click (~9px circular hitbox) to share: ascending warm E5-G5-C6 triangle arpeggio + low A3 body sustain, 14 sparkle particles + 3 golden hearts floating up, +6 happy / +20 hunger / +2 care / +4 friendship XP, contextual share speech (6 variants).
+- Mooncake spawns with 70% chance of a sighting speech (4 variants) and lingers ~40s on ground before fading out (60f); fades out faster if pet sleeps.
+- Achievement #73 "Mooncake Keeper" — share a mooncake from a blessed harvest moon.
+- Diary milestone on first share; subsequent shares add shorter "Shared mooncake #N~!" entries.
+- "mooncake" added to DREAM_TEMPLATES + SLEEP_TALK_CONTEXTUAL (3 sleep-talks); also finally added the missing "harvest_moon" bias to `getContextualDreamIcons()` (moon/star/heart) that was noted in last cycle's NEXT.md but never actually implemented.
+- Stats panel entry in WEATHER section between HARVEST MOON and LIGHTNING BOLTS in warm `#E8B880` MOONCAKES row showing shared + dropped counts.
+- Full persistence (totalMooncakesShared, totalMooncakesDropped, mooncakeFirstShared).
+- Total achievements: 73.
+- Renderer grew to ~23,830 lines (+~320 lines).
 
 ### Thoughts for next cycle
-- **Mooncake reward drop** — rare chance that after a harvest moon blessing, a small mooncake appears on the ground for the pet to walk to and nibble (small stamina bonus + unique speech). Listed alongside harvest moon originally; this cycle only delivered the core moon + lanterns.
 - **Golden-fairy variant** — 1-in-20 chance of a gold fairy emerging from a fairy ring with bigger rewards + unique speech + possibly its own achievement.
 - **Multiple fairies at once** — rare chance of 2 fairies per ring completion, orbiting opposite phases of the same figure-8.
 - **Fairy gift / keepsake** — after greeting, small chance fairy drops a heart-shaped petal the pet carries (persistent accessory unlock).
-- **Hedgehog visitor for winter** — second small visitor paralleling the squirrel; rolls up/unrolls, leaves tiny pinecones.
-- **Winter night signature event** — a snow moon analog to harvest moon? Ice lanterns? Something to give winter nights their own festival rhythm.
+- **Hedgehog / snow bunny visitor for winter** — second small visitor paralleling the squirrel; snow bunny (yukiusagi) would fit Japanese winter tradition nicely; hedgehog is also cute but hibernates so less authentic. Winter has NO creature visitors currently — big gap.
+- **Winter cardinal / redbird** — a bright red bird that lands on the ground or a tree branch during snowy/winter weather, nibbles at seeds, chirps, and flies away. Iconic winter creature.
+- **Winter night signature event** — a snow moon analog to harvest moon? Ice lanterns? Paper snowflakes drifting from the sky you can pop? Winter nights lack a signature big event.
 - **Spring night signature event** — cherry-blossom moon? Fireflies that form short-lived constellations?
+- **Mooncake variations** — lotus paste, red bean, salted egg yolk — different mooncakes with different small rewards, chosen randomly each drop (would add collecting variety to what is currently a single mooncake reward).
+- **Mooncake box / gift wrap** — rare chance the mooncake arrives wrapped in a little gift box that must be opened first.
+- **Harvest moon lantern persistence** — rare chance a lit lantern stays in the sky the next few nights as a keepsake.
+- **Lantern release ritual** — lit lanterns drift up into the sky and disappear as wish-release (Chinese sky lantern festival).
 - **Squirrel steals an acorn** — small chance squirrel sniffs a leftover acorn and snatches it back.
 - **Acorn inventory screen** — a hoard-view showing total acorn count with a basket visual.
-- **Pet approaches interactive objects** — pet walks toward the mushroom ring / campfire / leaf pile / squirrel / lanterns (short wander-behavior override).
+- **Pet approaches interactive objects** — pet walks toward the mushroom ring / campfire / leaf pile / squirrel / lanterns / mooncake (short wander-behavior override). This would pair beautifully with the mooncake: pet could walk to the mooncake and "nibble" it instead of just poofing away on click.
 - **Butterfly lands on squirrel's tail** — cross-feature interaction during the pause phase.
 - **Raking animation** — rake scattered leaves back into a pile.
 - **S'mores combo** — 3 perfect roasts → unlock a s'more treat next time cocoa spawns.
@@ -49,22 +55,20 @@ Read this FIRST at the start of each cycle to understand context from the previo
 - **Dream diary** — separate section in diary recording dream captions from each night.
 - **Lucid dreaming** — rare event where clicking a dream scene triggers a mini dream interaction.
 - **Winter tea party variant** — tea ceremony that happens during snowy weather.
-- **Harvest moon lantern persistence** — rare chance a lit lantern stays in the sky the next few nights as a keepsake.
-- **Lantern release** — a wish-release ritual where lit lanterns drift up into the sky and disappear (like sky lanterns during Chinese festivals).
 
 ### Current architecture notes
-- Renderer is now ~23,300 lines.
-- Harvest Moon Festival feature lives immediately after the fairy block and before `WEATHER_CHANGE_MIN` (starts around line 12080, just after the fairy hint text block).
-- Key interfaces: `HarvestLantern` (x, y, swayPhase, swaySpeed, lit, litAnim, hue, sparkleTimer), `HarvestMoonFestival` (moonCx, moonCy, moonRadius, riseProgress, life, fadeIn, fadeOut, lanterns, blessed, blessGlow, blessTimer, ambientSparkleTimer).
-- Only one festival exists at a time (`harvestMoonFestival: HarvestMoonFestival | null = null`). Spawn is random-per-frame gated by `canSpawnHarvestMoonFestival()` which checks: no existing festival, not sleeping, season=autumn, time=night, weather not storm/rain/snow. Spawn probability: `Math.random() < 0.00012` per frame (~1 per 140 seconds on average during allowed conditions, so maybe 1 per autumn night session).
-- Key functions: `canSpawnHarvestMoonFestival()`, `spawnHarvestMoonFestival()`, `getLanternSwayX(l)`, `tryClickHarvestLantern(x, y)`, `lightHarvestLantern(i)`, `blessHarvestMoon()`, `updateHarvestMoonFestival()`, `drawHarvestMoonSky()`, `drawHarvestLantern(l, alpha)`, `drawHarvestLanterns()`, `playLanternLitSound()`, `playHarvestMoonBlessing()`.
-- Lantern click hitbox: elliptical `dx²/49 + dy²/100 < 1`. Click routed in mousedown handler AFTER fairy check, BEFORE mushroom ring check.
-- Rendering split into two calls: `drawHarvestMoonSky()` in the sky layer (after `drawComet()` and before `drawCherryBlossoms()`), and `drawHarvestLanterns()` in the upper-foreground layer (after `drawFairy()` and before `drawNightlight()`). This keeps the moon behind everything (true sky) and the lanterns above particles but below speech bubbles.
-- Lantern visual size: body ellipse `radiusX=4.5, radiusY=6` centered at `(sx, sy+5)`; total height ~14 px including top cap + tassel. Paper-lantern style with wooden top cap, rounded oval paper body, dark bands at top/bottom, vertical ribs, gold tassel.
-- Moon visual: radius 22-26 px; three crater details at relative offsets (-0.35, -0.15), (0.2, 0.3), (0.35, -0.3); specular highlight at (-0.3, -0.35) size 0.25x; breathing halo at 2.2x radius.
-- Save version still 1; added fields: `totalHarvestMoonsSeen`, `totalHarvestLanternsLit`, `totalHarvestMoonsBlessed`, `harvestMoonFirstSeen`, `harvestMoonFirstBlessed`.
-- Total achievements: 72 (added "moon_blessed" — light every lantern under a harvest moon, single completion).
-- dailyActivityLog now tracks 25 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile, squirrel, mushroom, fairy, harvest_moon.
-- DREAM_TEMPLATES + SLEEP_TALK_CONTEXTUAL extended to include "harvest_moon".
-- Stats panel WEATHER section now shows harvest moon stats between FAIRIES and LIGHTNING BOLTS in an amber `#F2B060` HARVEST MOON row.
-- Two diary milestones per player: first sighting (🌕) and first blessing (🌕). Additional blessings after first record as "Harvest moon blessing #N~!".
+- Renderer is now ~23,830 lines.
+- Mooncake feature lives immediately after the Harvest Moon Festival block and before `WEATHER_CHANGE_MIN` (starts around line 12677 post-harvest-moon-block).
+- Key interface: `Mooncake` (x, startX, startY, groundX, groundY, y, arcProgress, bounce, bouncePhase, spin, life, fadeIn, fadeOut, landed, active, sway, glowPulse).
+- Only one mooncake exists at a time (`mooncake: Mooncake | null = null`). Spawn is triggered exclusively by `blessHarvestMoon()` — there is no random per-frame spawn check. So mooncakes are gated on harvest moon blessings, which are gated on `canSpawnHarvestMoonFestival()` + `Math.random() < 0.00012` per frame (~1 per autumn night session).
+- Key functions: `spawnMooncake(startX, startY)` (called from `blessHarvestMoon()`), `tryClickMooncake(x, y)`, `shareMooncake()`, `updateMooncake()`, `drawMooncake()`, `playMooncakeDropSound()`, `playMooncakeLandSound()`, `playMooncakeShareSound()`.
+- Mooncake click hitbox: circular `dx² + dy² < 81` (~9px radius). Click routed in mousedown handler AFTER fairy + harvest-lantern checks, BEFORE mushroom ring check.
+- Rendering: `drawMooncake()` called in the ground layer after `drawMushroomRing()` — the mooncake renders behind the pet when landed, but during the falling arc phase its y-coordinate is in the upper canvas (near the moon) so it naturally appears to be in the sky/midair during flight. Draw call order matters for the landed state.
+- Lifecycle: arc phase uses `arcProgress` 0→1 over 90 frames (~1.5s), with `eased = 1 - (1-t)²` for x and `t²` for y plus `sin(t*π) * -8` hump. After `arcProgress >= 1`, `landed = true`, plays landing sound, 6-particle dust puff, begins `bouncePhase` 1→0 squash-bounce animation at -0.04/frame.
+- Save version still 1; added fields: `totalMooncakesShared`, `totalMooncakesDropped`, `mooncakeFirstShared`.
+- Total achievements: 73 (added "mooncake_keeper" — share a mooncake from a blessed harvest moon, single completion).
+- dailyActivityLog now tracks 26 activities: fed, played, trick, petted, photo, fireflies, constellations, dewdrops, story, bottle, fortune, bubbles, meditation, tea, snowman, campfire, marshmallow, cocoa, chime, dandelion, leafpile, squirrel, mushroom, fairy, harvest_moon, mooncake.
+- DREAM_TEMPLATES + SLEEP_TALK_CONTEXTUAL extended to include "mooncake".
+- `getContextualDreamIcons()` finally includes "harvest_moon" (moon/star/heart) + "mooncake" (food/moon/heart) — fixed missing harvest_moon entry while adding mooncake.
+- Stats panel WEATHER section now shows mooncake stats between HARVEST MOON and LIGHTNING BOLTS in a warm `#E8B880` MOONCAKES row.
+- Diary: two milestones per player: first share (🥮) and ongoing "Shared mooncake #N~!" entries.

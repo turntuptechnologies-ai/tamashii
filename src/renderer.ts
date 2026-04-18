@@ -433,6 +433,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "mushroom", icons: [["flower", "butterfly", "star"], ["star", "flower", "butterfly"]], captions: ["a forest of fairy rings~", "dancing with sprites~", "little toadstool village~"] },
   { activity: "fairy", icons: [["star", "butterfly", "heart"], ["heart", "star", "butterfly"]], captions: ["dancing with fairies~", "tiny glowing friends~", "fairy blessings~"] },
   { activity: "harvest_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of golden lanterns~", "moonlit harvest festival~", "dancing under the big orange moon~"] },
+  { activity: "mooncake", icons: [["food", "moon", "heart"], ["heart", "food", "moon"]], captions: ["a mountain of mooncakes~", "a lotus-golden feast~", "sharing sweets with the moon~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -557,6 +558,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... big golden moon... so pretty...",
     "Zzz... lanterns floating... lighting... up...",
     "*snore*... harvest blessing... warm glow...",
+  ],
+  mooncake: [
+    "*mumble*... one more bite... lotus yum...",
+    "Zzz... moon gave me cake... hehe...",
+    "*snore*... golden mooncake... sticky sweet...",
   ],
 };
 
@@ -3609,6 +3615,8 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("squirrel")) contextIcons.push("food", "heart", "flower");
   if (dailyActivityLog.includes("mushroom")) contextIcons.push("flower", "butterfly", "star");
   if (dailyActivityLog.includes("fairy")) contextIcons.push("heart", "star", "butterfly");
+  if (dailyActivityLog.includes("harvest_moon")) contextIcons.push("moon", "star", "heart");
+  if (dailyActivityLog.includes("mooncake")) contextIcons.push("food", "moon", "heart");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -12402,6 +12410,13 @@ function blessHarvestMoon(): void {
     addDiaryEntry("milestone", "🌕", `Harvest moon blessing #${totalHarvestMoonsBlessed}~! Every lantern shining bright! 🌕🏮`);
   }
 
+  // After the blessing, the moon drops a mooncake as a harvest-moon gift.
+  // Small delay via setTimeout-on-frame would be nicer, but we just spawn immediately
+  // — the arc animation itself gives the drop its "descending from the sky" feel.
+  const moonX = fest.moonCx;
+  const moonY = fest.moonCy;
+  spawnMooncake(moonX, moonY);
+
   checkAchievements();
   saveGame();
 }
@@ -12672,6 +12687,421 @@ function drawHarvestLanterns(): void {
     ctx.fillText("light 🏮", getLanternSwayX(firstUnlit), firstUnlit.y - 4);
     ctx.restore();
   }
+}
+
+// --- Mooncake reward drop (falls from the moon after a harvest moon blessing) ---
+// When the player blesses a harvest moon by lighting every lantern, a traditional
+// Chinese mooncake arcs down from the moon onto the ground. Clicking it shares
+// the treat with the pet — a bigger reward than a normal snack + unique speech.
+interface Mooncake {
+  x: number;            // current x (moves during arc)
+  startX: number;
+  startY: number;
+  groundX: number;      // final resting x
+  groundY: number;      // final resting y
+  y: number;            // current y
+  arcProgress: number;  // 0 → 1 during the drop arc
+  bounce: number;
+  bouncePhase: number;  // bouncing animation after landing
+  spin: number;         // rotation during fall
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  landed: boolean;
+  active: boolean;
+  sway: number;         // gentle rest sway phase
+  glowPulse: number;    // halo pulse until player shares it
+}
+
+let mooncake: Mooncake | null = null;
+let totalMooncakesShared = 0;
+let totalMooncakesDropped = 0;
+let mooncakeFirstShared = false;
+
+const MOONCAKE_ARC_FRAMES = 90;      // ~1.5s arc from moon to ground
+const MOONCAKE_LIFE = 2400;          // ~40s before fading out if uncollected
+const MOONCAKE_FADE_IN = 30;
+const MOONCAKE_FADE_OUT = 60;
+
+const MOONCAKE_SHARE_SPEECHES = [
+  "Mmm~ mooncake! 🥮✨",
+  "So sweet and warm~! 🥮💖",
+  "A harvest feast just for me~! 🥮🌕",
+  "Sharing with the moon~! 🥮✨",
+  "Lotus-y and golden~! 🥮💛",
+  "The best autumn bite~! 🥮🍂",
+];
+
+const MOONCAKE_SIGHT_SPEECHES = [
+  "A mooncake~! 🥮",
+  "Whooa~ a gift from the moon! 🥮🌕",
+  "Is that for me~? 🥮💖",
+  "A tiny golden cake~! 🥮✨",
+];
+
+function playMooncakeDropSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft chime descending as the mooncake drops — like a twinkle glissando
+  const freqs = [1568, 1318.5, 1046.5, 880]; // G6, E6, C6, A5
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.035, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.32);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.35);
+  }
+}
+
+function playMooncakeLandSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft landing thump: low sine + quick decay
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(160, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t + 0.18);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.25);
+}
+
+function playMooncakeShareSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Warm ascending "nibble" chime: E5, G5, C6
+  const freqs = [659.25, 783.99, 1046.5];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.06, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.45);
+  }
+  // Soft low "mmm" body sustain
+  const low = audioCtx.createOscillator();
+  low.type = "sine";
+  low.frequency.value = 220;
+  const lgain = audioCtx.createGain();
+  lgain.gain.setValueAtTime(0, t);
+  lgain.gain.linearRampToValueAtTime(0.03, t + 0.05);
+  lgain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  low.connect(lgain);
+  lgain.connect(audioCtx.destination);
+  low.start(t);
+  low.stop(t + 0.6);
+}
+
+function spawnMooncake(startX: number, startY: number): void {
+  if (mooncake) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 52;
+  // Land a bit toward the center, on the opposite side of the pet's usual position
+  // so the pet has a clear path to it visually.
+  const landX = w * 0.3 + Math.random() * w * 0.4;
+  mooncake = {
+    x: startX,
+    startX,
+    startY,
+    groundX: landX,
+    groundY,
+    y: startY,
+    arcProgress: 0,
+    bounce: 0,
+    bouncePhase: 0,
+    spin: 0,
+    life: MOONCAKE_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    landed: false,
+    active: true,
+    sway: Math.random() * Math.PI * 2,
+    glowPulse: 0,
+  };
+  totalMooncakesDropped++;
+  playMooncakeDropSound();
+  // 70% chance of a sighting speech
+  if (Math.random() < 0.7) {
+    const s = MOONCAKE_SIGHT_SPEECHES[Math.floor(Math.random() * MOONCAKE_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 140);
+  }
+}
+
+function tryClickMooncake(clickX: number, clickY: number): boolean {
+  if (!mooncake || !mooncake.active || !mooncake.landed) return false;
+  const m = mooncake;
+  const dx = clickX - m.x;
+  const dy = clickY - (m.y - 2);
+  // Generous circular hitbox (~9px radius)
+  if (dx * dx + dy * dy < 81) {
+    shareMooncake();
+    return true;
+  }
+  return false;
+}
+
+function shareMooncake(): void {
+  if (!mooncake || !mooncake.active) return;
+  const m = mooncake;
+  m.active = false;
+  totalMooncakesShared++;
+
+  petHappiness = Math.min(100, petHappiness + 6);
+  petHunger = Math.min(100, petHunger + 20);
+  totalCarePoints += 2;
+  addFriendshipXP(4);
+
+  playMooncakeShareSound();
+
+  // Warm sparkle + crumb particle burst
+  for (let i = 0; i < 14; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = 1.0 + Math.random() * 1.8;
+    particles.push({
+      x: m.x + (Math.random() - 0.5) * 3,
+      y: m.y - 3,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 45 + Math.floor(Math.random() * 25),
+      maxLife: 70,
+      size: 1.8 + Math.random() * 1.8,
+      type: "sparkle",
+    });
+  }
+  // A few golden heart particles
+  for (let i = 0; i < 3; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.6;
+    const speed = 0.9 + Math.random() * 1.0;
+    particles.push({
+      x: m.x,
+      y: m.y - 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 70 + Math.floor(Math.random() * 20),
+      maxLife: 90,
+      size: 3 + Math.random() * 1.2,
+      type: "heart",
+    });
+  }
+
+  const s = MOONCAKE_SHARE_SPEECHES[Math.floor(Math.random() * MOONCAKE_SHARE_SPEECHES.length)];
+  queueSpeechBubble(s, 200);
+
+  if (!mooncakeFirstShared) {
+    mooncakeFirstShared = true;
+    addDiaryEntry("milestone", "🥮", "The moon gave me a mooncake after the harvest blessing~! So warm and golden! 🥮🌕✨");
+  } else {
+    addDiaryEntry("milestone", "🥮", `Shared mooncake #${totalMooncakesShared}~! Another harvest-moon gift! 🥮🌕`);
+  }
+
+  logDailyActivity("mooncake");
+  checkAchievements();
+  saveGame();
+}
+
+function updateMooncake(): void {
+  if (!mooncake) return;
+  const m = mooncake;
+
+  if (m.fadeIn < 1) m.fadeIn = Math.min(1, m.fadeIn + 1 / MOONCAKE_FADE_IN);
+
+  if (!m.landed) {
+    // Arc from moon to ground with gentle parabolic ease
+    m.arcProgress = Math.min(1, m.arcProgress + 1 / MOONCAKE_ARC_FRAMES);
+    const t = m.arcProgress;
+    const eased = 1 - Math.pow(1 - t, 2); // quadratic ease-out
+    m.x = m.startX + (m.groundX - m.startX) * eased;
+    // Parabolic fall with small hump: y = startY + (groundY - startY) * t² shape, plus slight hump
+    const baseY = m.startY + (m.groundY - m.startY) * (t * t);
+    const hump = Math.sin(t * Math.PI) * -8; // small arc rise
+    m.y = baseY + hump;
+    m.spin += 0.08;
+    if (m.arcProgress >= 1) {
+      m.landed = true;
+      m.y = m.groundY;
+      m.x = m.groundX;
+      m.bouncePhase = 1;
+      playMooncakeLandSound();
+      // Tiny dust puff on landing
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI - Math.PI;
+        const speed = 0.4 + Math.random() * 0.8;
+        particles.push({
+          x: m.x + (Math.random() - 0.5) * 6,
+          y: m.groundY + 1,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed * 0.5 - 0.3,
+          life: 25 + Math.floor(Math.random() * 10),
+          maxLife: 35,
+          size: 1.2 + Math.random() * 0.8,
+          type: "sparkle",
+        });
+      }
+    }
+  } else {
+    // Resting on ground
+    m.sway += 0.04;
+    m.bouncePhase = Math.max(0, m.bouncePhase - 0.04);
+    m.glowPulse += 0.06;
+    m.life--;
+    if (m.life <= 0 || !m.active) {
+      m.fadeOut = Math.max(0, m.fadeOut - 1 / MOONCAKE_FADE_OUT);
+      if (m.fadeOut <= 0) {
+        mooncake = null;
+        return;
+      }
+    } else if (m.life < MOONCAKE_FADE_OUT) {
+      m.fadeOut = m.life / MOONCAKE_FADE_OUT;
+    }
+    // Fade out faster if pet sleeps
+    if (isSleeping && m.active && m.life > MOONCAKE_FADE_OUT) {
+      m.life = MOONCAKE_FADE_OUT;
+    }
+  }
+}
+
+function drawMooncake(): void {
+  if (!mooncake) return;
+  const m = mooncake;
+  const alpha = m.fadeIn * m.fadeOut;
+  if (alpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ground shadow when landed (scales with bouncePhase)
+  if (m.landed) {
+    const shadowR = 8 + (1 - m.bouncePhase) * 2;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+    ctx.beginPath();
+    ctx.ellipse(m.groundX, m.groundY + 5, shadowR, 2.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Bounce-in squash on first landing
+  const squashX = m.landed ? 1 + m.bouncePhase * 0.3 : 1;
+  const squashY = m.landed ? 1 - m.bouncePhase * 0.25 : 1;
+  // Gentle rest sway
+  const swayY = m.landed ? Math.sin(m.sway) * 0.5 : 0;
+
+  // Halo pulse while landed & active (invitation to click)
+  if (m.landed && m.active) {
+    const pulse = 0.5 + Math.sin(m.glowPulse) * 0.5;
+    const haloR = 10 + pulse * 3;
+    const halo = ctx.createRadialGradient(m.x, m.y - 1 + swayY, 4, m.x, m.y - 1 + swayY, haloR);
+    halo.addColorStop(0, "rgba(255, 200, 110, 0.4)");
+    halo.addColorStop(1, "rgba(255, 150, 70, 0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y - 1 + swayY, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(m.x, m.y - 2 + swayY);
+  if (!m.landed) ctx.rotate(m.spin);
+  ctx.scale(squashX, squashY);
+
+  // --- Mooncake sprite (traditional round Chinese mooncake) ---
+  // Outer side (body) — golden brown pastry
+  const bodyGrad = ctx.createRadialGradient(0, -1, 1, 0, 2, 8);
+  bodyGrad.addColorStop(0, "#E6B566");
+  bodyGrad.addColorStop(0.7, "#C98F44");
+  bodyGrad.addColorStop(1, "#8C5A28");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 7, 4.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Top surface (slightly offset upward) — lighter golden
+  const topGrad = ctx.createRadialGradient(-1.5, -2, 1, 0, -1, 7);
+  topGrad.addColorStop(0, "#F4D090");
+  topGrad.addColorStop(0.6, "#D9A558");
+  topGrad.addColorStop(1, "#A57438");
+  ctx.fillStyle = topGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, -1, 7, 3.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Decorative 4-petal lotus imprint on top
+  ctx.strokeStyle = "#7E4E1E";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  // Four small petals around the center
+  const petals = 4;
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2 + Math.PI / 4;
+    const px = Math.cos(a) * 2.8;
+    const py = Math.sin(a) * 1.3 - 1;
+    ctx.moveTo(0, -1);
+    ctx.quadraticCurveTo(Math.cos(a) * 1.8, Math.sin(a) * 0.8 - 1, px, py);
+  }
+  ctx.stroke();
+
+  // Center decorative dot (represents the egg-yolk center or stamped character)
+  ctx.fillStyle = "#E8A850";
+  ctx.beginPath();
+  ctx.arc(0, -1, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#A56020";
+  ctx.beginPath();
+  ctx.arc(0, -1, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer crimped edge highlight (small dots around top rim, like fluted pastry)
+  ctx.fillStyle = "rgba(255, 220, 160, 0.55)";
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const rx = Math.cos(a) * 6.4;
+    const ry = Math.sin(a) * 2.8 - 1;
+    ctx.beginPath();
+    ctx.arc(rx, ry, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Upper-left specular highlight
+  ctx.fillStyle = "rgba(255, 240, 200, 0.45)";
+  ctx.beginPath();
+  ctx.ellipse(-2.4, -2.2, 1.8, 0.7, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // "share 🥮" hint until player has shared their first mooncake
+  if (m.landed && m.active && !mooncakeFirstShared && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("share 🥮", m.x, m.y - 10);
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
@@ -15123,6 +15553,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for mooncake pickup (dropped on ground after a blessing)
+  if (mooncake) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickMooncake(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mushroom ring poofs before bubbles/drag
   if (mushroomRing) {
     const rect = canvas.getBoundingClientRect();
@@ -16890,6 +17329,11 @@ const achievements: Achievement[] = [
     icon: "🌕", unlockMessage: "The harvest moon blesses you~! An autumn festival in your heart! 🌕🏮✨",
     condition: () => totalHarvestMoonsBlessed >= 1, unlocked: false,
   },
+  {
+    id: "mooncake_keeper", name: "Mooncake Keeper", description: "Share a mooncake from the harvest moon",
+    icon: "🥮", unlockMessage: "A moonlit feast with you~! The harvest moon smiles! 🥮🌕✨",
+    condition: () => totalMooncakesShared >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -17829,6 +18273,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E8B880";
+  ctx.fillText("MOONCAKES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🥮 ${totalMooncakesShared} shared (${totalMooncakesDropped} dropped)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -18320,6 +18774,9 @@ interface SaveData {
   totalHarvestMoonsBlessed: number;
   harvestMoonFirstSeen: boolean;
   harvestMoonFirstBlessed: boolean;
+  totalMooncakesShared: number;
+  totalMooncakesDropped: number;
+  mooncakeFirstShared: boolean;
   version: number;
 }
 
@@ -18444,6 +18901,9 @@ function buildSaveData(): SaveData {
     totalHarvestMoonsBlessed,
     harvestMoonFirstSeen,
     harvestMoonFirstBlessed,
+    totalMooncakesShared,
+    totalMooncakesDropped,
+    mooncakeFirstShared,
     version: 1,
   };
 }
@@ -18884,6 +19344,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).harvestMoonFirstBlessed === "boolean") {
     harvestMoonFirstBlessed = (data as SaveData).harvestMoonFirstBlessed;
+  }
+  if (typeof (data as SaveData).totalMooncakesShared === "number") {
+    totalMooncakesShared = (data as SaveData).totalMooncakesShared;
+  }
+  if (typeof (data as SaveData).totalMooncakesDropped === "number") {
+    totalMooncakesDropped = (data as SaveData).totalMooncakesDropped;
+  }
+  if (typeof (data as SaveData).mooncakeFirstShared === "boolean") {
+    mooncakeFirstShared = (data as SaveData).mooncakeFirstShared;
   }
 
   // Restore diary
@@ -21407,6 +21876,9 @@ function update(): void {
   // Harvest moon festival (autumn-night special event)
   updateHarvestMoonFestival();
 
+  // Mooncake reward drop (spawned by a blessed harvest moon)
+  updateMooncake();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -22580,6 +23052,9 @@ function draw(): void {
 
   // Mushroom ring / fairy ring (drawn behind the pet, on the ground)
   drawMushroomRing();
+
+  // Mooncake gift drop (falls from moon to ground after a harvest moon blessing)
+  drawMooncake();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
