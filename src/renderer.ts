@@ -435,6 +435,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "harvest_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of golden lanterns~", "moonlit harvest festival~", "dancing under the big orange moon~"] },
   { activity: "mooncake", icons: [["food", "moon", "heart"], ["heart", "food", "moon"]], captions: ["a mountain of mooncakes~", "a lotus-golden feast~", "sharing sweets with the moon~"] },
   { activity: "cardinal", icons: [["heart", "star", "heart"], ["flower", "heart", "star"]], captions: ["redbird in the snow~", "cheer-cheer-cheer forever~", "a winter songbird friend~"] },
+  { activity: "bunny", icons: [["heart", "flower", "heart"], ["star", "heart", "flower"]], captions: ["a meadow of bunnies~", "hop hop hop forever~", "soft ears in the snow~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -569,6 +570,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... cheer cheer... red feathers...",
     "Zzz... bright redbird... snowy day...",
     "*snore*... tiny seeds... for my friend...",
+  ],
+  bunny: [
+    "*mumble*... fluffy ears... so soft...",
+    "Zzz... hop hop... carrot yum...",
+    "*snore*... tiny pink nose... wiggle wiggle...",
   ],
 };
 
@@ -3624,6 +3630,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("harvest_moon")) contextIcons.push("moon", "star", "heart");
   if (dailyActivityLog.includes("mooncake")) contextIcons.push("food", "moon", "heart");
   if (dailyActivityLog.includes("cardinal")) contextIcons.push("heart", "star", "flower");
+  if (dailyActivityLog.includes("bunny")) contextIcons.push("heart", "flower", "star");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -13716,6 +13723,756 @@ function drawCardinal(): void {
   }
 }
 
+// ============================================================================
+// SNOW BUNNY (YUKIUSAGI 雪うさぎ)
+// ----------------------------------------------------------------------------
+// A fluffy white rabbit that occasionally hops into the scene during winter
+// daytime/evening — hops horizontally along the ground, pauses to sniff the
+// snow with twitching nose, nibbles at tiny snow-grass tufts, then hops off.
+// Leaves a trail of tiny paw prints in the snow behind it. Click while paused
+// to offer a carrot: bunny noses the carrot, munches with a happy wiggle,
+// rewards +happy/+care/+XP. Complements the Winter Cardinal (sky visitor) as
+// winter's ground-visitor counterpart — together they mirror the autumn
+// squirrel/fairy pair of small-friend encounters.
+// ============================================================================
+
+type BunnyState = "hopping_in" | "sniffing" | "nibbling" | "hopping_out" | "eating_carrot";
+
+interface Bunny {
+  x: number;
+  y: number;
+  groundY: number;
+  dir: 1 | -1;              // 1 = facing right (hopping right), -1 = facing left
+  state: BunnyState;
+  stateTimer: number;
+  hopPhase: number;         // 0..2π — advances per hop; y-bounce = sin(hopPhase)
+  hopSpeed: number;         // frames per hop cycle
+  earTwitch: number;        // ear twitch angle (radians)
+  earTwitchTimer: number;   // frames until next twitch
+  nosePhase: number;        // nose wiggle phase
+  noseFast: boolean;        // fast wiggle while sniffing
+  sniffBobs: number;        // how many body-down-sniff bobs remain
+  sniffCountdown: number;
+  nibblesLeft: number;
+  nibbleCountdown: number;
+  fadeIn: number;
+  fadeOut: number;
+  greeted: boolean;
+  carrotAppearAnim: number;  // 0..1 carrot fade-in on greet
+  carrotEaten: number;       // 0..1 carrot shrink as it's eaten
+  bodyColor: "white" | "cream" | "grey";  // rare grey variant
+  lastPawPrintX: number;     // so we don't spam prints every frame
+}
+
+// Tiny paw prints the bunny leaves behind as it hops
+interface PawPrint {
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  side: 1 | -1;  // left or right paw-pair offset
+}
+
+let bunny: Bunny | null = null;
+const pawPrints: PawPrint[] = [];
+let totalBunniesSeen = 0;
+let totalBunniesGreeted = 0;
+let bunnyFirstSeen = false;
+let bunnyFirstGreeted = false;
+
+const BUNNY_FADE_IN = 30;
+const BUNNY_FADE_OUT = 45;
+const BUNNY_HOP_FORWARD = 5.5;  // horizontal px advanced per hop landing
+const BUNNY_HOP_SPEED = 22;     // frames per hop cycle (lower = faster hops)
+const BUNNY_SNIFF_MIN = 140;    // ~2.3s minimum sniffing
+const BUNNY_SNIFF_MAX = 260;    // ~4.3s maximum sniffing
+const BUNNY_NIBBLE_MIN = 180;   // ~3s minimum nibbling
+const BUNNY_NIBBLE_MAX = 320;   // ~5.3s maximum nibbling
+const PAW_PRINT_MAX_LIFE = 260; // ~4.3s before paw prints fade away
+
+const BUNNY_SIGHT_SPEECHES = [
+  "A snow bunny~! 🐰❄️",
+  "Yukiusagi~ hehe! 🐰",
+  "Fluffy bunny friend~! 🐰💖",
+  "Hop hop hop~! 🐰",
+  "So fluffy in the snow~! 🐰❄️",
+];
+
+const BUNNY_GREET_SPEECHES = [
+  "Carrot for my bunny~! 🥕🐰",
+  "Nibble nibble~! 🐰💕",
+  "A winter friend fed~! 🐰❄️",
+  "Happy hoppy nose~! 🐰✨",
+  "Soft ears, warm heart~! 🐰💖",
+  "Shared my carrot~! 🥕💖",
+];
+
+function playBunnyHop(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft low thump — pawed landing on snow (no bones, just fluff)
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.09);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.028, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.12);
+  // A brief filtered-noise whisper to add a "snow-crunch" texture
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.07), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.02));
+    data[i] = (Math.random() * 2 - 1) * env * 0.5;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 2200;
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(0.022, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  noise.connect(filter);
+  filter.connect(ng);
+  ng.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.09);
+}
+
+function playBunnySniff(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Two tiny high-pitched breathy puffs — sniff-sniff
+  for (let i = 0; i < 2; i++) {
+    const start = t + i * 0.08;
+    const noise = audioCtx.createBufferSource();
+    const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.05), audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let j = 0; j < data.length; j++) {
+      const env = Math.exp(-j / (audioCtx.sampleRate * 0.015));
+      data[j] = (Math.random() * 2 - 1) * env;
+    }
+    noise.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 3200;
+    filter.Q.value = 2.2;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.028, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.06);
+    noise.connect(filter);
+    filter.connect(g);
+    g.connect(audioCtx.destination);
+    noise.start(start);
+    noise.stop(start + 0.07);
+  }
+}
+
+function playBunnyNibble(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Tiny rapid ticks — bunny munching
+  for (let i = 0; i < 4; i++) {
+    const start = t + i * 0.055;
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(1400 + Math.random() * 400, start);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(0.02, start + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.04);
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.05);
+  }
+}
+
+function playBunnyGreetSqueak(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Tiny happy squeak-chirp — "eeep!"
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(1800, t);
+  osc.frequency.exponentialRampToValueAtTime(2600, t + 0.08);
+  osc.frequency.exponentialRampToValueAtTime(1600, t + 0.18);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.05, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.24);
+  // Quick nibble follow-up
+  setTimeout(() => playBunnyNibble(), 220);
+}
+
+function canSpawnBunny(): boolean {
+  if (bunny) return false;
+  if (cardinal) return false; // don't double-up winter visitors
+  if (isSleeping) return false;
+  if (currentSeason !== "winter") return false;
+  const isDaytimeish = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon" || currentTimeOfDay === "evening";
+  if (!isDaytimeish) return false;
+  if (currentWeather === "stormy") return false;
+  return true;
+}
+
+function spawnBunny(): void {
+  if (bunny) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const fromLeft = Math.random() < 0.5;
+  const dir: 1 | -1 = fromLeft ? 1 : -1;
+  const startX = fromLeft ? -12 : w + 12;
+  const groundY = h / 2 + 50 + Math.random() * 4;
+  const bodyColorRoll = Math.random();
+  const bodyColor: "white" | "cream" | "grey" =
+    bodyColorRoll < 0.75 ? "white" : bodyColorRoll < 0.93 ? "cream" : "grey";
+  bunny = {
+    x: startX,
+    y: groundY,
+    groundY,
+    dir,
+    state: "hopping_in",
+    stateTimer: 2400, // safety cap; transition happens via position check
+    hopPhase: 0,
+    hopSpeed: BUNNY_HOP_SPEED,
+    earTwitch: 0,
+    earTwitchTimer: 60 + Math.floor(Math.random() * 120),
+    nosePhase: 0,
+    noseFast: false,
+    sniffBobs: 0,
+    sniffCountdown: 0,
+    nibblesLeft: 2 + Math.floor(Math.random() * 3), // 2-4 nibbles
+    nibbleCountdown: 0,
+    fadeIn: 0,
+    fadeOut: 1,
+    greeted: false,
+    carrotAppearAnim: 0,
+    carrotEaten: 0,
+    bodyColor,
+    lastPawPrintX: startX,
+  };
+  totalBunniesSeen++;
+}
+
+function tryClickBunny(clickX: number, clickY: number): boolean {
+  if (!bunny) return false;
+  const b = bunny;
+  if (b.state === "hopping_in" || b.state === "hopping_out" || b.state === "eating_carrot") return false;
+  if (b.greeted) return false;
+  const dx = clickX - b.x;
+  const dy = clickY - (b.y - 3);
+  // Generous circular hitbox (~11 px radius) — bigger than cardinal since bunny body is wider
+  if (dx * dx + dy * dy < 121) {
+    greetBunny();
+    return true;
+  }
+  return false;
+}
+
+function greetBunny(): void {
+  if (!bunny) return;
+  const b = bunny;
+  b.greeted = true;
+  b.state = "eating_carrot";
+  b.stateTimer = 220; // ~3.7s carrot-munch sequence
+  b.carrotAppearAnim = 0;
+  b.carrotEaten = 0;
+  b.noseFast = true;
+  totalBunniesGreeted++;
+
+  petHappiness = Math.min(100, petHappiness + 4);
+  totalCarePoints += 2;
+  addFriendshipXP(3);
+
+  playBunnyGreetSqueak();
+
+  // Warm heart + snowy sparkle bloom
+  for (let i = 0; i < 12; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.2;
+    const speed = 0.7 + Math.random() * 1.4;
+    particles.push({
+      x: b.x + (Math.random() - 0.5) * 4,
+      y: b.y - 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 40 + Math.floor(Math.random() * 25),
+      maxLife: 65,
+      size: 1.6 + Math.random() * 1.4,
+      type: "sparkle",
+    });
+  }
+  for (let i = 0; i < 3; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.7;
+    const speed = 0.8 + Math.random() * 0.8;
+    particles.push({
+      x: b.x,
+      y: b.y - 5,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 60 + Math.floor(Math.random() * 20),
+      maxLife: 80,
+      size: 2.4 + Math.random() * 1,
+      type: "heart",
+    });
+  }
+
+  const s = BUNNY_GREET_SPEECHES[Math.floor(Math.random() * BUNNY_GREET_SPEECHES.length)];
+  queueSpeechBubble(s, 180);
+
+  if (!bunnyFirstGreeted) {
+    bunnyFirstGreeted = true;
+    addDiaryEntry("milestone", "🐰", "A snow bunny came to my hand~! I shared a carrot and her tiny nose wiggled with joy! 🐰🥕❄️");
+  }
+
+  logDailyActivity("bunny");
+  checkAchievements();
+  saveGame();
+}
+
+function updateBunny(): void {
+  // Spawn roll — slightly rarer than cardinal so they don't collide often
+  if (!bunny && canSpawnBunny() && Math.random() < 0.0004) {
+    spawnBunny();
+  }
+
+  // Paw prints fade regardless of bunny presence
+  for (let i = pawPrints.length - 1; i >= 0; i--) {
+    pawPrints[i].life--;
+    if (pawPrints[i].life <= 0) pawPrints.splice(i, 1);
+  }
+
+  if (!bunny) return;
+  const b = bunny;
+
+  if (b.fadeIn < 1) b.fadeIn = Math.min(1, b.fadeIn + 1 / BUNNY_FADE_IN);
+  b.stateTimer--;
+
+  // Nose and ear animation (ambient on all states)
+  b.nosePhase += b.noseFast ? 0.5 : 0.18;
+  b.earTwitch *= 0.9;
+  b.earTwitchTimer--;
+  if (b.earTwitchTimer <= 0) {
+    b.earTwitch = (Math.random() - 0.5) * 0.5;
+    b.earTwitchTimer = 60 + Math.floor(Math.random() * 140);
+  }
+
+  if (b.state === "hopping_in" || b.state === "hopping_out") {
+    // Hop cycle — advance hopPhase; each time it crosses 2π we land, play thump, advance x
+    const prevPhase = b.hopPhase;
+    b.hopPhase += (Math.PI * 2) / b.hopSpeed;
+    // Hop y-offset: peak at π/2, landed at 2π (and 0)
+    const bounce = Math.sin(b.hopPhase) * 5.5; // 5.5 px peak hop
+    b.y = b.groundY - Math.max(0, bounce);
+    // Move forward during the hop arc (slightly faster in air, slow on landing)
+    const airboost = Math.max(0, Math.sin(b.hopPhase)) * 0.8 + 0.4;
+    b.x += b.dir * (BUNNY_HOP_FORWARD / b.hopSpeed) * airboost;
+    // Landing thump + paw print when the hop completes
+    if (prevPhase < Math.PI * 2 && b.hopPhase >= Math.PI * 2) {
+      b.hopPhase -= Math.PI * 2;
+      b.y = b.groundY;
+      playBunnyHop();
+      // Drop a paw print behind the bunny
+      pawPrints.push({
+        x: b.x - b.dir * 2,
+        y: b.groundY + 2,
+        life: PAW_PRINT_MAX_LIFE,
+        maxLife: PAW_PRINT_MAX_LIFE,
+        side: Math.random() < 0.5 ? 1 : -1,
+      });
+      b.lastPawPrintX = b.x;
+    }
+
+    if (b.state === "hopping_in") {
+      // After entering sufficiently far into the canvas, decide to stop
+      const enteredEnough = (b.dir === 1 && b.x > canvas.width * 0.2)
+        || (b.dir === -1 && b.x < canvas.width * 0.8);
+      // Random chance per landing to pause — only check when close to ground (landed)
+      if (enteredEnough && b.hopPhase < Math.PI * 0.15 && Math.random() < 0.04) {
+        b.state = "sniffing";
+        b.stateTimer = BUNNY_SNIFF_MIN + Math.floor(Math.random() * (BUNNY_SNIFF_MAX - BUNNY_SNIFF_MIN));
+        b.sniffCountdown = 30;
+        b.sniffBobs = 2 + Math.floor(Math.random() * 2);
+        b.noseFast = true;
+        b.y = b.groundY;
+        b.hopPhase = 0;
+        if (!bunnyFirstSeen) {
+          bunnyFirstSeen = true;
+          addDiaryEntry("milestone", "🐰", "A fluffy snow bunny visited my snow~! Her tiny nose wiggled so fast! 🐰❄️");
+        }
+        if (Math.random() < 0.7) {
+          const s = BUNNY_SIGHT_SPEECHES[Math.floor(Math.random() * BUNNY_SIGHT_SPEECHES.length)];
+          queueSpeechBubble(s, 140);
+        }
+      }
+    } else {
+      // hopping_out — exit when off-screen
+      if (b.x < -20 || b.x > canvas.width + 20) {
+        b.fadeOut = Math.max(0, b.fadeOut - 1 / BUNNY_FADE_OUT);
+        if (b.fadeOut <= 0) {
+          bunny = null;
+          return;
+        }
+      }
+    }
+  } else if (b.state === "sniffing") {
+    b.sniffCountdown--;
+    if (b.sniffCountdown <= 0 && b.sniffBobs > 0) {
+      b.sniffBobs--;
+      b.sniffCountdown = 60 + Math.floor(Math.random() * 30);
+      playBunnySniff();
+    }
+    if (b.stateTimer <= 0) {
+      if (b.nibblesLeft > 0 && !b.greeted) {
+        b.state = "nibbling";
+        b.stateTimer = BUNNY_NIBBLE_MIN + Math.floor(Math.random() * (BUNNY_NIBBLE_MAX - BUNNY_NIBBLE_MIN));
+        b.nibbleCountdown = 20;
+        b.noseFast = true;
+      } else {
+        // Decide: hop further or leave?
+        const shouldLeave = Math.random() < 0.4 || !b.greeted && b.nibblesLeft <= 0;
+        if (shouldLeave) {
+          b.state = "hopping_out";
+          b.stateTimer = 1800;
+          b.noseFast = false;
+        } else {
+          // Resume hopping further
+          b.state = "hopping_in";
+          b.stateTimer = 1800;
+          b.noseFast = false;
+          b.hopPhase = 0;
+        }
+      }
+    }
+  } else if (b.state === "nibbling") {
+    b.nibbleCountdown--;
+    if (b.nibbleCountdown <= 0 && b.nibblesLeft > 0) {
+      b.nibblesLeft--;
+      b.nibbleCountdown = 55 + Math.floor(Math.random() * 30);
+      playBunnyNibble();
+      // Tiny snow-puff particles on nibble
+      for (let i = 0; i < 3; i++) {
+        const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI;
+        const speed = 0.3 + Math.random() * 0.5;
+        particles.push({
+          x: b.x + b.dir * 3,
+          y: b.groundY + 1,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.4,
+          life: 18 + Math.floor(Math.random() * 10),
+          maxLife: 30,
+          size: 1 + Math.random() * 0.6,
+          type: "sparkle",
+        });
+      }
+    }
+    if (b.nibblesLeft <= 0 || b.stateTimer <= 0) {
+      b.state = "sniffing";
+      b.stateTimer = 80 + Math.floor(Math.random() * 60);
+      b.sniffBobs = 1;
+      b.sniffCountdown = 30;
+    }
+  } else if (b.state === "eating_carrot") {
+    // Greet-sequence: carrot appears, bunny noses it, it shrinks as she munches
+    if (b.carrotAppearAnim < 1) b.carrotAppearAnim = Math.min(1, b.carrotAppearAnim + 0.06);
+    // Begin eating after carrot pops in
+    if (b.carrotAppearAnim >= 0.95 && b.carrotEaten < 1) {
+      b.carrotEaten = Math.min(1, b.carrotEaten + 0.014);
+      if (Math.floor(b.stateTimer) % 30 === 0 && b.stateTimer > 40) playBunnyNibble();
+    }
+    if (b.stateTimer <= 0) {
+      // Happy after-munch hop away
+      b.state = "hopping_out";
+      b.stateTimer = 1800;
+      b.noseFast = false;
+      // Flip direction so bunny hops off towards nearest edge
+      const nearestLeft = b.x < canvas.width / 2;
+      b.dir = (nearestLeft ? -1 : 1) as 1 | -1;
+      b.hopPhase = 0;
+    }
+  }
+
+  // Safety: if stuck hopping in too long (never paused), force an exit
+  if (b.state === "hopping_in" && ((b.dir === 1 && b.x > canvas.width + 20) || (b.dir === -1 && b.x < -20))) {
+    b.state = "hopping_out";
+    b.stateTimer = 400;
+  }
+
+  // Weather/season/sleep transitions → leave
+  if (isSleeping || currentSeason !== "winter" || currentWeather === "stormy") {
+    if (b.state !== "hopping_out") {
+      b.state = "hopping_out";
+      b.stateTimer = 1800;
+      b.noseFast = false;
+      b.hopPhase = 0;
+    }
+  }
+}
+
+function drawPawPrints(): void {
+  if (pawPrints.length === 0) return;
+  ctx.save();
+  for (const p of pawPrints) {
+    const alpha = Math.min(1, p.life / p.maxLife) * 0.55;
+    ctx.globalAlpha = alpha;
+    // Soft indented paw print — two small ovals (pads) with an upper toe dot triplet
+    ctx.fillStyle = "rgba(150, 170, 190, 0.9)";
+    // Main pad
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 1.8, 1.0, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Small toe dots above
+    ctx.beginPath();
+    ctx.arc(p.x - 1.1, p.y - 1.1, 0.4, 0, Math.PI * 2);
+    ctx.arc(p.x + 1.1, p.y - 1.1, 0.4, 0, Math.PI * 2);
+    ctx.arc(p.x + p.side * 0.3, p.y - 1.5, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBunny(): void {
+  if (!bunny) return;
+  const b = bunny;
+  const alpha = b.fadeIn * b.fadeOut;
+  if (alpha <= 0.01) return;
+
+  // Body colors by variant
+  const colors = b.bodyColor === "grey"
+    ? { light: "#dce0e6", mid: "#b8c0ca", shadow: "#9098a6", belly: "#e6e9ee" }
+    : b.bodyColor === "cream"
+    ? { light: "#fff8ed", mid: "#f0e4cc", shadow: "#c8b898", belly: "#fffaf0" }
+    : { light: "#ffffff", mid: "#eef2f7", shadow: "#c4ccd6", belly: "#ffffff" };
+
+  const bodyX = b.x;
+  // A bit of y-squish on landing — squish when near ground during active hop
+  const nearGround = Math.abs(b.y - b.groundY) < 0.3;
+  const squish = (b.state === "hopping_in" || b.state === "hopping_out") && nearGround ? 0.15 : 0;
+  // Sniff head-dip: bob during sniffing
+  const sniffDip = b.state === "sniffing" && b.sniffCountdown < 18 && b.sniffCountdown > 4
+    ? Math.sin((18 - b.sniffCountdown) / 14 * Math.PI) * 1.2
+    : 0;
+  const bodyY = b.y + sniffDip;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ground shadow (when grounded-ish)
+  if (b.state !== "hopping_in" || nearGround) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.groundY + 2, 7 - Math.max(0, b.groundY - b.y) * 0.3, 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.translate(bodyX, bodyY);
+  ctx.scale(b.dir, 1); // mirror sprite by facing direction
+  // Squish: scale y down a touch, compensate by shifting down
+  if (squish > 0) {
+    ctx.translate(0, squish * 2);
+    ctx.scale(1 + squish * 0.3, 1 - squish);
+    ctx.translate(0, -squish * 2);
+  }
+
+  // --- Fluffy tail puff (behind body) ---
+  ctx.fillStyle = colors.light;
+  ctx.beginPath();
+  ctx.ellipse(-5.0, -0.2, 2.2, 2.0, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.beginPath();
+  ctx.ellipse(-5.2, -0.6, 1.2, 1.0, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Back leg (folded under the body when sitting/sniffing) ---
+  ctx.fillStyle = colors.mid;
+  ctx.beginPath();
+  ctx.ellipse(-2.5, 3.2, 2.4, 1.3, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Body (round fluffy torso) ---
+  const bodyGrad = ctx.createRadialGradient(-0.5, -0.8, 0.8, 0, 0, 7);
+  bodyGrad.addColorStop(0, colors.light);
+  bodyGrad.addColorStop(0.6, colors.mid);
+  bodyGrad.addColorStop(1, colors.shadow);
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(-0.4, 0.4, 5.6, 4.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Belly (lighter front)
+  ctx.fillStyle = colors.belly;
+  ctx.beginPath();
+  ctx.ellipse(0.5, 1.8, 3.2, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Front legs (paws tucked in front) ---
+  ctx.fillStyle = colors.mid;
+  ctx.beginPath();
+  ctx.ellipse(1.5, 3.6, 1.2, 1.6, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(3.2, 3.6, 1.2, 1.6, 0.15, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Head (round with slight forward lean) ---
+  const headDip = b.state === "sniffing" ? 0.8 : 0;
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(3.4, -2.0 + headDip, 3.2, 2.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Ears (long rounded, pink inner, with independent twitch) ---
+  const earBaseAngleL = -0.15 + b.earTwitch;
+  const earBaseAngleR = 0.15 + b.earTwitch * 0.7;
+  // Back ear (left from viewer's POV but in sprite space it's on upper-left of head)
+  ctx.save();
+  ctx.translate(2.6, -4.5 + headDip);
+  ctx.rotate(earBaseAngleL);
+  ctx.fillStyle = colors.light;
+  ctx.beginPath();
+  ctx.ellipse(0, -2.2, 0.9, 3.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Pink inner
+  ctx.fillStyle = "#f6b8c4";
+  ctx.beginPath();
+  ctx.ellipse(0, -1.9, 0.45, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Shadow edge
+  ctx.fillStyle = "rgba(0,0,0,0.06)";
+  ctx.beginPath();
+  ctx.ellipse(-0.2, -2.2, 0.25, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Front ear
+  ctx.save();
+  ctx.translate(4.2, -4.3 + headDip);
+  ctx.rotate(earBaseAngleR);
+  ctx.fillStyle = colors.light;
+  ctx.beginPath();
+  ctx.ellipse(0, -2.0, 0.95, 3.0, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#f8c2cc";
+  ctx.beginPath();
+  ctx.ellipse(0, -1.7, 0.5, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // --- Eye (single tiny black dot on the visible side) ---
+  ctx.fillStyle = "#0e0a10";
+  ctx.beginPath();
+  ctx.arc(4.4, -2.4 + headDip, 0.55, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(4.55, -2.55 + headDip, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Nose (pink wiggling triangle) + whiskers ---
+  const noseWiggle = Math.sin(b.nosePhase) * 0.3;
+  ctx.fillStyle = "#ec8ea2";
+  ctx.beginPath();
+  ctx.moveTo(5.9 + noseWiggle * 0.2, -1.4 + headDip);
+  ctx.lineTo(5.4, -1.9 + headDip);
+  ctx.lineTo(5.4, -0.9 + headDip);
+  ctx.closePath();
+  ctx.fill();
+  // Tiny mouth line
+  ctx.strokeStyle = "rgba(80, 40, 50, 0.55)";
+  ctx.lineWidth = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(5.4, -1.0 + headDip);
+  ctx.lineTo(5.0, -0.4 + headDip);
+  ctx.stroke();
+  // Whiskers
+  ctx.strokeStyle = "rgba(200, 200, 210, 0.55)";
+  ctx.lineWidth = 0.25;
+  ctx.beginPath();
+  ctx.moveTo(5.2, -0.9 + headDip);
+  ctx.lineTo(7.5, -0.8 + headDip);
+  ctx.moveTo(5.2, -0.6 + headDip);
+  ctx.lineTo(7.5, -0.3 + headDip);
+  ctx.stroke();
+
+  // --- Carrot (during eating_carrot state only) ---
+  if (b.state === "eating_carrot" && b.carrotAppearAnim > 0) {
+    const carrotScale = b.carrotAppearAnim * (1 - b.carrotEaten * 0.85);
+    ctx.save();
+    ctx.translate(6.8, 0.4 + headDip);
+    ctx.scale(carrotScale, carrotScale);
+    // Orange carrot body
+    const carrotGrad = ctx.createLinearGradient(-2, 0, 2.2, 0);
+    carrotGrad.addColorStop(0, "#ff9830");
+    carrotGrad.addColorStop(1, "#c05a10");
+    ctx.fillStyle = carrotGrad;
+    ctx.beginPath();
+    ctx.moveTo(-1.2, -0.9);
+    ctx.lineTo(2.2, -0.4);
+    ctx.lineTo(2.2, 0.4);
+    ctx.lineTo(-1.2, 0.9);
+    ctx.closePath();
+    ctx.fill();
+    // Ridges
+    ctx.strokeStyle = "rgba(100, 40, 0, 0.35)";
+    ctx.lineWidth = 0.2;
+    ctx.beginPath();
+    ctx.moveTo(-0.2, -0.75);
+    ctx.lineTo(-0.2, 0.75);
+    ctx.moveTo(0.7, -0.55);
+    ctx.lineTo(0.7, 0.55);
+    ctx.moveTo(1.5, -0.45);
+    ctx.lineTo(1.5, 0.45);
+    ctx.stroke();
+    // Green leafy top
+    ctx.fillStyle = "#3ca048";
+    ctx.beginPath();
+    ctx.moveTo(-1.2, -0.2);
+    ctx.lineTo(-2.6, -1.4);
+    ctx.lineTo(-1.8, -1.4);
+    ctx.lineTo(-2.1, -2.2);
+    ctx.lineTo(-1.2, -1.2);
+    ctx.lineTo(-1.2, 0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#55b060";
+    ctx.beginPath();
+    ctx.moveTo(-1.2, -0.5);
+    ctx.lineTo(-1.4, -2.0);
+    ctx.lineTo(-0.9, -0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore();
+
+  // "greet 🐰" hint text until the player has greeted their first bunny
+  if (!bunnyFirstGreeted && !b.greeted && (b.state === "sniffing" || b.state === "nibbling")
+      && b.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("greet 🐰", b.x, b.y - 14);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -16183,6 +16940,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for snow bunny greet (paused on the ground in winter daytime)
+  if (bunny) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickBunny(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mushroom ring poofs before bubbles/drag
   if (mushroomRing) {
     const rect = canvas.getBoundingClientRect();
@@ -17960,6 +18726,11 @@ const achievements: Achievement[] = [
     icon: "🐦", unlockMessage: "A redbird's song is yours forever~! Winter friends stay true! 🐦❄️💖",
     condition: () => totalCardinalsGreeted >= 3, unlocked: false,
   },
+  {
+    id: "bunny_friend", name: "Snow Bunny Friend", description: "Offer a carrot to 3 snow bunnies",
+    icon: "🐰", unlockMessage: "A fluffy winter companion~! Hop hop hop into my heart! 🐰🥕❄️",
+    condition: () => totalBunniesGreeted >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -18919,6 +19690,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#F0E0F0";
+  ctx.fillText("SNOW BUNNIES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🐰 ${totalBunniesGreeted} greeted (${totalBunniesSeen} seen)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -19417,6 +20198,10 @@ interface SaveData {
   totalCardinalsGreeted: number;
   cardinalFirstSeen: boolean;
   cardinalFirstGreeted: boolean;
+  totalBunniesSeen: number;
+  totalBunniesGreeted: number;
+  bunnyFirstSeen: boolean;
+  bunnyFirstGreeted: boolean;
   version: number;
 }
 
@@ -19548,6 +20333,10 @@ function buildSaveData(): SaveData {
     totalCardinalsGreeted,
     cardinalFirstSeen,
     cardinalFirstGreeted,
+    totalBunniesSeen,
+    totalBunniesGreeted,
+    bunnyFirstSeen,
+    bunnyFirstGreeted,
     version: 1,
   };
 }
@@ -20009,6 +20798,18 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).cardinalFirstGreeted === "boolean") {
     cardinalFirstGreeted = (data as SaveData).cardinalFirstGreeted;
+  }
+  if (typeof (data as SaveData).totalBunniesSeen === "number") {
+    totalBunniesSeen = (data as SaveData).totalBunniesSeen;
+  }
+  if (typeof (data as SaveData).totalBunniesGreeted === "number") {
+    totalBunniesGreeted = (data as SaveData).totalBunniesGreeted;
+  }
+  if (typeof (data as SaveData).bunnyFirstSeen === "boolean") {
+    bunnyFirstSeen = (data as SaveData).bunnyFirstSeen;
+  }
+  if (typeof (data as SaveData).bunnyFirstGreeted === "boolean") {
+    bunnyFirstGreeted = (data as SaveData).bunnyFirstGreeted;
   }
 
   // Restore diary
@@ -22538,6 +23339,9 @@ function update(): void {
   // Winter cardinal visitor (bright red bird during winter daytime)
   updateCardinal();
 
+  // Snow bunny visitor (winter ground hopper)
+  updateBunny();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -23717,6 +24521,12 @@ function draw(): void {
 
   // Winter cardinal (drawn in the ground/body layer so it reads behind the pet)
   drawCardinal();
+
+  // Snow bunny paw prints on the ground (below the bunny)
+  drawPawPrints();
+
+  // Snow bunny (drawn in the ground/body layer so it reads behind the pet)
+  drawBunny();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
