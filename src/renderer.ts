@@ -437,6 +437,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "cardinal", icons: [["heart", "star", "heart"], ["flower", "heart", "star"]], captions: ["redbird in the snow~", "cheer-cheer-cheer forever~", "a winter songbird friend~"] },
   { activity: "bunny", icons: [["heart", "flower", "heart"], ["star", "heart", "flower"]], captions: ["a meadow of bunnies~", "hop hop hop forever~", "soft ears in the snow~"] },
   { activity: "snow_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of silver snowflakes~", "moonlit winter festival~", "dancing under the pale-blue moon~"] },
+  { activity: "snowflake_keepsake", icons: [["heart", "star", "moon"], ["star", "heart", "moon"]], captions: ["a crystal shelf of keepsakes~", "silver snowflakes in my paws~", "the moon's gift glowing softly~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -581,6 +582,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... silver moon... so pretty...",
     "Zzz... snowflakes... catching them all...",
     "*snore*... winter blessing... warm inside...",
+  ],
+  snowflake_keepsake: [
+    "*mumble*... tiny crystal... mine forever...",
+    "Zzz... keepsake from the moon... hehe...",
+    "*snore*... silver snowflake... safe with me...",
   ],
 };
 
@@ -3638,6 +3644,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("cardinal")) contextIcons.push("heart", "star", "flower");
   if (dailyActivityLog.includes("bunny")) contextIcons.push("heart", "flower", "star");
   if (dailyActivityLog.includes("snow_moon")) contextIcons.push("moon", "star", "heart");
+  if (dailyActivityLog.includes("snowflake_keepsake")) contextIcons.push("heart", "star", "moon");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -14850,6 +14857,10 @@ function blessSnowMoon(): void {
     addDiaryEntry("milestone", "🌕", `Snow moon blessing #${totalSnowMoonsBlessed}~! Every snowflake shining silver! 🌕❄️`);
   }
 
+  // After the blessing, the snow moon drops a snowflake keepsake as a winter
+  // gift — winter's counterpart to the harvest moon's mooncake.
+  spawnSnowflakeKeepsake(fest.moonCx, fest.moonCy);
+
   checkAchievements();
   saveGame();
 }
@@ -15135,6 +15146,510 @@ function drawSnowMoonCrystals(): void {
     ctx.fillText("catch ❄️", getSnowflakeX(firstUncaught), getSnowflakeY(firstUncaught) - 8);
     ctx.restore();
   }
+}
+
+// --- Snowflake Keepsake (drifts down from the moon after a snow moon blessing) ---
+// Winter counterpart to the mooncake. A single oversized crystalline snowflake
+// falls from the blessed snow moon, drifts side-to-side like a real snowflake,
+// and settles on the ground with a cool silvery halo. Clicking treasures it
+// with the pet — a memory keepsake rather than food, so it grants happiness /
+// care / XP but no hunger. One hue variant is picked per drop, matching the
+// sky-crystal palette so the keepsake visually ties back to the moon's sky.
+interface SnowflakeKeepsake {
+  x: number;             // current x (drifts during fall)
+  startX: number;
+  startY: number;
+  groundX: number;       // target resting x
+  groundY: number;       // target resting y
+  y: number;
+  fallProgress: number;  // 0 → 1 during the drop
+  spin: number;          // rotation while falling (continues subtly on ground)
+  swayPhase: number;     // sway phase while falling and on ground
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  landed: boolean;
+  landBounce: number;    // squash-in on landing, decays to 0
+  active: boolean;
+  glowPulse: number;     // halo pulse while landed & active
+  sparkleTimer: number;  // throttle for ground-ambient sparkle emission
+  hueIndex: number;      // index into SNOWFLAKE_HUES
+}
+
+let snowflakeKeepsake: SnowflakeKeepsake | null = null;
+let totalSnowflakeKeepsakesTreasured = 0;
+let totalSnowflakeKeepsakesDropped = 0;
+let snowflakeKeepsakeFirstTreasured = false;
+
+const SNOWFLAKE_KEEPSAKE_FALL_FRAMES = 140;  // ~2.3s drift down (slower than mooncake's 1.5s — snowflakes fall gently)
+const SNOWFLAKE_KEEPSAKE_LIFE = 2400;        // ~40s on ground before fading if un-treasured
+const SNOWFLAKE_KEEPSAKE_FADE_IN = 30;
+const SNOWFLAKE_KEEPSAKE_FADE_OUT = 60;
+
+const SNOWFLAKE_KEEPSAKE_TREASURE_SPEECHES = [
+  "I'll treasure this forever~! ❄️💖",
+  "A snow moon keepsake~! ❄️✨",
+  "So cold but so pretty~! ❄️💙",
+  "Winter magic in my paws~! ❄️🌕",
+  "The moon gave me a crystal~! ❄️💖",
+  "My silver memento~! ❄️✨",
+];
+
+const SNOWFLAKE_KEEPSAKE_SIGHT_SPEECHES = [
+  "A snowflake keepsake~! ❄️",
+  "Whooa~ a gift from the snow moon! ❄️🌕",
+  "Is that crystal for me~? ❄️💖",
+  "A tiny silver star~! ❄️✨",
+];
+
+function playSnowflakeKeepsakeDropSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Cool descending glockenspiel twinkle — higher and icier than the mooncake's
+  // warm glissando, with a crystalline shimmer on top.
+  const freqs = [2637, 2093, 1760, 1397]; // E7, C7, A6, F6
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.09;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.032, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.34);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.38);
+  }
+  // Faint high shimmer harmonic throughout
+  const shim = audioCtx.createOscillator();
+  shim.type = "sine";
+  shim.frequency.value = 3951; // B7
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t);
+  sgain.gain.linearRampToValueAtTime(0.012, t + 0.08);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  shim.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shim.start(t);
+  shim.stop(t + 0.65);
+}
+
+function playSnowflakeKeepsakeLandSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Tiny crystalline "tink" — two short high triangle ticks rather than a thump,
+  // because a feather-light snowflake shouldn't thud like a mooncake.
+  const osc = audioCtx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(2093, t);       // C7
+  osc.frequency.exponentialRampToValueAtTime(1568, t + 0.12); // → G6
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.035, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.22);
+  // High-filtered noise "tink tail" for frost texture
+  const bufSize = audioCtx.sampleRate * 0.12;
+  const noiseBuf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 4500;
+  bp.Q.value = 1.2;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.02, t + 0.008);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  noise.connect(bp);
+  bp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.14);
+}
+
+function playSnowflakeKeepsakeTreasureSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Ascending crystalline silver arpeggio: C6, E6, G6, C7 — cool and bright,
+  // distinct from the mooncake's warm E5-G5-C6 "nibble" chime.
+  const freqs = [1046.5, 1318.5, 1568, 2093];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.075;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.05, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.42);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.45);
+  }
+  // Sparkling B7 shimmer tail
+  const shim = audioCtx.createOscillator();
+  shim.type = "sine";
+  shim.frequency.value = 3951;
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t + 0.15);
+  sgain.gain.linearRampToValueAtTime(0.018, t + 0.18);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+  shim.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shim.start(t + 0.15);
+  shim.stop(t + 0.8);
+}
+
+function spawnSnowflakeKeepsake(startX: number, startY: number): void {
+  if (snowflakeKeepsake) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 52;
+  // Land on the left-ish side of the canvas to echo the snow moon's left-bias.
+  const landX = w * 0.2 + Math.random() * w * 0.4;
+  snowflakeKeepsake = {
+    x: startX,
+    startX,
+    startY,
+    groundX: landX,
+    groundY,
+    y: startY,
+    fallProgress: 0,
+    spin: 0,
+    swayPhase: Math.random() * Math.PI * 2,
+    life: SNOWFLAKE_KEEPSAKE_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    landed: false,
+    landBounce: 0,
+    active: true,
+    glowPulse: 0,
+    sparkleTimer: 30,
+    hueIndex: Math.floor(Math.random() * SNOWFLAKE_HUES.length),
+  };
+  totalSnowflakeKeepsakesDropped++;
+  playSnowflakeKeepsakeDropSound();
+  if (Math.random() < 0.7) {
+    const s = SNOWFLAKE_KEEPSAKE_SIGHT_SPEECHES[Math.floor(Math.random() * SNOWFLAKE_KEEPSAKE_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 140);
+  }
+}
+
+function tryClickSnowflakeKeepsake(clickX: number, clickY: number): boolean {
+  if (!snowflakeKeepsake || !snowflakeKeepsake.active || !snowflakeKeepsake.landed) return false;
+  const k = snowflakeKeepsake;
+  const dx = clickX - k.x;
+  const dy = clickY - (k.y - 2);
+  if (dx * dx + dy * dy < 100) {
+    treasureSnowflakeKeepsake();
+    return true;
+  }
+  return false;
+}
+
+function treasureSnowflakeKeepsake(): void {
+  if (!snowflakeKeepsake || !snowflakeKeepsake.active) return;
+  const k = snowflakeKeepsake;
+  k.active = false;
+  totalSnowflakeKeepsakesTreasured++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 2;
+  addFriendshipXP(4);
+
+  playSnowflakeKeepsakeTreasureSound();
+
+  // Silver sparkle bloom
+  for (let i = 0; i < 14; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = 1.0 + Math.random() * 1.9;
+    particles.push({
+      x: k.x + (Math.random() - 0.5) * 4,
+      y: k.y - 3,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 50 + Math.floor(Math.random() * 25),
+      maxLife: 75,
+      size: 1.8 + Math.random() * 1.8,
+      type: "sparkle",
+    });
+  }
+  // A few drifting snowflake particles as the keepsake dissolves into memory
+  for (let i = 0; i < 4; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.8;
+    const speed = 0.6 + Math.random() * 1.1;
+    particles.push({
+      x: k.x + (Math.random() - 0.5) * 5,
+      y: k.y - 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 70 + Math.floor(Math.random() * 25),
+      maxLife: 95,
+      size: 2 + Math.random() * 1.2,
+      type: "snowflake",
+    });
+  }
+  // Three small heart particles — it's a memento, not food, so the hearts
+  // carry the reward message instead of a big hunger stat gain.
+  for (let i = 0; i < 3; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.6;
+    const speed = 0.9 + Math.random() * 1.0;
+    particles.push({
+      x: k.x,
+      y: k.y - 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 75 + Math.floor(Math.random() * 20),
+      maxLife: 95,
+      size: 3 + Math.random() * 1.2,
+      type: "heart",
+    });
+  }
+
+  const s = SNOWFLAKE_KEEPSAKE_TREASURE_SPEECHES[Math.floor(Math.random() * SNOWFLAKE_KEEPSAKE_TREASURE_SPEECHES.length)];
+  queueSpeechBubble(s, 200);
+
+  if (!snowflakeKeepsakeFirstTreasured) {
+    snowflakeKeepsakeFirstTreasured = true;
+    addDiaryEntry("milestone", "❄️", "The snow moon gave me a snowflake keepsake~! I'll treasure it forever! ❄️🌕✨");
+  } else {
+    addDiaryEntry("milestone", "❄️", `Treasured snowflake keepsake #${totalSnowflakeKeepsakesTreasured}~! Another snow-moon gift! ❄️🌕`);
+  }
+
+  logDailyActivity("snowflake_keepsake");
+  checkAchievements();
+  saveGame();
+}
+
+function updateSnowflakeKeepsake(): void {
+  if (!snowflakeKeepsake) return;
+  const k = snowflakeKeepsake;
+
+  if (k.fadeIn < 1) k.fadeIn = Math.min(1, k.fadeIn + 1 / SNOWFLAKE_KEEPSAKE_FADE_IN);
+
+  if (!k.landed) {
+    // Gentle drift down with side-to-side sway like a real snowflake.
+    k.fallProgress = Math.min(1, k.fallProgress + 1 / SNOWFLAKE_KEEPSAKE_FALL_FRAMES);
+    k.swayPhase += 0.07;
+    const t = k.fallProgress;
+    const eased = 1 - Math.pow(1 - t, 2);
+    // Horizontal base progression from start to ground x, plus swaying sine
+    // offset that fades as it approaches the ground so the landing is precise.
+    const swayAmp = (1 - t) * 6;
+    const swayX = Math.sin(k.swayPhase) * swayAmp;
+    const baseX = k.startX + (k.groundX - k.startX) * eased;
+    k.x = baseX + swayX;
+    // Parabolic-ish fall with a shallow start (accelerating gently) for
+    // a feather-light feel rather than a deliberate arc.
+    const baseY = k.startY + (k.groundY - k.startY) * (t * t * 0.85 + t * 0.15);
+    k.y = baseY;
+    k.spin += 0.05;
+    if (k.fallProgress >= 1) {
+      k.landed = true;
+      k.y = k.groundY;
+      k.x = k.groundX;
+      k.landBounce = 1;
+      playSnowflakeKeepsakeLandSound();
+      // Tiny frost-puff on landing
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI - Math.PI;
+        const speed = 0.35 + Math.random() * 0.7;
+        particles.push({
+          x: k.x + (Math.random() - 0.5) * 5,
+          y: k.groundY + 1,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed * 0.4 - 0.25,
+          life: 28 + Math.floor(Math.random() * 12),
+          maxLife: 40,
+          size: 1.1 + Math.random() * 0.8,
+          type: "sparkle",
+        });
+      }
+    }
+  } else {
+    // Resting on ground — gentle sway, slow rotation, halo pulse, and
+    // periodic ambient sparkles to keep it visibly glimmering.
+    k.swayPhase += 0.03;
+    k.spin += 0.006;
+    k.landBounce = Math.max(0, k.landBounce - 0.035);
+    k.glowPulse += 0.06;
+    k.sparkleTimer--;
+    if (k.active && k.sparkleTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      particles.push({
+        x: k.x + Math.cos(angle) * 5,
+        y: k.y + Math.sin(angle) * 2.5,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.18 - Math.random() * 0.3,
+        life: 38 + Math.floor(Math.random() * 22),
+        maxLife: 60,
+        size: 0.9 + Math.random() * 0.7,
+        type: "sparkle",
+      });
+      k.sparkleTimer = 40 + Math.floor(Math.random() * 35);
+    }
+    k.life--;
+    if (k.life <= 0 || !k.active) {
+      k.fadeOut = Math.max(0, k.fadeOut - 1 / SNOWFLAKE_KEEPSAKE_FADE_OUT);
+      if (k.fadeOut <= 0) {
+        snowflakeKeepsake = null;
+        return;
+      }
+    } else if (k.life < SNOWFLAKE_KEEPSAKE_FADE_OUT) {
+      k.fadeOut = k.life / SNOWFLAKE_KEEPSAKE_FADE_OUT;
+    }
+    // Fade out faster if pet sleeps
+    if (isSleeping && k.active && k.life > SNOWFLAKE_KEEPSAKE_FADE_OUT) {
+      k.life = SNOWFLAKE_KEEPSAKE_FADE_OUT;
+    }
+  }
+}
+
+function drawSnowflakeKeepsake(): void {
+  if (!snowflakeKeepsake) return;
+  const k = snowflakeKeepsake;
+  const alpha = k.fadeIn * k.fadeOut;
+  if (alpha <= 0.01) return;
+
+  const palette = SNOWFLAKE_HUES[k.hueIndex];
+  const mainColor = `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`;
+  const edgeColor = `hsl(${palette.hue}, ${Math.min(80, palette.sat + 20)}%, ${Math.max(68, palette.light - 10)}%)`;
+  const coreColor = `hsl(${palette.hue}, ${Math.min(100, palette.sat + 35)}%, 96%)`;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ground shadow when landed
+  if (k.landed) {
+    const shadowR = 7 + (1 - k.landBounce) * 2;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(k.groundX, k.groundY + 5, shadowR, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Cool silvery-blue halo pulse while landed & active
+  const swayY = k.landed ? Math.sin(k.swayPhase) * 0.4 : 0;
+  if (k.landed && k.active) {
+    const pulse = 0.5 + Math.sin(k.glowPulse) * 0.5;
+    const haloR = 10 + pulse * 3.5;
+    const halo = ctx.createRadialGradient(k.x, k.y - 1 + swayY, 3, k.x, k.y - 1 + swayY, haloR);
+    halo.addColorStop(0, `hsla(${palette.hue}, 70%, 90%, 0.5)`);
+    halo.addColorStop(0.6, `hsla(${palette.hue}, 60%, 80%, 0.18)`);
+    halo.addColorStop(1, `hsla(${palette.hue}, 50%, 70%, 0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(k.x, k.y - 1 + swayY, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Bounce-in squash on first landing
+  const squashX = k.landed ? 1 + k.landBounce * 0.25 : 1;
+  const squashY = k.landed ? 1 - k.landBounce * 0.2 : 1;
+
+  ctx.save();
+  ctx.translate(k.x, k.y - 2 + swayY);
+  ctx.rotate(k.spin);
+  ctx.scale(squashX, squashY);
+
+  // --- Big crystalline snowflake sprite (~14 px diameter) ---
+  const size = 7;
+
+  // Soft inner glow disc behind the crystal
+  const innerGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.9);
+  innerGlow.addColorStop(0, `hsla(${palette.hue}, 70%, 94%, 0.85)`);
+  innerGlow.addColorStop(0.7, `hsla(${palette.hue}, 55%, 85%, 0.35)`);
+  innerGlow.addColorStop(1, `hsla(${palette.hue}, 50%, 80%, 0)`);
+  ctx.fillStyle = innerGlow;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.9, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 6 radial arms at 60° intervals
+  ctx.strokeStyle = mainColor;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 1.1;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const ax = Math.cos(angle) * size;
+    const ay = Math.sin(angle) * size;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+
+    // Two perpendicular branches at 35% and 65% along each arm
+    for (const frac of [0.35, 0.65]) {
+      const bx = Math.cos(angle) * size * frac;
+      const by = Math.sin(angle) * size * frac;
+      const branchLen = size * (frac === 0.35 ? 0.36 : 0.24);
+      const perp = angle + Math.PI / 3;
+      const nperp = angle - Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(perp) * branchLen, by + Math.sin(perp) * branchLen);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(nperp) * branchLen, by + Math.sin(nperp) * branchLen);
+      ctx.stroke();
+    }
+
+    // Diamond tip at the end of each arm
+    ctx.fillStyle = edgeColor;
+    ctx.beginPath();
+    ctx.arc(ax, ay, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Hexagonal center hub
+  ctx.fillStyle = edgeColor;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const hx = Math.cos(a) * 1.6;
+    const hy = Math.sin(a) * 1.6;
+    if (i === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Bright inner core
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 2);
+  core.addColorStop(0, coreColor);
+  core.addColorStop(1, `hsla(${palette.hue}, 80%, 92%, 0)`);
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(0, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // "treasure ❄️" hint until the player has treasured their first keepsake
+  if (k.landed && k.active && !snowflakeKeepsakeFirstTreasured && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("treasure ❄️", k.x, k.y - 11);
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
@@ -17604,6 +18119,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for snowflake keepsake pickup (dropped after a snow moon blessing)
+  if (snowflakeKeepsake) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickSnowflakeKeepsake(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for winter cardinal greet (perched on the ground in winter daytime)
   if (cardinal) {
     const rect = canvas.getBoundingClientRect();
@@ -19409,6 +19933,11 @@ const achievements: Achievement[] = [
     icon: "🌕", unlockMessage: "The snow moon blesses you~! A silver winter festival in your heart! 🌕❄️✨",
     condition: () => totalSnowMoonsBlessed >= 1, unlocked: false,
   },
+  {
+    id: "snowflake_keeper", name: "Snowflake Keeper", description: "Treasure a snowflake keepsake from the snow moon",
+    icon: "❄️", unlockMessage: "A crystalline keepsake kept forever~! The snow moon smiles! ❄️🌕✨",
+    condition: () => totalSnowflakeKeepsakesTreasured >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -20388,6 +20917,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#D6E6FA";
+  ctx.fillText("SNOWFLAKE KEEPSAKES", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`❄️ ${totalSnowflakeKeepsakesTreasured} treasured (${totalSnowflakeKeepsakesDropped} dropped)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -20895,6 +21434,9 @@ interface SaveData {
   totalSnowMoonsBlessed: number;
   snowMoonFirstSeen: boolean;
   snowMoonFirstBlessed: boolean;
+  totalSnowflakeKeepsakesTreasured: number;
+  totalSnowflakeKeepsakesDropped: number;
+  snowflakeKeepsakeFirstTreasured: boolean;
   version: number;
 }
 
@@ -21035,6 +21577,9 @@ function buildSaveData(): SaveData {
     totalSnowMoonsBlessed,
     snowMoonFirstSeen,
     snowMoonFirstBlessed,
+    totalSnowflakeKeepsakesTreasured,
+    totalSnowflakeKeepsakesDropped,
+    snowflakeKeepsakeFirstTreasured,
     version: 1,
   };
 }
@@ -21523,6 +22068,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).snowMoonFirstBlessed === "boolean") {
     snowMoonFirstBlessed = (data as SaveData).snowMoonFirstBlessed;
+  }
+  if (typeof (data as SaveData).totalSnowflakeKeepsakesTreasured === "number") {
+    totalSnowflakeKeepsakesTreasured = (data as SaveData).totalSnowflakeKeepsakesTreasured;
+  }
+  if (typeof (data as SaveData).totalSnowflakeKeepsakesDropped === "number") {
+    totalSnowflakeKeepsakesDropped = (data as SaveData).totalSnowflakeKeepsakesDropped;
+  }
+  if (typeof (data as SaveData).snowflakeKeepsakeFirstTreasured === "boolean") {
+    snowflakeKeepsakeFirstTreasured = (data as SaveData).snowflakeKeepsakeFirstTreasured;
   }
 
   // Restore diary
@@ -24058,6 +24612,9 @@ function update(): void {
   // Snow moon festival (winter-night signature event)
   updateSnowMoonFestival();
 
+  // Snowflake keepsake drop (spawned by a blessed snow moon)
+  updateSnowflakeKeepsake();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -25237,6 +25794,9 @@ function draw(): void {
 
   // Mooncake gift drop (falls from moon to ground after a harvest moon blessing)
   drawMooncake();
+
+  // Snowflake keepsake drop (falls from moon to ground after a snow moon blessing)
+  drawSnowflakeKeepsake();
 
   // Winter cardinal (drawn in the ground/body layer so it reads behind the pet)
   drawCardinal();
