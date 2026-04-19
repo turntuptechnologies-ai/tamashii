@@ -436,6 +436,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "mooncake", icons: [["food", "moon", "heart"], ["heart", "food", "moon"]], captions: ["a mountain of mooncakes~", "a lotus-golden feast~", "sharing sweets with the moon~"] },
   { activity: "cardinal", icons: [["heart", "star", "heart"], ["flower", "heart", "star"]], captions: ["redbird in the snow~", "cheer-cheer-cheer forever~", "a winter songbird friend~"] },
   { activity: "bunny", icons: [["heart", "flower", "heart"], ["star", "heart", "flower"]], captions: ["a meadow of bunnies~", "hop hop hop forever~", "soft ears in the snow~"] },
+  { activity: "snow_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of silver snowflakes~", "moonlit winter festival~", "dancing under the pale-blue moon~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -575,6 +576,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... fluffy ears... so soft...",
     "Zzz... hop hop... carrot yum...",
     "*snore*... tiny pink nose... wiggle wiggle...",
+  ],
+  snow_moon: [
+    "*mumble*... silver moon... so pretty...",
+    "Zzz... snowflakes... catching them all...",
+    "*snore*... winter blessing... warm inside...",
   ],
 };
 
@@ -3631,6 +3637,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("mooncake")) contextIcons.push("food", "moon", "heart");
   if (dailyActivityLog.includes("cardinal")) contextIcons.push("heart", "star", "flower");
   if (dailyActivityLog.includes("bunny")) contextIcons.push("heart", "flower", "star");
+  if (dailyActivityLog.includes("snow_moon")) contextIcons.push("moon", "star", "heart");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -14473,6 +14480,663 @@ function drawBunny(): void {
   }
 }
 
+// --- Snow Moon Festival (winter-night signature event) ---
+// Mirrors the Harvest Moon Festival for winter: a pale silvery-blue full moon
+// rises into the sky and a scattering of paper snowflake crystals drift
+// gently in the upper air waiting to be caught. Catching every snowflake
+// triggers the Snow Moon Blessing — a cool crystalline chime, silvery
+// sparkle fountain, and lasting moonglow halo.
+interface SnowflakeCrystal {
+  x: number;            // base x position in the sky
+  y: number;            // base y position in the sky
+  bobPhase: number;     // independent sine phase for gentle drift
+  bobSpeed: number;     // per-crystal phase speed
+  rotation: number;     // current rotation
+  rotSpeed: number;     // slow rotation rate (per frame)
+  caught: boolean;      // has player clicked to catch?
+  catchAnim: number;    // 0 → 1 bloom animation after catching
+  hue: number;          // 0..3 color variant
+  sparkleTimer: number; // throttle for caught-crystal ambient sparkles
+}
+
+interface SnowMoonFestival {
+  moonCx: number;
+  moonCy: number;
+  moonRadius: number;
+  riseProgress: number;
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  crystals: SnowflakeCrystal[];
+  blessed: boolean;
+  blessGlow: number;
+  blessTimer: number;
+  ambientSparkleTimer: number;
+}
+
+let snowMoonFestival: SnowMoonFestival | null = null;
+let totalSnowMoonsSeen = 0;
+let totalSnowflakesCaught = 0;
+let totalSnowMoonsBlessed = 0;
+let snowMoonFirstSeen = false;
+let snowMoonFirstBlessed = false;
+
+const SNOW_MOON_FADE_IN = 180;        // 3s fade-in
+const SNOW_MOON_FADE_OUT = 180;       // 3s fade-out
+const SNOW_MOON_LIFE = 7200;          // ~2 minutes natural lifespan
+const SNOW_MOON_RISE_DURATION = 600;  // ~10s moon rise animation
+
+// Per-crystal color palette: icy-blue / pale-lavender / pearl-white / frosty-mint
+const SNOWFLAKE_HUES = [
+  { hue: 200, sat: 60, light: 82 }, // icy blue
+  { hue: 260, sat: 35, light: 88 }, // pale lavender
+  { hue: 0, sat: 0, light: 96 },    // pearl white
+  { hue: 170, sat: 35, light: 86 }, // frosty mint
+];
+
+const SNOW_MOON_SIGHT_SPEECHES = [
+  "The snow moon~! 🌕❄️",
+  "A silver winter moon~! 🌕✨",
+  "Look, paper snowflakes~! ❄️",
+  "So pale and pretty~! 🌕💙",
+  "Winter magic in the sky~! 🌕❄️",
+  "Frosty moonlight~! 🌕✨",
+];
+
+const SNOWFLAKE_CAUGHT_SPEECHES = [
+  "Caught one~! ❄️",
+  "Ooh, a crystal~! ❄️✨",
+  "Gotcha~ tiny flake! ❄️",
+  "So sparkly~! ❄️💙",
+  "Keep catching them~! ❄️",
+];
+
+const SNOW_MOON_BLESS_SPEECHES = [
+  "The snow moon blesses me~! 🌕❄️",
+  "Every snowflake shining~! ❄️🌕",
+  "Silver winter blessing~! 🌕✨",
+  "The frost sky sings~! 🌕❄️💙",
+  "Moonlit snow festival~! 🌕❄️",
+];
+
+function playSnowflakeCatchSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Crystalline bell: E6 + B6 (a bright open fifth/twelfth for a "frost tinkle")
+  const freqs = [1318.5, 1975.5];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.045, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.55);
+  }
+  // Bright shimmer harmonic on top
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 3951; // B7
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t);
+  sgain.gain.linearRampToValueAtTime(0.02, t + 0.01);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(t);
+  shimmer.stop(t + 0.35);
+}
+
+function playSnowMoonBlessing(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Cool A-minor pentatonic arpeggio: A5, C6, E6, A6, C7, E7
+  const freqs = [880, 1046.5, 1318.5, 1760, 2093, 2637];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.09;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.075, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.7);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.75);
+  }
+  // High crystalline shimmer: B7 slide
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 3951; // B7
+  const sgain = audioCtx.createGain();
+  const sStart = t + 0.6;
+  sgain.gain.setValueAtTime(0, sStart);
+  sgain.gain.linearRampToValueAtTime(0.035, sStart + 0.08);
+  sgain.gain.exponentialRampToValueAtTime(0.001, sStart + 0.95);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(sStart);
+  shimmer.stop(sStart + 1);
+  // High-filtered noise "wind whisper" behind the chime
+  const bufferSize = audioCtx.sampleRate * 0.6;
+  const noiseBuf = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const noiseData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) noiseData[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 2400;
+  bp.Q.value = 1.0;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.012, t + 0.12);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  noise.connect(bp);
+  bp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.62);
+}
+
+function canSpawnSnowMoonFestival(): boolean {
+  if (snowMoonFestival) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "winter") return false;
+  if (currentTimeOfDay !== "night") return false;
+  // Allow clear/cloudy/snowy winter nights (snow moon over falling snow is
+  // part of the magic) but not stormy/rainy.
+  if (currentWeather === "stormy" || currentWeather === "rainy") return false;
+  return true;
+}
+
+function spawnSnowMoonFestival(): void {
+  if (snowMoonFestival) return;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Moon: oversized pale silvery-blue orb in upper sky (slightly left-biased
+  // to distinguish its spatial presence from the harvest moon's right-bias)
+  const moonCx = w * (0.18 + Math.random() * 0.18);
+  const moonCy = h * 0.18 + Math.random() * 8;
+  const moonRadius = 22 + Math.random() * 4;
+
+  // 4-6 drifting paper snowflakes scattered across the upper air
+  const crystalCount = 4 + Math.floor(Math.random() * 3);
+  const crystals: SnowflakeCrystal[] = [];
+  const spacing = w / (crystalCount + 1);
+  for (let i = 0; i < crystalCount; i++) {
+    const baseX = spacing * (i + 1) + (Math.random() - 0.5) * 12;
+    const baseY = 22 + Math.random() * 42;
+    crystals.push({
+      x: baseX,
+      y: baseY,
+      bobPhase: Math.random() * Math.PI * 2,
+      bobSpeed: 0.018 + Math.random() * 0.014,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() < 0.5 ? -1 : 1) * (0.003 + Math.random() * 0.005),
+      caught: false,
+      catchAnim: 0,
+      hue: Math.floor(Math.random() * SNOWFLAKE_HUES.length),
+      sparkleTimer: 45 + Math.floor(Math.random() * 30),
+    });
+  }
+
+  snowMoonFestival = {
+    moonCx,
+    moonCy,
+    moonRadius,
+    riseProgress: 0,
+    life: SNOW_MOON_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    crystals,
+    blessed: false,
+    blessGlow: 0,
+    blessTimer: 0,
+    ambientSparkleTimer: 0,
+  };
+
+  totalSnowMoonsSeen++;
+
+  if (!snowMoonFirstSeen) {
+    snowMoonFirstSeen = true;
+    addDiaryEntry("milestone", "🌕", "A silver snow moon rose over my world~! Tiny paper snowflakes drifted in the sky, waiting to be caught! 🌕❄️✨");
+  }
+
+  if (Math.random() < 0.9) {
+    const s = SNOW_MOON_SIGHT_SPEECHES[Math.floor(Math.random() * SNOW_MOON_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 180);
+  }
+
+  saveGame();
+}
+
+function getSnowflakeX(c: SnowflakeCrystal): number {
+  return c.x + Math.sin(c.bobPhase) * 3;
+}
+
+function getSnowflakeY(c: SnowflakeCrystal): number {
+  return c.y + Math.cos(c.bobPhase * 0.7) * 2;
+}
+
+function tryClickSnowflake(clickX: number, clickY: number): boolean {
+  if (!snowMoonFestival) return false;
+  const fest = snowMoonFestival;
+  if (fest.fadeIn < 0.4) return false;
+  if (fest.blessed) return false;
+  for (let i = 0; i < fest.crystals.length; i++) {
+    const c = fest.crystals[i];
+    if (c.caught) continue;
+    const sx = getSnowflakeX(c);
+    const sy = getSnowflakeY(c);
+    const dx = clickX - sx;
+    const dy = clickY - sy;
+    if (dx * dx + dy * dy < 100) { // ~10 px radius hitbox
+      catchSnowflake(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function catchSnowflake(index: number): void {
+  if (!snowMoonFestival) return;
+  const fest = snowMoonFestival;
+  const c = fest.crystals[index];
+  if (!c || c.caught) return;
+  c.caught = true;
+  c.catchAnim = 0;
+  totalSnowflakesCaught++;
+
+  playSnowflakeCatchSound();
+
+  const sx = getSnowflakeX(c);
+  const sy = getSnowflakeY(c);
+  // Icy sparkle bloom at the catch point
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 0.6 + Math.random() * 1.4;
+    particles.push({
+      x: sx,
+      y: sy,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.3,
+      life: 34 + Math.floor(Math.random() * 22),
+      maxLife: 56,
+      size: 1.3 + Math.random() * 1.3,
+      type: "sparkle",
+    });
+  }
+
+  petHappiness = Math.min(100, petHappiness + 1);
+  addFriendshipXP(1);
+
+  if (Math.random() < 0.5) {
+    const s = SNOWFLAKE_CAUGHT_SPEECHES[Math.floor(Math.random() * SNOWFLAKE_CAUGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 120);
+  }
+
+  const allCaught = fest.crystals.every(x => x.caught);
+  if (allCaught) {
+    blessSnowMoon();
+  }
+
+  logDailyActivity("snow_moon");
+  checkAchievements();
+  saveGame();
+}
+
+function blessSnowMoon(): void {
+  if (!snowMoonFestival || snowMoonFestival.blessed) return;
+  const fest = snowMoonFestival;
+  fest.blessed = true;
+  fest.blessGlow = 1;
+  fest.blessTimer = 0;
+  totalSnowMoonsBlessed++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  addFriendshipXP(5);
+
+  playSnowMoonBlessing();
+
+  // Silvery sparkle fountain radiating from the moon
+  for (let i = 0; i < 32; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.0 + Math.random() * 2.4;
+    particles.push({
+      x: fest.moonCx + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      y: fest.moonCy + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 70 + Math.floor(Math.random() * 45),
+      maxLife: 115,
+      size: 2 + Math.random() * 2.3,
+      type: "sparkle",
+    });
+  }
+  // A few drifting snowflake particles for winter flavor
+  for (let i = 0; i < 10; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.4 + Math.random() * 1.2;
+    particles.push({
+      x: fest.moonCx + (Math.random() - 0.5) * fest.moonRadius * 1.5,
+      y: fest.moonCy + (Math.random() - 0.5) * fest.moonRadius * 1.5,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed + 0.15,
+      life: 80 + Math.floor(Math.random() * 50),
+      maxLife: 130,
+      size: 2.4 + Math.random() * 1.6,
+      type: "snowflake",
+    });
+  }
+
+  const s = SNOW_MOON_BLESS_SPEECHES[Math.floor(Math.random() * SNOW_MOON_BLESS_SPEECHES.length)];
+  queueSpeechBubble(s, 240);
+
+  if (!snowMoonFirstBlessed) {
+    snowMoonFirstBlessed = true;
+    addDiaryEntry("milestone", "🌕", "I caught every snowflake under the snow moon~! The sky answered with a silver winter blessing! 🌕❄️✨");
+  } else {
+    addDiaryEntry("milestone", "🌕", `Snow moon blessing #${totalSnowMoonsBlessed}~! Every snowflake shining silver! 🌕❄️`);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateSnowMoonFestival(): void {
+  // Very rare spawn during winter night
+  if (!snowMoonFestival && canSpawnSnowMoonFestival() && Math.random() < 0.00012) {
+    spawnSnowMoonFestival();
+  }
+
+  if (!snowMoonFestival) return;
+  const fest = snowMoonFestival;
+
+  // Fade-in ramp
+  if (fest.fadeIn < 1) fest.fadeIn = Math.min(1, fest.fadeIn + 1 / SNOW_MOON_FADE_IN);
+
+  // Moon rise
+  if (fest.riseProgress < 1) {
+    fest.riseProgress = Math.min(1, fest.riseProgress + 1 / SNOW_MOON_RISE_DURATION);
+  }
+
+  // Drift + rotation + ambient sparkles for caught crystals
+  for (const c of fest.crystals) {
+    c.bobPhase += c.bobSpeed;
+    c.rotation += c.rotSpeed;
+    if (c.caught) {
+      if (c.catchAnim < 1) c.catchAnim = Math.min(1, c.catchAnim + 0.04);
+      c.sparkleTimer--;
+      if (c.sparkleTimer <= 0) {
+        const sx = getSnowflakeX(c);
+        const sy = getSnowflakeY(c);
+        particles.push({
+          x: sx + (Math.random() - 0.5) * 4,
+          y: sy + (Math.random() - 0.5) * 3,
+          vx: (Math.random() - 0.5) * 0.18,
+          vy: 0.22 + Math.random() * 0.22,
+          life: 30 + Math.floor(Math.random() * 20),
+          maxLife: 50,
+          size: 0.9 + Math.random() * 0.6,
+          type: "sparkle",
+        });
+        c.sparkleTimer = 50 + Math.floor(Math.random() * 30);
+      }
+    }
+  }
+
+  // Post-bless glow decay + celebratory continuous sparkles
+  if (fest.blessed) {
+    fest.blessTimer++;
+    if (fest.blessGlow > 0) fest.blessGlow = Math.max(0, fest.blessGlow - 0.008);
+    fest.ambientSparkleTimer--;
+    if (fest.blessTimer < 120 && fest.ambientSparkleTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = fest.moonRadius + Math.random() * 20;
+      particles.push({
+        x: fest.moonCx + Math.cos(angle) * r,
+        y: fest.moonCy + Math.sin(angle) * r,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.25 + Math.random() * 0.3,
+        life: 40 + Math.floor(Math.random() * 30),
+        maxLife: 70,
+        size: 1.4 + Math.random() * 1.2,
+        type: Math.random() < 0.35 ? "snowflake" : "sparkle",
+      });
+      fest.ambientSparkleTimer = 3;
+    }
+  }
+
+  // Natural lifespan
+  fest.life--;
+
+  // Early end: weather/season/time turns unfavorable, pet sleeps (unless blessing playing out)
+  const inappropriate =
+    currentTimeOfDay !== "night" ||
+    currentSeason !== "winter" ||
+    currentWeather === "stormy" || currentWeather === "rainy";
+  if ((inappropriate || isSleeping) && !fest.blessed) {
+    fest.life = Math.min(fest.life, SNOW_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= SNOW_MOON_FADE_OUT) {
+    fest.fadeOut = Math.max(0, fest.life / SNOW_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= 0) {
+    snowMoonFestival = null;
+  }
+}
+
+function drawSnowMoonSky(): void {
+  if (!snowMoonFestival) return;
+  const fest = snowMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  // Ease-out rise: moon starts 50px below resting position
+  const easedRise = 1 - Math.pow(1 - fest.riseProgress, 3);
+  const riseOffset = (1 - easedRise) * 50;
+  const mx = fest.moonCx;
+  const my = fest.moonCy + riseOffset;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Outer breathing halo — cool silvery-blue instead of warm amber
+  const haloR = fest.moonRadius * (2.3 + Math.sin(frame * 0.018) * 0.15);
+  const halo = ctx.createRadialGradient(mx, my, fest.moonRadius * 0.9, mx, my, haloR);
+  halo.addColorStop(0, "rgba(210, 230, 255, 0.45)");
+  halo.addColorStop(0.5, "rgba(150, 190, 240, 0.18)");
+  halo.addColorStop(1, "rgba(120, 160, 220, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(mx, my, haloR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Post-bless bright silver outer glow
+  if (fest.blessed && fest.blessGlow > 0) {
+    const bhalo = ctx.createRadialGradient(mx, my, fest.moonRadius, mx, my, fest.moonRadius * 3.5);
+    bhalo.addColorStop(0, `rgba(220, 240, 255, ${0.4 * fest.blessGlow})`);
+    bhalo.addColorStop(1, "rgba(180, 210, 250, 0)");
+    ctx.fillStyle = bhalo;
+    ctx.beginPath();
+    ctx.arc(mx, my, fest.moonRadius * 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Moon disk — radial gradient pale silvery-blue to deep slate-blue
+  const moonGrad = ctx.createRadialGradient(
+    mx - fest.moonRadius * 0.25, my - fest.moonRadius * 0.25, 0,
+    mx, my, fest.moonRadius
+  );
+  moonGrad.addColorStop(0, "#F2F8FF");
+  moonGrad.addColorStop(0.5, "#C0D4EA");
+  moonGrad.addColorStop(0.85, "#80A0C4");
+  moonGrad.addColorStop(1, "#4A6890");
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(mx, my, fest.moonRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Crater details (subtle cool-toned darker spots)
+  ctx.fillStyle = "rgba(60, 90, 130, 0.28)";
+  ctx.beginPath();
+  ctx.arc(mx - fest.moonRadius * 0.35, my - fest.moonRadius * 0.15, fest.moonRadius * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(mx + fest.moonRadius * 0.2, my + fest.moonRadius * 0.3, fest.moonRadius * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(mx + fest.moonRadius * 0.35, my - fest.moonRadius * 0.3, fest.moonRadius * 0.07, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Upper-left highlight (specular) — soft white-blue
+  ctx.fillStyle = "rgba(250, 253, 255, 0.4)";
+  ctx.beginPath();
+  ctx.arc(mx - fest.moonRadius * 0.3, my - fest.moonRadius * 0.35, fest.moonRadius * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawSnowflakeCrystal(c: SnowflakeCrystal, baseAlpha: number): void {
+  const palette = SNOWFLAKE_HUES[c.hue % SNOWFLAKE_HUES.length];
+  const sx = getSnowflakeX(c);
+  const sy = getSnowflakeY(c);
+  const ease = c.caught ? c.catchAnim : 0;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Outer glow halo (only when caught — the flake "freezes" into a brighter form)
+  if (c.caught && ease > 0.05) {
+    const haloR = 7 + ease * 4;
+    const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, haloR);
+    halo.addColorStop(0, `hsla(${palette.hue}, ${palette.sat + 20}%, ${Math.min(98, palette.light + 8)}%, ${0.6 * ease})`);
+    halo.addColorStop(0.5, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, ${0.25 * ease})`);
+    halo.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sx, sy, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.translate(sx, sy);
+  ctx.rotate(c.rotation);
+
+  // Size: slightly bigger once caught (bloom effect)
+  const baseSize = 4.5;
+  const size = baseSize + ease * 1;
+
+  // Color — uncaught flakes are muted paper-grey, caught ones glow full color
+  const mainColor = c.caught
+    ? `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0.95)`
+    : "rgba(200, 210, 225, 0.72)";
+  const edgeColor = c.caught
+    ? `hsla(${palette.hue}, ${palette.sat + 15}%, ${Math.max(40, palette.light - 25)}%, 0.85)`
+    : "rgba(140, 160, 185, 0.6)";
+
+  // Draw 6 radial arms at 60° intervals
+  ctx.strokeStyle = mainColor;
+  ctx.lineCap = "round";
+  ctx.lineWidth = c.caught ? 0.9 : 0.7;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const ax = Math.cos(angle) * size;
+    const ay = Math.sin(angle) * size;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+
+    // Two perpendicular branches at 40% and 70% along each arm
+    for (const frac of [0.4, 0.7]) {
+      const bx = Math.cos(angle) * size * frac;
+      const by = Math.sin(angle) * size * frac;
+      const branchLen = size * (frac === 0.4 ? 0.28 : 0.18);
+      const perp = angle + Math.PI / 3;
+      const nperp = angle - Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(perp) * branchLen, by + Math.sin(perp) * branchLen);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(nperp) * branchLen, by + Math.sin(nperp) * branchLen);
+      ctx.stroke();
+    }
+
+    // Tiny diamond tip at end of each arm
+    ctx.fillStyle = edgeColor;
+    ctx.beginPath();
+    ctx.arc(ax, ay, c.caught ? 0.7 : 0.55, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Center hexagonal hub
+  ctx.fillStyle = c.caught
+    ? `hsla(${palette.hue}, ${Math.min(60, palette.sat + 10)}%, ${Math.min(98, palette.light + 6)}%, 1)`
+    : "rgba(220, 228, 240, 0.92)";
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const hx = Math.cos(a) * 1.1;
+    const hy = Math.sin(a) * 1.1;
+    if (i === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Inner bright core shimmer when caught
+  if (c.caught && ease > 0.15) {
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 2.5);
+    core.addColorStop(0, `hsla(${palette.hue}, 100%, 96%, ${0.8 * ease})`);
+    core.addColorStop(1, `hsla(${palette.hue}, 100%, 85%, 0)`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawSnowMoonCrystals(): void {
+  if (!snowMoonFestival) return;
+  const fest = snowMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  for (const c of fest.crystals) {
+    drawSnowflakeCrystal(c, baseAlpha);
+  }
+
+  // Hint text above the first uncaught crystal until player has blessed their first snow moon
+  const firstUncaught = fest.crystals.find(x => !x.caught);
+  if (!snowMoonFirstBlessed && firstUncaught && !fest.blessed && fest.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("catch ❄️", getSnowflakeX(firstUncaught), getSnowflakeY(firstUncaught) - 8);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -16922,6 +17586,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for snow moon snowflake catching (paper snowflakes in the upper air)
+  if (snowMoonFestival) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickSnowflake(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mooncake pickup (dropped on ground after a blessing)
   if (mooncake) {
     const rect = canvas.getBoundingClientRect();
@@ -18731,6 +19404,11 @@ const achievements: Achievement[] = [
     icon: "🐰", unlockMessage: "A fluffy winter companion~! Hop hop hop into my heart! 🐰🥕❄️",
     condition: () => totalBunniesGreeted >= 3, unlocked: false,
   },
+  {
+    id: "snow_moon_blessed", name: "Snow Moon Blessed", description: "Catch every snowflake under a snow moon",
+    icon: "🌕", unlockMessage: "The snow moon blesses you~! A silver winter festival in your heart! 🌕❄️✨",
+    condition: () => totalSnowMoonsBlessed >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -19700,6 +20378,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#BCD4F0";
+  ctx.fillText("SNOW MOON", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌕 ${totalSnowMoonsBlessed} blessed (${totalSnowflakesCaught} flakes)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -20202,6 +20890,11 @@ interface SaveData {
   totalBunniesGreeted: number;
   bunnyFirstSeen: boolean;
   bunnyFirstGreeted: boolean;
+  totalSnowMoonsSeen: number;
+  totalSnowflakesCaught: number;
+  totalSnowMoonsBlessed: number;
+  snowMoonFirstSeen: boolean;
+  snowMoonFirstBlessed: boolean;
   version: number;
 }
 
@@ -20337,6 +21030,11 @@ function buildSaveData(): SaveData {
     totalBunniesGreeted,
     bunnyFirstSeen,
     bunnyFirstGreeted,
+    totalSnowMoonsSeen,
+    totalSnowflakesCaught,
+    totalSnowMoonsBlessed,
+    snowMoonFirstSeen,
+    snowMoonFirstBlessed,
     version: 1,
   };
 }
@@ -20810,6 +21508,21 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).bunnyFirstGreeted === "boolean") {
     bunnyFirstGreeted = (data as SaveData).bunnyFirstGreeted;
+  }
+  if (typeof (data as SaveData).totalSnowMoonsSeen === "number") {
+    totalSnowMoonsSeen = (data as SaveData).totalSnowMoonsSeen;
+  }
+  if (typeof (data as SaveData).totalSnowflakesCaught === "number") {
+    totalSnowflakesCaught = (data as SaveData).totalSnowflakesCaught;
+  }
+  if (typeof (data as SaveData).totalSnowMoonsBlessed === "number") {
+    totalSnowMoonsBlessed = (data as SaveData).totalSnowMoonsBlessed;
+  }
+  if (typeof (data as SaveData).snowMoonFirstSeen === "boolean") {
+    snowMoonFirstSeen = (data as SaveData).snowMoonFirstSeen;
+  }
+  if (typeof (data as SaveData).snowMoonFirstBlessed === "boolean") {
+    snowMoonFirstBlessed = (data as SaveData).snowMoonFirstBlessed;
   }
 
   // Restore diary
@@ -23342,6 +24055,9 @@ function update(): void {
   // Snow bunny visitor (winter ground hopper)
   updateBunny();
 
+  // Snow moon festival (winter-night signature event)
+  updateSnowMoonFestival();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -24473,6 +25189,9 @@ function draw(): void {
   // Harvest moon (sky layer, behind pet) — autumn-night special event
   drawHarvestMoonSky();
 
+  // Snow moon (sky layer, behind pet) — winter-night special event
+  drawSnowMoonSky();
+
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
 
@@ -24806,6 +25525,9 @@ function draw(): void {
 
   // Harvest moon lanterns (hanging in upper air, above pet and fairy)
   drawHarvestLanterns();
+
+  // Snow moon paper snowflakes (drifting in upper air, above pet)
+  drawSnowMoonCrystals();
 
   // Nightlight (beside sleeping pet, below dream bubbles)
   drawNightlight();
