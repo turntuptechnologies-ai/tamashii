@@ -434,6 +434,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "fairy", icons: [["star", "butterfly", "heart"], ["heart", "star", "butterfly"]], captions: ["dancing with fairies~", "tiny glowing friends~", "fairy blessings~"] },
   { activity: "harvest_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of golden lanterns~", "moonlit harvest festival~", "dancing under the big orange moon~"] },
   { activity: "mooncake", icons: [["food", "moon", "heart"], ["heart", "food", "moon"]], captions: ["a mountain of mooncakes~", "a lotus-golden feast~", "sharing sweets with the moon~"] },
+  { activity: "cardinal", icons: [["heart", "star", "heart"], ["flower", "heart", "star"]], captions: ["redbird in the snow~", "cheer-cheer-cheer forever~", "a winter songbird friend~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -563,6 +564,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... one more bite... lotus yum...",
     "Zzz... moon gave me cake... hehe...",
     "*snore*... golden mooncake... sticky sweet...",
+  ],
+  cardinal: [
+    "*mumble*... cheer cheer... red feathers...",
+    "Zzz... bright redbird... snowy day...",
+    "*snore*... tiny seeds... for my friend...",
   ],
 };
 
@@ -3617,6 +3623,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("fairy")) contextIcons.push("heart", "star", "butterfly");
   if (dailyActivityLog.includes("harvest_moon")) contextIcons.push("moon", "star", "heart");
   if (dailyActivityLog.includes("mooncake")) contextIcons.push("food", "moon", "heart");
+  if (dailyActivityLog.includes("cardinal")) contextIcons.push("heart", "star", "flower");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -13104,6 +13111,611 @@ function drawMooncake(): void {
   ctx.restore();
 }
 
+// ============================================================================
+// WINTER CARDINAL
+// ----------------------------------------------------------------------------
+// A bright red northern cardinal (male) that occasionally flies into the scene
+// during winter daytime — perches on the ground, chirps its signature
+// "cheer-cheer-cheer" call, pecks at snow for seeds, and flies away. Click
+// while perched to offer seeds: it bows, chirps a musical trill, and rewards
+// the player with XP + stats. Fills the previously empty "winter creature
+// visitor" slot — winter's first ambient character.
+// ============================================================================
+
+type CardinalState = "flying_in" | "perched" | "pecking" | "flying_out";
+
+interface Cardinal {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  dir: 1 | -1;           // 1 = facing right, -1 = facing left
+  state: CardinalState;
+  stateTimer: number;
+  groundY: number;
+  targetX: number;       // where to land
+  wingPhase: number;     // wing flap 0..2π (fast while flying, slow while perched)
+  hopPhase: number;      // gentle hop on perch
+  chirpTimer: number;    // frames until next ambient chirp
+  peckCountdown: number;
+  pecksLeft: number;
+  crestLift: number;     // 0..1 crest raise on alert/greet
+  bowPhase: number;      // 0..1 bow animation after greet
+  fadeIn: number;
+  fadeOut: number;
+  greeted: boolean;      // player has offered seeds this visit
+}
+
+let cardinal: Cardinal | null = null;
+let totalCardinalsSeen = 0;
+let totalCardinalsGreeted = 0;
+let cardinalFirstSeen = false;
+let cardinalFirstGreeted = false;
+
+const CARDINAL_FADE_IN = 30;
+const CARDINAL_FADE_OUT = 45;
+const CARDINAL_FLY_SPEED = 1.5;
+const CARDINAL_PERCH_MIN = 280;    // ~4.7s
+const CARDINAL_PERCH_MAX = 460;    // ~7.7s
+const CARDINAL_CHIRP_MIN = 70;     // ~1.2s between ambient chirps
+const CARDINAL_CHIRP_MAX = 160;    // ~2.7s between ambient chirps
+
+const CARDINAL_SIGHT_SPEECHES = [
+  "A cardinal! 🐦❤️",
+  "Redbird visitor~! 🐦❄️",
+  "So red against the snow~! 🐦💖",
+  "Cheer cheer cheer~! 🐦✨",
+  "Look, a winter friend! 🐦🌨️",
+];
+
+const CARDINAL_GREET_SPEECHES = [
+  "Shared seeds with the cardinal~! 🐦💖",
+  "A song for my seeds~! 🐦🎵",
+  "Winter friend~! 🐦✨",
+  "Cheer-cheer-cheer~ hehe! 🐦💕",
+  "Such a bright red guest~! 🐦❄️",
+  "Warm hearts in cold weather~! 🐦💖",
+];
+
+function playCardinalChirp(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // "cheer cheer cheer" — three quick descending chirps with slides
+  const baseFreqs = [3600, 3200, 2900];
+  for (let i = 0; i < baseFreqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    const startF = baseFreqs[i];
+    const start = t + i * 0.12;
+    osc.frequency.setValueAtTime(startF * 0.65, start);
+    osc.frequency.exponentialRampToValueAtTime(startF, start + 0.04);
+    osc.frequency.exponentialRampToValueAtTime(startF * 0.7, start + 0.14);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.045, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.17);
+  }
+}
+
+function playCardinalGreetTrill(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Bright musical trill — "what-cheer what-cheer birdie-birdie-birdie"
+  // Ascending triplets + a fast wavering tail
+  const pattern = [2600, 3200, 2600, 3200, 3600, 3200, 3600, 3800];
+  for (let i = 0; i < pattern.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    const start = t + i * 0.08;
+    osc.frequency.setValueAtTime(pattern[i], start);
+    osc.frequency.exponentialRampToValueAtTime(pattern[i] * 1.05, start + 0.05);
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.055, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.1);
+  }
+}
+
+function playCardinalFlutter(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft short noise burst for wing flap
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.09), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const env = Math.exp(-i / (audioCtx.sampleRate * 0.03));
+    data[i] = (Math.random() * 2 - 1) * env;
+  }
+  noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 900;
+  filter.Q.value = 0.8;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.04, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.11);
+}
+
+function canSpawnCardinal(): boolean {
+  if (cardinal) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "winter") return false;
+  const isDaytimeish = currentTimeOfDay === "morning" || currentTimeOfDay === "afternoon" || currentTimeOfDay === "evening";
+  if (!isDaytimeish) return false;
+  // Cardinals are classic against snow — any non-stormy weather works
+  if (currentWeather === "stormy") return false;
+  return true;
+}
+
+function spawnCardinal(): void {
+  if (cardinal) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const fromLeft = Math.random() < 0.5;
+  const dir: 1 | -1 = fromLeft ? 1 : -1;
+  const startX = fromLeft ? -14 : w + 14;
+  const startY = 20 + Math.random() * 30; // enters from upper sky
+  const offset = w * 0.20 + Math.random() * w * 0.16;
+  const targetX = fromLeft ? (w / 2) - offset + Math.random() * 18 : (w / 2) + offset - Math.random() * 18;
+  const groundY = h / 2 + 50 + Math.random() * 4;
+  cardinal = {
+    x: startX,
+    y: startY,
+    vx: dir * CARDINAL_FLY_SPEED,
+    vy: 0.5 + Math.random() * 0.3,
+    dir,
+    state: "flying_in",
+    stateTimer: 600, // safety
+    groundY,
+    targetX: Math.max(24, Math.min(w - 24, targetX)),
+    wingPhase: 0,
+    hopPhase: 0,
+    chirpTimer: 80 + Math.floor(Math.random() * 60),
+    peckCountdown: 0,
+    pecksLeft: 2 + Math.floor(Math.random() * 3), // 2-4 pecks
+    crestLift: 0.3,
+    bowPhase: 0,
+    fadeIn: 0,
+    fadeOut: 1,
+    greeted: false,
+  };
+  totalCardinalsSeen++;
+}
+
+function tryClickCardinal(clickX: number, clickY: number): boolean {
+  if (!cardinal) return false;
+  const c = cardinal;
+  if (c.state === "flying_in" || c.state === "flying_out") return false;
+  if (c.greeted) return false;
+  const dx = clickX - c.x;
+  const dy = clickY - (c.y - 4);
+  // Generous circular hitbox (~10 px radius)
+  if (dx * dx + dy * dy < 100) {
+    greetCardinal();
+    return true;
+  }
+  return false;
+}
+
+function greetCardinal(): void {
+  if (!cardinal) return;
+  const c = cardinal;
+  c.greeted = true;
+  c.crestLift = 1.0;
+  c.bowPhase = 1.0;
+  c.state = "perched"; // pause any pecking
+  c.stateTimer = Math.max(c.stateTimer, 200); // linger a bit longer after greet
+  totalCardinalsGreeted++;
+
+  petHappiness = Math.min(100, petHappiness + 4);
+  totalCarePoints += 2;
+  addFriendshipXP(3);
+
+  playCardinalGreetTrill();
+
+  // Warm red sparkle + a few heart particles
+  for (let i = 0; i < 14; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = 0.9 + Math.random() * 1.6;
+    particles.push({
+      x: c.x + (Math.random() - 0.5) * 4,
+      y: c.y - 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 40 + Math.floor(Math.random() * 25),
+      maxLife: 65,
+      size: 1.8 + Math.random() * 1.6,
+      type: "sparkle",
+    });
+  }
+  for (let i = 0; i < 3; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.7;
+    const speed = 0.8 + Math.random() * 0.9;
+    particles.push({
+      x: c.x,
+      y: c.y - 5,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 60 + Math.floor(Math.random() * 20),
+      maxLife: 80,
+      size: 2.6 + Math.random() * 1,
+      type: "heart",
+    });
+  }
+
+  const s = CARDINAL_GREET_SPEECHES[Math.floor(Math.random() * CARDINAL_GREET_SPEECHES.length)];
+  queueSpeechBubble(s, 180);
+
+  if (!cardinalFirstGreeted) {
+    cardinalFirstGreeted = true;
+    addDiaryEntry("milestone", "🐦", "A red cardinal came to me~! I shared some seeds and he sang his winter song! 🐦❄️✨");
+  }
+
+  logDailyActivity("cardinal");
+  checkAchievements();
+  saveGame();
+}
+
+function updateCardinal(): void {
+  // Spawn chance (only if nothing else blocking) — rarer than squirrel
+  if (!cardinal && canSpawnCardinal() && Math.random() < 0.0005) {
+    spawnCardinal();
+  }
+
+  if (!cardinal) return;
+  const c = cardinal;
+
+  if (c.fadeIn < 1) c.fadeIn = Math.min(1, c.fadeIn + 1 / CARDINAL_FADE_IN);
+  c.stateTimer--;
+
+  if (c.state === "flying_in") {
+    c.wingPhase += 0.55; // rapid flap while flying
+    c.x += c.vx;
+    // Descend toward ground in a gentle arc
+    const distX = Math.abs(c.targetX - c.x);
+    const totalDrop = c.groundY - 20;
+    // Ease the y toward groundY as we approach targetX
+    const remaining = Math.max(0, distX);
+    if (remaining > 2) {
+      const desiredY = c.groundY - (remaining / (canvas.width * 0.6)) * totalDrop * 0.6;
+      c.y += (desiredY - c.y) * 0.08;
+    } else {
+      c.y += (c.groundY - c.y) * 0.25;
+    }
+    // Occasional wing flap sound
+    if (Math.floor(c.wingPhase / Math.PI) !== Math.floor((c.wingPhase - 0.55) / Math.PI) && Math.random() < 0.4) {
+      playCardinalFlutter();
+    }
+    // Arrive at perch
+    if ((c.dir === 1 && c.x >= c.targetX) || (c.dir === -1 && c.x <= c.targetX)) {
+      c.x = c.targetX;
+      c.y = c.groundY;
+      c.vx = 0;
+      c.vy = 0;
+      c.state = "perched";
+      c.stateTimer = CARDINAL_PERCH_MIN + Math.floor(Math.random() * (CARDINAL_PERCH_MAX - CARDINAL_PERCH_MIN));
+      c.crestLift = 0.3;
+      if (!cardinalFirstSeen) {
+        cardinalFirstSeen = true;
+        addDiaryEntry("milestone", "🐦", "A bright red cardinal visited my snow~! His feathers glowed against the frost! 🐦❄️");
+      }
+      if (Math.random() < 0.7) {
+        const s = CARDINAL_SIGHT_SPEECHES[Math.floor(Math.random() * CARDINAL_SIGHT_SPEECHES.length)];
+        queueSpeechBubble(s, 140);
+      }
+      // Initial landing chirp
+      playCardinalChirp();
+    }
+  } else if (c.state === "perched") {
+    c.wingPhase += 0.03;
+    c.hopPhase += 0.02 + (c.bowPhase > 0 ? 0.01 : 0);
+    c.bowPhase = Math.max(0, c.bowPhase - 0.025);
+    c.crestLift = Math.max(0.3, c.crestLift - 0.01);
+    c.chirpTimer--;
+    if (c.chirpTimer <= 0) {
+      playCardinalChirp();
+      c.chirpTimer = CARDINAL_CHIRP_MIN + Math.floor(Math.random() * (CARDINAL_CHIRP_MAX - CARDINAL_CHIRP_MIN));
+    }
+    if (c.stateTimer <= 0) {
+      if (c.pecksLeft > 0 && !c.greeted) {
+        c.state = "pecking";
+        c.stateTimer = 260;
+        c.peckCountdown = 20;
+      } else {
+        c.state = "flying_out";
+        c.stateTimer = 400;
+        c.dir = (c.dir * -1) as 1 | -1;
+        c.vx = c.dir * CARDINAL_FLY_SPEED;
+        c.vy = -1.1;
+        playCardinalFlutter();
+      }
+    }
+  } else if (c.state === "pecking") {
+    c.wingPhase += 0.02;
+    c.hopPhase += 0.01;
+    c.peckCountdown--;
+    if (c.peckCountdown <= 0 && c.pecksLeft > 0) {
+      c.pecksLeft--;
+      c.peckCountdown = 50 + Math.floor(Math.random() * 30);
+      // Tiny snow puff particles on peck
+      for (let i = 0; i < 3; i++) {
+        const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI;
+        const speed = 0.3 + Math.random() * 0.5;
+        particles.push({
+          x: c.x + c.dir * 3,
+          y: c.groundY + 1,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.4,
+          life: 18 + Math.floor(Math.random() * 10),
+          maxLife: 30,
+          size: 1 + Math.random() * 0.6,
+          type: "sparkle",
+        });
+      }
+    }
+    if (c.pecksLeft <= 0 || c.stateTimer <= 0) {
+      c.state = "perched";
+      c.stateTimer = 100 + Math.floor(Math.random() * 80);
+    }
+  } else if (c.state === "flying_out") {
+    c.wingPhase += 0.55;
+    c.x += c.vx;
+    c.y += c.vy;
+    c.vy -= 0.03; // accelerate upward
+    if (Math.floor(c.wingPhase / Math.PI) !== Math.floor((c.wingPhase - 0.55) / Math.PI) && Math.random() < 0.4) {
+      playCardinalFlutter();
+    }
+    if (c.y < -20 || c.x < -20 || c.x > canvas.width + 20) {
+      c.fadeOut = Math.max(0, c.fadeOut - 1 / CARDINAL_FADE_OUT);
+      if (c.fadeOut <= 0) {
+        cardinal = null;
+        return;
+      }
+    }
+  }
+
+  // Safety: if stuck, fly out
+  if (c.stateTimer <= -400 && c.state !== "flying_out") {
+    c.state = "flying_out";
+    c.stateTimer = 400;
+    c.vx = c.dir * CARDINAL_FLY_SPEED;
+    c.vy = -1.1;
+  }
+
+  // Weather/season/sleep transitions → leave
+  if (isSleeping || currentSeason !== "winter" || currentWeather === "stormy") {
+    if (c.state !== "flying_out") {
+      c.state = "flying_out";
+      c.vx = c.dir * CARDINAL_FLY_SPEED;
+      c.vy = -1.1;
+      playCardinalFlutter();
+    }
+  }
+}
+
+function drawCardinal(): void {
+  if (!cardinal) return;
+  const c = cardinal;
+  const alpha = c.fadeIn * c.fadeOut;
+  if (alpha <= 0.01) return;
+
+  const isFlying = c.state === "flying_in" || c.state === "flying_out";
+  // Hop bob while perched
+  const hop = c.state === "perched" || c.state === "pecking"
+    ? Math.abs(Math.sin(c.hopPhase)) * 0.7
+    : 0;
+  // Pecking dip
+  const peckDip = c.state === "pecking" && c.peckCountdown < 12 && c.peckCountdown > 2
+    ? Math.sin((12 - c.peckCountdown) / 10 * Math.PI) * 3
+    : 0;
+  // Bow lean after greet
+  const bowLean = c.bowPhase * 2;
+
+  const bodyX = c.x;
+  const bodyY = c.y - hop + peckDip + bowLean;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ground shadow (only when grounded)
+  if (!isFlying) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.groundY + 2, 6 - hop * 0.6, 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.translate(bodyX, bodyY);
+  ctx.scale(c.dir, 1); // mirror sprite by facing direction
+
+  // --- Tail (behind body, pointing back-down) ---
+  ctx.fillStyle = "#8a0c18"; // darker red for tail shadow layer
+  ctx.beginPath();
+  ctx.moveTo(-3.8, 1.2);
+  ctx.lineTo(-8.2, 3.4);
+  ctx.lineTo(-8.0, 4.4);
+  ctx.lineTo(-3.5, 2.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#c41828"; // primary red tail
+  ctx.beginPath();
+  ctx.moveTo(-3.8, 0.4);
+  ctx.lineTo(-8.0, 2.0);
+  ctx.lineTo(-8.2, 3.2);
+  ctx.lineTo(-3.6, 1.8);
+  ctx.closePath();
+  ctx.fill();
+
+  // --- Wing (back) ---
+  const flapPhase = Math.sin(c.wingPhase);
+  const wingLift = isFlying ? flapPhase * 2.8 : flapPhase * 0.3;
+  ctx.save();
+  ctx.rotate(-0.15 + (isFlying ? flapPhase * 0.4 : 0));
+  ctx.fillStyle = "#8a0c18";
+  ctx.beginPath();
+  ctx.ellipse(-1.5, 0.5 + wingLift, 4.2, 2.2, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // --- Body (round red torso) ---
+  const bodyGrad = ctx.createRadialGradient(0.5, -0.5, 1, 0, 0, 6);
+  bodyGrad.addColorStop(0, "#ff5060");
+  bodyGrad.addColorStop(0.55, "#e81828");
+  bodyGrad.addColorStop(1, "#9a0c18");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 5.4, 4.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Belly shadow (lower)
+  ctx.fillStyle = "rgba(80, 10, 14, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(0.3, 1.8, 3.8, 2.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Front wing (on top of body) ---
+  ctx.save();
+  ctx.rotate(isFlying ? flapPhase * 0.5 : flapPhase * 0.05);
+  const wingGrad = ctx.createLinearGradient(-2, -1, 3, 2);
+  wingGrad.addColorStop(0, "#e02030");
+  wingGrad.addColorStop(1, "#8a0c18");
+  ctx.fillStyle = wingGrad;
+  ctx.beginPath();
+  ctx.ellipse(0.4, 0.2 + wingLift * 0.6, 3.6, 2.2, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  // Subtle wing highlight
+  ctx.fillStyle = "rgba(255, 140, 150, 0.35)";
+  ctx.beginPath();
+  ctx.ellipse(0.6, -0.4 + wingLift * 0.6, 1.6, 0.7, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // --- Head ---
+  ctx.fillStyle = "#e81828";
+  ctx.beginPath();
+  ctx.arc(3.2, -2.0, 3.0, 0, Math.PI * 2);
+  ctx.fill();
+  // Head highlight
+  ctx.fillStyle = "rgba(255, 140, 150, 0.5)";
+  ctx.beginPath();
+  ctx.ellipse(3.6, -2.8, 1.3, 0.8, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Crest (pointed spike on top of head) ---
+  const crestH = 2.2 + c.crestLift * 1.2;
+  ctx.fillStyle = "#c41828";
+  ctx.beginPath();
+  ctx.moveTo(2.4, -4.2);
+  ctx.lineTo(3.6, -4.2 - crestH);
+  ctx.lineTo(4.0, -4.0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#9a0c18";
+  ctx.beginPath();
+  ctx.moveTo(3.0, -4.2);
+  ctx.lineTo(3.7, -3.4 - crestH * 0.7);
+  ctx.lineTo(4.0, -4.0);
+  ctx.closePath();
+  ctx.fill();
+
+  // --- Black face mask (around eye and beak base) ---
+  ctx.fillStyle = "#12080a";
+  ctx.beginPath();
+  ctx.ellipse(4.6, -1.0, 1.9, 1.5, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Throat mask extension
+  ctx.beginPath();
+  ctx.ellipse(4.0, 0.2, 1.3, 0.9, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Beak (thick orange cone) ---
+  const beakGrad = ctx.createLinearGradient(5.2, -1, 7.4, -0.5);
+  beakGrad.addColorStop(0, "#ffc040");
+  beakGrad.addColorStop(1, "#c0700a");
+  ctx.fillStyle = beakGrad;
+  ctx.beginPath();
+  ctx.moveTo(5.0, -1.4);
+  ctx.lineTo(7.4, -0.8);
+  ctx.lineTo(5.0, -0.2);
+  ctx.closePath();
+  ctx.fill();
+  // Beak dividing line
+  ctx.strokeStyle = "rgba(80, 40, 0, 0.6)";
+  ctx.lineWidth = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(5.0, -0.7);
+  ctx.lineTo(7.3, -0.8);
+  ctx.stroke();
+
+  // --- Eye ---
+  ctx.fillStyle = "#10080a";
+  ctx.beginPath();
+  ctx.arc(4.6, -1.6, 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(4.8, -1.8, 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Feet (only when perched) ---
+  if (!isFlying) {
+    ctx.strokeStyle = "#3a1a0a";
+    ctx.lineWidth = 0.7;
+    ctx.lineCap = "round";
+    // Left foot
+    ctx.beginPath();
+    ctx.moveTo(-1.2, 4.2);
+    ctx.lineTo(-1.2, 5.3);
+    ctx.stroke();
+    // Right foot
+    ctx.beginPath();
+    ctx.moveTo(1.2, 4.2);
+    ctx.lineTo(1.2, 5.3);
+    ctx.stroke();
+    // Toes
+    ctx.beginPath();
+    ctx.moveTo(-1.2, 5.3);
+    ctx.lineTo(-1.9, 5.5);
+    ctx.moveTo(-1.2, 5.3);
+    ctx.lineTo(-0.5, 5.5);
+    ctx.moveTo(1.2, 5.3);
+    ctx.lineTo(0.5, 5.5);
+    ctx.moveTo(1.2, 5.3);
+    ctx.lineTo(1.9, 5.5);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // "greet 🐦" hint text until player has greeted their first cardinal
+  if (!cardinalFirstGreeted && !c.greeted && !isFlying && c.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("greet 🐦", c.x, c.y - 14);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -15562,6 +16174,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for winter cardinal greet (perched on the ground in winter daytime)
+  if (cardinal) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCardinal(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mushroom ring poofs before bubbles/drag
   if (mushroomRing) {
     const rect = canvas.getBoundingClientRect();
@@ -17334,6 +17955,11 @@ const achievements: Achievement[] = [
     icon: "🥮", unlockMessage: "A moonlit feast with you~! The harvest moon smiles! 🥮🌕✨",
     condition: () => totalMooncakesShared >= 1, unlocked: false,
   },
+  {
+    id: "cardinal_friend", name: "Cardinal Friend", description: "Greet 3 winter cardinals with seeds",
+    icon: "🐦", unlockMessage: "A redbird's song is yours forever~! Winter friends stay true! 🐦❄️💖",
+    condition: () => totalCardinalsGreeted >= 3, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -18283,6 +18909,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#E82838";
+  ctx.fillText("CARDINALS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🐦 ${totalCardinalsGreeted} greeted (${totalCardinalsSeen} seen)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -18777,6 +19413,10 @@ interface SaveData {
   totalMooncakesShared: number;
   totalMooncakesDropped: number;
   mooncakeFirstShared: boolean;
+  totalCardinalsSeen: number;
+  totalCardinalsGreeted: number;
+  cardinalFirstSeen: boolean;
+  cardinalFirstGreeted: boolean;
   version: number;
 }
 
@@ -18904,6 +19544,10 @@ function buildSaveData(): SaveData {
     totalMooncakesShared,
     totalMooncakesDropped,
     mooncakeFirstShared,
+    totalCardinalsSeen,
+    totalCardinalsGreeted,
+    cardinalFirstSeen,
+    cardinalFirstGreeted,
     version: 1,
   };
 }
@@ -19353,6 +19997,18 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).mooncakeFirstShared === "boolean") {
     mooncakeFirstShared = (data as SaveData).mooncakeFirstShared;
+  }
+  if (typeof (data as SaveData).totalCardinalsSeen === "number") {
+    totalCardinalsSeen = (data as SaveData).totalCardinalsSeen;
+  }
+  if (typeof (data as SaveData).totalCardinalsGreeted === "number") {
+    totalCardinalsGreeted = (data as SaveData).totalCardinalsGreeted;
+  }
+  if (typeof (data as SaveData).cardinalFirstSeen === "boolean") {
+    cardinalFirstSeen = (data as SaveData).cardinalFirstSeen;
+  }
+  if (typeof (data as SaveData).cardinalFirstGreeted === "boolean") {
+    cardinalFirstGreeted = (data as SaveData).cardinalFirstGreeted;
   }
 
   // Restore diary
@@ -21879,6 +22535,9 @@ function update(): void {
   // Mooncake reward drop (spawned by a blessed harvest moon)
   updateMooncake();
 
+  // Winter cardinal visitor (bright red bird during winter daytime)
+  updateCardinal();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -23055,6 +23714,9 @@ function draw(): void {
 
   // Mooncake gift drop (falls from moon to ground after a harvest moon blessing)
   drawMooncake();
+
+  // Winter cardinal (drawn in the ground/body layer so it reads behind the pet)
+  drawCardinal();
 
   // Toy (on the ground, behind the pet body)
   drawToy(cx, cy);
