@@ -3,6 +3,16 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 
+// Global safety net — never let an uncaught main-process exception kill the
+// app with Electron's default "A JavaScript error occurred in the main
+// process" dialog. We still log the error so crash cause is visible.
+process.on("uncaughtException", (err) => {
+  try { console.error("[uncaughtException]", err); } catch { /* ignore */ }
+});
+process.on("unhandledRejection", (reason) => {
+  try { console.error("[unhandledRejection]", reason); } catch { /* ignore */ }
+});
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let currentMood = "☀️ Energetic (Morning)";
@@ -38,24 +48,53 @@ function createWindow(): void {
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 
-  // Surface renderer-side errors to the main process log so they're visible
-  // even when DevTools is closed (helps diagnose "blank window" reports).
-  mainWindow.webContents.on("render-process-gone", (_e, details) => {
-    console.error("Renderer process gone:", details);
-  });
-  mainWindow.webContents.on("console-message", (_e, level, message, line, sourceId) => {
-    if (level >= 2) console.error(`[renderer ${sourceId}:${line}] ${message}`);
-  });
+  // Diagnostic listeners are wrapped defensively so a signature change across
+  // Electron versions (e.g. console-message's callback args changed in v35)
+  // can never crash the main process at startup. Each handler body is also
+  // wrapped so any unexpected runtime throw is swallowed, not surfaced as
+  // "A JavaScript error occurred in the main process".
+  try {
+    mainWindow.webContents.on("render-process-gone", (..._args: unknown[]) => {
+      try {
+        console.error("Renderer process gone:", _args[_args.length - 1]);
+      } catch { /* ignore */ }
+    });
+  } catch { /* ignore */ }
+
+  try {
+    mainWindow.webContents.on("console-message", (...args: unknown[]) => {
+      try {
+        // Electron 35+: (event, { level, message, lineNumber, sourceId })
+        // Electron <35: (event, level, message, line, sourceId)
+        const maybeDetails = args[1] as { level?: string | number; message?: string; lineNumber?: number; sourceId?: string } | undefined;
+        if (maybeDetails && typeof maybeDetails === "object" && "message" in maybeDetails) {
+          const lvl = maybeDetails.level;
+          const isError = lvl === "error" || lvl === "warning" || (typeof lvl === "number" && lvl >= 2);
+          if (isError) console.error(`[renderer ${maybeDetails.sourceId}:${maybeDetails.lineNumber}] ${maybeDetails.message}`);
+        } else {
+          const level = args[1] as number | undefined;
+          const message = args[2] as string | undefined;
+          const line = args[3] as number | undefined;
+          const sourceId = args[4] as string | undefined;
+          if (typeof level === "number" && level >= 2) console.error(`[renderer ${sourceId}:${line}] ${message}`);
+        }
+      } catch { /* ignore */ }
+    });
+  } catch { /* ignore */ }
 
   // F12 / Ctrl+Shift+I toggles DevTools so users can diagnose rendering issues.
-  mainWindow.webContents.on("before-input-event", (_event, input) => {
-    if (input.type !== "keyDown") return;
-    const isF12 = input.key === "F12";
-    const isInspector = input.control && input.shift && input.key.toLowerCase() === "i";
-    if (isF12 || isInspector) {
-      mainWindow?.webContents.toggleDevTools();
-    }
-  });
+  try {
+    mainWindow.webContents.on("before-input-event", (_event, input) => {
+      try {
+        if (!input || input.type !== "keyDown") return;
+        const isF12 = input.key === "F12";
+        const isInspector = input.control && input.shift && typeof input.key === "string" && input.key.toLowerCase() === "i";
+        if (isF12 || isInspector) {
+          mainWindow?.webContents.toggleDevTools();
+        }
+      } catch { /* ignore */ }
+    });
+  } catch { /* ignore */ }
 
   mainWindow.on("closed", () => {
     mainWindow = null;

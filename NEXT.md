@@ -3,7 +3,27 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.105.0 — Diagnostic: Visible Error Overlay + DevTools Shortcut (2026-04-20)
+## Last completed: v0.105.1 — Hotfix: Main-Process Startup Crash (2026-04-20)
+
+### What was done
+- **Emergency hotfix**, not a feature. The user reported that v0.105.0 wouldn't launch at all on Windows 11 — Electron's default "A JavaScript error occurred in the main process" alert dialog appeared immediately on startup. The v0.105.0 diagnostic additions (`render-process-gone`, `console-message`, `before-input-event` listeners) were registered without defensive guards, and one of those callbacks was throwing synchronously during startup.
+- Wrapped every diagnostic event handler's body in try/catch so any runtime surprise (API signature change, null input, missing property) is swallowed rather than crashing. Also wrapped each `on(...)` registration call in try/catch as a belt-and-suspenders against future Electron event-name changes.
+- Rewrote the `console-message` handler to detect BOTH shapes: Electron <35's `(event, level, message, line, sourceId)` AND Electron 35+'s `(event, { level, message, lineNumber, sourceId })`. The v35 signature change was the most likely culprit — the old deprecated signature may have started throwing at runtime in v35.7.5 rather than silently returning wrong values.
+- Added `process.on("uncaughtException")` + `process.on("unhandledRejection")` as a last-ditch main-process safety net. Any future main-process throw is now logged to stdout instead of raising Electron's scary startup dialog.
+
+### Thoughts for next cycle
+- **WAIT for the user to confirm v0.105.1 launches successfully on Windows 11 before shipping any more features.** If v0.105.1 launches but the pet still doesn't draw, the error-overlay diagnostic should surface the underlying v0.104.0 bug — proceed with that fix next. If v0.105.1 STILL won't launch, the cause is not in main.ts and the next investigation should focus on renderer-side module initialization order, preload script, or Electron 35 packaging issues.
+- **Most likely diagnostic next-step candidates if v0.105.1 launches**: (a) add a rolling log file at `app.getPath("userData") + "/tamashii.log"` that mirrors `console.error` so user bug reports can attach a file; (b) add a 2-line "version + build timestamp" line in the error-overlay header so we can confirm users are actually running the new build.
+- Once v0.104.0's rendering bug is fixed: **summer night signature event** remains the highest-value feature — options listed in detail in the v0.104.0 notes below.
+
+### Architecture notes
+- `main.ts` now registers diagnostic listeners inside try/catch at both registration and callback-body layers (two levels of defense).
+- `process.on("uncaughtException")` / `process.on("unhandledRejection")` are registered AT MODULE TOP (before any Electron import is used), so they catch errors from *anywhere* in main, including `app.whenReady().then(...)` callbacks.
+- Electron 35 `console-message` signature: `(event, { level: "info"|"warning"|"error"|"verbose", message, lineNumber, sourceId, frame })`. The old `(event, level: number, message, line, sourceId)` signature is documented as deprecated but may throw at runtime in v35.7.5 — the new handler supports both.
+
+---
+
+## Previously completed: v0.105.0 — Diagnostic: Visible Error Overlay + DevTools Shortcut (2026-04-20)
 
 ### What was done
 - **Off-cycle diagnostic release**, not a new feature. A user reported that v0.104.0 runs on Windows 11 (window outline visible, right-click menu works, click sounds play) but the pet itself never draws — meaning JS is running but something throws silently between startup and the first frame. Without DevTools or a visible error surface, there's no way to get the actual exception text from a user bug report.

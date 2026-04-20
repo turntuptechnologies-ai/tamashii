@@ -3,6 +3,16 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.105.1] — 2026-04-20 — Hotfix: Main-Process Startup Crash
+
+### Fixed
+- **"A JavaScript error occurred in the main process" on startup** — a user reported v0.105.0 refused to launch at all on Windows 11, throwing Electron's default main-process error dialog before the window could appear. v0.105.0's diagnostic additions (`render-process-gone`, `console-message`, `before-input-event` listeners) were registered without defensive guards, and one of those callbacks was throwing synchronously during startup, which Electron surfaces as the scary uncaught-exception dialog.
+- **Defensive listener wrappers** — every diagnostic event handler's body is now wrapped in try/catch so any runtime surprise (API signature change, null input, missing property) is swallowed rather than crashing the main process. Even the `on(...)` registration calls themselves are try-guarded in case a future Electron version ever throws on an unknown event name.
+- **Electron 35 `console-message` signature compatibility** — v35 changed the callback arguments from `(event, level, message, line, sourceId)` to `(event, { level, message, lineNumber, sourceId })`. The handler now detects which shape it received and reads the right fields, so neither signature causes a runtime error.
+- **Global `uncaughtException` / `unhandledRejection` safety net** — a last-ditch `process.on("uncaughtException")` + `process.on("unhandledRejection")` now swallows any main-process throw that isn't caught elsewhere and logs it instead. The Electron default error dialog no longer replaces the pet on startup.
+
+**Why this hotfix:** the v0.105.0 diagnostic release was supposed to make the v0.104.0 "pet never draws" bug easier to report — but on Windows 11 it made things strictly worse by preventing the app from launching at all. This release fixes the launch crash with minimal scope so the diagnostic overlay can actually do its job.
+
 ## [v0.105.0] — 2026-04-20 — Diagnostic: Visible Error Overlay + DevTools Shortcut
 
 ### Added
