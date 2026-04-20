@@ -439,6 +439,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "snow_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of silver snowflakes~", "moonlit winter festival~", "dancing under the pale-blue moon~"] },
   { activity: "snowflake_keepsake", icons: [["heart", "star", "moon"], ["star", "heart", "moon"]], captions: ["a crystal shelf of keepsakes~", "silver snowflakes in my paws~", "the moon's gift glowing softly~"] },
   { activity: "cherry_moon", icons: [["moon", "flower", "heart"], ["flower", "moon", "heart"]], captions: ["a sky of paper cranes~", "moonlit hanami festival~", "wishing under the pink moon~"] },
+  { activity: "sakura_petal", icons: [["flower", "heart", "moon"], ["heart", "flower", "moon"]], captions: ["a book of pressed petals~", "sakura blossoms in my paws~", "the moon's soft pink gift~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -593,6 +594,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... pink moon... so soft...",
     "Zzz... paper cranes... wishing...",
     "*snore*... hanami... under the stars...",
+  ],
+  sakura_petal: [
+    "*mumble*... tiny petal... pressed forever...",
+    "Zzz... keepsake from the moon... hehe...",
+    "*snore*... pink blossom... safe with me...",
   ],
 };
 
@@ -3652,6 +3658,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("snow_moon")) contextIcons.push("moon", "star", "heart");
   if (dailyActivityLog.includes("snowflake_keepsake")) contextIcons.push("heart", "star", "moon");
   if (dailyActivityLog.includes("cherry_moon")) contextIcons.push("flower", "moon", "heart");
+  if (dailyActivityLog.includes("sakura_petal")) contextIcons.push("flower", "heart", "moon");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -16064,6 +16071,11 @@ function blessCherryMoon(): void {
     addDiaryEntry("milestone", "🌕", `Cherry moon blessing #${totalCherryMoonsBlessed}~! Every wish took flight! 🌕🌸`);
   }
 
+  // After the blessing, the cherry moon drops a sakura petal keepsake as a
+  // spring gift — spring's counterpart to the harvest moon's mooncake and the
+  // snow moon's snowflake keepsake.
+  spawnSakuraPetalKeepsake(fest.moonCx, fest.moonCy);
+
   checkAchievements();
   saveGame();
 }
@@ -16404,6 +16416,523 @@ function drawCherryMoonCranes(): void {
     ctx.fillText("wish 🕊️", getCraneX(firstUnwished), getCraneY(firstUnwished) - 8);
     ctx.restore();
   }
+}
+
+// --- Sakura Petal Keepsake (spring keepsake drop) ---
+// Spring's counterpart to the autumn mooncake and winter snowflake keepsake.
+// After every Cherry Moon Blessing, the pink moon drops a single oversized
+// cherry-blossom keepsake that tumbles gently down to the ground. Click it to
+// *press* the petal (like pressing flowers in a book) — the third distinct
+// keepsake verb: mooncake is *shared*, snowflake is *treasured*, sakura petal
+// is *pressed*. Inverts the snowflake-keepsake's vocabulary point-for-point:
+// crystalline 6-armed snowflake → 5-petal cherry blossom; side-to-side sway →
+// tumbling rotation + flutter; crystalline triangle-wave glockenspiel → warm
+// sine-wave descending cascade; cool crystalline tink → soft paper whisper on
+// landing; silvery-blue halo → warm pink blush halo.
+interface SakuraPetalKeepsake {
+  x: number;
+  startX: number;
+  startY: number;
+  groundX: number;
+  groundY: number;
+  y: number;
+  fallProgress: number;
+  spin: number;           // continuous petal rotation while falling
+  flutterPhase: number;   // left-right flutter during fall
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  landed: boolean;
+  landBounce: number;
+  active: boolean;
+  glowPulse: number;
+  petalTimer: number;     // throttle for ambient petal emission while landed
+  hueIndex: number;       // index into CHERRY_HUES
+}
+
+let sakuraPetalKeepsake: SakuraPetalKeepsake | null = null;
+let totalSakuraPetalKeepsakesPressed = 0;
+let totalSakuraPetalKeepsakesDropped = 0;
+let sakuraPetalKeepsakeFirstPressed = false;
+
+const SAKURA_PETAL_KEEPSAKE_FALL_FRAMES = 180;  // ~3s tumble (longer than snowflake's 2.3s — petals flutter even slower)
+const SAKURA_PETAL_KEEPSAKE_LIFE = 2400;        // ~40s on ground before fading if un-pressed
+const SAKURA_PETAL_KEEPSAKE_FADE_IN = 30;
+const SAKURA_PETAL_KEEPSAKE_FADE_OUT = 60;
+
+const SAKURA_PETAL_PRESS_SPEECHES = [
+  "I'll press this forever~! 🌸💖",
+  "A cherry moon keepsake~! 🌸✨",
+  "So soft and pink~! 🌸💗",
+  "Spring magic in my paws~! 🌸🌕",
+  "The moon gave me a petal~! 🌸💖",
+  "My pink memento~! 🌸✨",
+];
+
+const SAKURA_PETAL_SIGHT_SPEECHES = [
+  "A sakura petal keepsake~! 🌸",
+  "Whooa~ a gift from the cherry moon! 🌸🌕",
+  "Is that petal for me~? 🌸💖",
+  "A tiny pink blossom~! 🌸✨",
+];
+
+function playSakuraPetalKeepsakeDropSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Warm descending sine cascade — rounder/lower than snowflake's bright
+  // triangle glockenspiel. A soft cherry-night cascade rather than an icy
+  // chime. D6, A5, F#5, D5 — a warm D major descent.
+  const freqs = [1174.7, 880, 740, 587.3]; // D6, A5, F#5, D5
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.11;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.036, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.45);
+  }
+  // Warm C#7 shimmer (lower than snowflake's B7 high shimmer; a warmer register
+  // for a spring feel)
+  const shim = audioCtx.createOscillator();
+  shim.type = "sine";
+  shim.frequency.value = 2217; // C#7
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t);
+  sgain.gain.linearRampToValueAtTime(0.01, t + 0.1);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  shim.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shim.start(t);
+  shim.stop(t + 0.85);
+}
+
+function playSakuraPetalKeepsakeLandSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Soft paper whisper rather than crystalline tink — a petal lands silently,
+  // almost only a brushed paper sigh. Tiny warm sine dip + low-filtered pink
+  // noise tail. The inverse of snowflake's high bandpass frost-tinkle.
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(660, t);        // E5
+  osc.frequency.exponentialRampToValueAtTime(523.25, t + 0.12); // → C5
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.022, t + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.24);
+  // Low-filtered noise "paper rustle" tail — warm close whisper rather than
+  // snow's high crystalline shimmer
+  const bufSize = audioCtx.sampleRate * 0.18;
+  const noiseBuf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < bufSize; i++) {
+    const white = Math.random() * 2 - 1;
+    last = last * 0.95 + white * 0.05;
+    data[i] = last;
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 1400;
+  lp.Q.value = 0.6;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.016, t + 0.01);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  noise.connect(lp);
+  lp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.2);
+}
+
+function playSakuraPetalKeepsakePressSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Warm ascending F# major arpeggio — F#5, A5, C#6, F#6 — with sine waves for
+  // warm rounded feel, distinct from snowflake's cool C-E-G-C triangle-wave
+  // silver arpeggio. F# major is a shade warmer than C major and mirrors the
+  // cherry moon blessing's D major palette.
+  const freqs = [740, 880, 1108.7, 1480]; // F#5, A5, C#6, F#6
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.055, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.48);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.5);
+  }
+  // Warm C#7 shimmer tail (matches cherry moon blessing's top note)
+  const shim = audioCtx.createOscillator();
+  shim.type = "sine";
+  shim.frequency.value = 2217; // C#7
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t + 0.18);
+  sgain.gain.linearRampToValueAtTime(0.02, t + 0.22);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+  shim.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shim.start(t + 0.18);
+  shim.stop(t + 0.9);
+}
+
+function spawnSakuraPetalKeepsake(startX: number, startY: number): void {
+  if (sakuraPetalKeepsake) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  const groundY = h / 2 + 52;
+  // Land on the right-ish side of the canvas to echo the cherry moon's
+  // right-bias (snowflake lands left-biased to echo snow moon's left-bias).
+  const landX = w * 0.4 + Math.random() * w * 0.4;
+  sakuraPetalKeepsake = {
+    x: startX,
+    startX,
+    startY,
+    groundX: landX,
+    groundY,
+    y: startY,
+    fallProgress: 0,
+    spin: Math.random() * Math.PI * 2,
+    flutterPhase: Math.random() * Math.PI * 2,
+    life: SAKURA_PETAL_KEEPSAKE_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    landed: false,
+    landBounce: 0,
+    active: true,
+    glowPulse: 0,
+    petalTimer: 40,
+    hueIndex: Math.floor(Math.random() * CHERRY_HUES.length),
+  };
+  totalSakuraPetalKeepsakesDropped++;
+  playSakuraPetalKeepsakeDropSound();
+  if (Math.random() < 0.7) {
+    const s = SAKURA_PETAL_SIGHT_SPEECHES[Math.floor(Math.random() * SAKURA_PETAL_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 140);
+  }
+}
+
+function tryClickSakuraPetalKeepsake(clickX: number, clickY: number): boolean {
+  if (!sakuraPetalKeepsake || !sakuraPetalKeepsake.active || !sakuraPetalKeepsake.landed) return false;
+  const k = sakuraPetalKeepsake;
+  const dx = clickX - k.x;
+  const dy = clickY - (k.y - 2);
+  if (dx * dx + dy * dy < 110) { // ~10.5 px hitbox — slightly larger than snowflake's 10 px since the blossom shape is wider
+    pressSakuraPetalKeepsake();
+    return true;
+  }
+  return false;
+}
+
+function pressSakuraPetalKeepsake(): void {
+  if (!sakuraPetalKeepsake || !sakuraPetalKeepsake.active) return;
+  const k = sakuraPetalKeepsake;
+  k.active = false;
+  totalSakuraPetalKeepsakesPressed++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 2;
+  addFriendshipXP(4);
+
+  playSakuraPetalKeepsakePressSound();
+
+  // Pink sparkle bloom
+  for (let i = 0; i < 14; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+    const speed = 1.0 + Math.random() * 1.9;
+    particles.push({
+      x: k.x + (Math.random() - 0.5) * 4,
+      y: k.y - 3,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.6,
+      life: 50 + Math.floor(Math.random() * 25),
+      maxLife: 75,
+      size: 1.8 + Math.random() * 1.8,
+      type: "sparkle",
+    });
+  }
+  // A few drifting blossom petals as the keepsake dissolves into memory
+  for (let i = 0; i < 4; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.8;
+    const speed = 0.6 + Math.random() * 1.1;
+    particles.push({
+      x: k.x + (Math.random() - 0.5) * 5,
+      y: k.y - 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.5,
+      life: 70 + Math.floor(Math.random() * 25),
+      maxLife: 95,
+      size: 2.8 + Math.random() * 1.4,
+      type: "blossom",
+    });
+  }
+  // Three heart particles — it's a keepsake, not food
+  for (let i = 0; i < 3; i++) {
+    const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 0.6;
+    const speed = 0.9 + Math.random() * 1.0;
+    particles.push({
+      x: k.x,
+      y: k.y - 4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 75 + Math.floor(Math.random() * 20),
+      maxLife: 95,
+      size: 3 + Math.random() * 1.2,
+      type: "heart",
+    });
+  }
+
+  const s = SAKURA_PETAL_PRESS_SPEECHES[Math.floor(Math.random() * SAKURA_PETAL_PRESS_SPEECHES.length)];
+  queueSpeechBubble(s, 200);
+
+  if (!sakuraPetalKeepsakeFirstPressed) {
+    sakuraPetalKeepsakeFirstPressed = true;
+    addDiaryEntry("milestone", "🌸", "The cherry moon gave me a sakura petal keepsake~! I pressed it to keep forever! 🌸🌕✨");
+  } else {
+    addDiaryEntry("milestone", "🌸", `Pressed sakura petal keepsake #${totalSakuraPetalKeepsakesPressed}~! Another cherry-moon gift! 🌸🌕`);
+  }
+
+  logDailyActivity("sakura_petal");
+  checkAchievements();
+  saveGame();
+}
+
+function updateSakuraPetalKeepsake(): void {
+  if (!sakuraPetalKeepsake) return;
+  const k = sakuraPetalKeepsake;
+
+  if (k.fadeIn < 1) k.fadeIn = Math.min(1, k.fadeIn + 1 / SAKURA_PETAL_KEEPSAKE_FADE_IN);
+
+  if (!k.landed) {
+    // Tumble down with flutter — a petal rotates AND sways harder than a
+    // snowflake, since real petals tumble end-over-end through the air.
+    k.fallProgress = Math.min(1, k.fallProgress + 1 / SAKURA_PETAL_KEEPSAKE_FALL_FRAMES);
+    k.flutterPhase += 0.09;
+    const t = k.fallProgress;
+    const eased = 1 - Math.pow(1 - t, 2);
+    // Flutter amplitude a touch wider than snowflake (8 vs 6), tapering as
+    // the petal approaches the ground so the landing stays precise.
+    const flutterAmp = (1 - t) * 8;
+    const flutterX = Math.sin(k.flutterPhase) * flutterAmp;
+    const baseX = k.startX + (k.groundX - k.startX) * eased;
+    k.x = baseX + flutterX;
+    const baseY = k.startY + (k.groundY - k.startY) * (t * t * 0.8 + t * 0.2);
+    k.y = baseY;
+    // Faster continuous rotation during fall — petals tumble more visibly
+    // than snowflakes, which only rotate subtly. 0.08 vs snowflake's 0.05.
+    k.spin += 0.08;
+    if (k.fallProgress >= 1) {
+      k.landed = true;
+      k.y = k.groundY;
+      k.x = k.groundX;
+      k.landBounce = 1;
+      playSakuraPetalKeepsakeLandSound();
+      // Tiny pink-blossom puff on landing (petals rather than frost)
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI - Math.PI;
+        const speed = 0.35 + Math.random() * 0.7;
+        particles.push({
+          x: k.x + (Math.random() - 0.5) * 5,
+          y: k.groundY + 1,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed * 0.4 - 0.25,
+          life: 28 + Math.floor(Math.random() * 12),
+          maxLife: 40,
+          size: 1.4 + Math.random() * 0.9,
+          type: Math.random() < 0.6 ? "blossom" : "sparkle",
+        });
+      }
+    }
+  } else {
+    // Resting on ground — gentle flutter rest, slow spin, halo pulse, and
+    // periodic ambient petal drift to keep the keepsake visually alive.
+    k.flutterPhase += 0.03;
+    k.spin += 0.003;
+    k.landBounce = Math.max(0, k.landBounce - 0.035);
+    k.glowPulse += 0.055;
+    k.petalTimer--;
+    if (k.active && k.petalTimer <= 0) {
+      // Emit a tiny petal or sparkle drifting gently upward — a cherry-moon
+      // keepsake sheds petals instead of sparkles (contrasts with the
+      // snowflake's pure sparkle emission).
+      const angle = Math.random() * Math.PI * 2;
+      const isPetal = Math.random() < 0.55;
+      particles.push({
+        x: k.x + Math.cos(angle) * 5,
+        y: k.y + Math.sin(angle) * 2.5,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.16 - Math.random() * 0.28,
+        life: 42 + Math.floor(Math.random() * 22),
+        maxLife: 64,
+        size: isPetal ? 1.6 + Math.random() * 0.8 : 0.9 + Math.random() * 0.6,
+        type: isPetal ? "blossom" : "sparkle",
+      });
+      k.petalTimer = 45 + Math.floor(Math.random() * 35);
+    }
+    k.life--;
+    if (k.life <= 0 || !k.active) {
+      k.fadeOut = Math.max(0, k.fadeOut - 1 / SAKURA_PETAL_KEEPSAKE_FADE_OUT);
+      if (k.fadeOut <= 0) {
+        sakuraPetalKeepsake = null;
+        return;
+      }
+    } else if (k.life < SAKURA_PETAL_KEEPSAKE_FADE_OUT) {
+      k.fadeOut = k.life / SAKURA_PETAL_KEEPSAKE_FADE_OUT;
+    }
+    // Fade out faster if pet sleeps
+    if (isSleeping && k.active && k.life > SAKURA_PETAL_KEEPSAKE_FADE_OUT) {
+      k.life = SAKURA_PETAL_KEEPSAKE_FADE_OUT;
+    }
+  }
+}
+
+function drawSakuraPetalKeepsake(): void {
+  if (!sakuraPetalKeepsake) return;
+  const k = sakuraPetalKeepsake;
+  const alpha = k.fadeIn * k.fadeOut;
+  if (alpha <= 0.01) return;
+
+  const palette = CHERRY_HUES[k.hueIndex];
+  const petalColor = `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`;
+  const petalEdge = `hsl(${palette.hue}, ${Math.min(85, palette.sat + 20)}%, ${Math.max(68, palette.light - 12)}%)`;
+  // Warm cream-yellow pollen center for the blossom, regardless of petal hue
+  const pollenColor = "hsl(48, 85%, 82%)";
+  const pollenEdge = "hsl(36, 70%, 58%)";
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Ground shadow when landed
+  if (k.landed) {
+    const shadowR = 7 + (1 - k.landBounce) * 2;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(k.groundX, k.groundY + 5, shadowR, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Warm pink blush halo pulse while landed & active
+  const flutterY = k.landed ? Math.sin(k.flutterPhase) * 0.4 : 0;
+  if (k.landed && k.active) {
+    const pulse = 0.5 + Math.sin(k.glowPulse) * 0.5;
+    const haloR = 10 + pulse * 3.5;
+    const halo = ctx.createRadialGradient(k.x, k.y - 1 + flutterY, 3, k.x, k.y - 1 + flutterY, haloR);
+    halo.addColorStop(0, `hsla(${palette.hue}, 75%, 88%, 0.5)`);
+    halo.addColorStop(0.6, `hsla(${palette.hue}, 60%, 80%, 0.2)`);
+    halo.addColorStop(1, `hsla(${palette.hue}, 55%, 72%, 0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(k.x, k.y - 1 + flutterY, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Bounce-in squash on first landing
+  const squashX = k.landed ? 1 + k.landBounce * 0.25 : 1;
+  const squashY = k.landed ? 1 - k.landBounce * 0.2 : 1;
+
+  ctx.save();
+  ctx.translate(k.x, k.y - 2 + flutterY);
+  ctx.rotate(k.spin);
+  ctx.scale(squashX, squashY);
+
+  // --- Big 5-petal cherry blossom sprite (~14 px diameter) ---
+  const size = 7;
+
+  // Soft inner glow disc behind the blossom
+  const innerGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.05);
+  innerGlow.addColorStop(0, `hsla(${palette.hue}, 80%, 94%, 0.85)`);
+  innerGlow.addColorStop(0.7, `hsla(${palette.hue}, 60%, 85%, 0.35)`);
+  innerGlow.addColorStop(1, `hsla(${palette.hue}, 55%, 78%, 0)`);
+  ctx.fillStyle = innerGlow;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 1.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 5 petals at 72° intervals — each petal is a rounded heart-ish teardrop
+  // with a subtle notch at its tip, evoking the classic sakura silhouette.
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    ctx.save();
+    ctx.rotate(angle);
+    // Petal body: ellipse stretched radially outward
+    ctx.fillStyle = petalColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -size * 0.58, size * 0.42, size * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Petal rim shadow for depth
+    ctx.fillStyle = petalEdge;
+    ctx.beginPath();
+    ctx.ellipse(size * 0.12, -size * 0.6, size * 0.18, size * 0.44, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    // Subtle notch at the petal tip — the signature sakura silhouette
+    ctx.fillStyle = `hsla(${palette.hue}, 40%, 72%, 0.6)`;
+    ctx.beginPath();
+    ctx.ellipse(0, -size * 1.05, size * 0.08, size * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Warm cream-yellow pollen center
+  ctx.fillStyle = pollenColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Small stamens radiating from the center as tiny darker dots
+  ctx.fillStyle = pollenEdge;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const sx = Math.cos(a) * size * 0.2;
+    const sy = Math.sin(a) * size * 0.2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Bright inner core
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.22);
+  core.addColorStop(0, "hsla(52, 90%, 94%, 1)");
+  core.addColorStop(1, "hsla(48, 80%, 85%, 0)");
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // "press 🌸" hint until the player has pressed their first petal
+  if (k.landed && k.active && !sakuraPetalKeepsakeFirstPressed && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("press 🌸", k.x, k.y - 11);
+    ctx.restore();
+  }
+
+  ctx.restore();
 }
 
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
@@ -18891,6 +19420,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for sakura petal keepsake pickup (dropped after a cherry moon blessing)
+  if (sakuraPetalKeepsake) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickSakuraPetalKeepsake(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for winter cardinal greet (perched on the ground in winter daytime)
   if (cardinal) {
     const rect = canvas.getBoundingClientRect();
@@ -20706,6 +21244,11 @@ const achievements: Achievement[] = [
     icon: "🌕", unlockMessage: "The cherry moon blesses you~! A pink spring festival in your heart! 🌕🌸🕊️",
     condition: () => totalCherryMoonsBlessed >= 1, unlocked: false,
   },
+  {
+    id: "sakura_petal_keeper", name: "Sakura Petal Keeper", description: "Press a sakura petal keepsake from the cherry moon",
+    icon: "🌸", unlockMessage: "A pressed pink petal kept forever~! The cherry moon smiles! 🌸🌕✨",
+    condition: () => totalSakuraPetalKeepsakesPressed >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -21705,6 +22248,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFD6E0";
+  ctx.fillText("SAKURA PETALS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌸 ${totalSakuraPetalKeepsakesPressed} pressed (${totalSakuraPetalKeepsakesDropped} dropped)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -22220,6 +22773,9 @@ interface SaveData {
   totalCherryMoonsBlessed: number;
   cherryMoonFirstSeen: boolean;
   cherryMoonFirstBlessed: boolean;
+  totalSakuraPetalKeepsakesPressed: number;
+  totalSakuraPetalKeepsakesDropped: number;
+  sakuraPetalKeepsakeFirstPressed: boolean;
   version: number;
 }
 
@@ -22368,6 +22924,9 @@ function buildSaveData(): SaveData {
     totalCherryMoonsBlessed,
     cherryMoonFirstSeen,
     cherryMoonFirstBlessed,
+    totalSakuraPetalKeepsakesPressed,
+    totalSakuraPetalKeepsakesDropped,
+    sakuraPetalKeepsakeFirstPressed,
     version: 1,
   };
 }
@@ -22880,6 +23439,15 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).cherryMoonFirstBlessed === "boolean") {
     cherryMoonFirstBlessed = (data as SaveData).cherryMoonFirstBlessed;
+  }
+  if (typeof (data as SaveData).totalSakuraPetalKeepsakesPressed === "number") {
+    totalSakuraPetalKeepsakesPressed = (data as SaveData).totalSakuraPetalKeepsakesPressed;
+  }
+  if (typeof (data as SaveData).totalSakuraPetalKeepsakesDropped === "number") {
+    totalSakuraPetalKeepsakesDropped = (data as SaveData).totalSakuraPetalKeepsakesDropped;
+  }
+  if (typeof (data as SaveData).sakuraPetalKeepsakeFirstPressed === "boolean") {
+    sakuraPetalKeepsakeFirstPressed = (data as SaveData).sakuraPetalKeepsakeFirstPressed;
   }
 
   // Restore diary
@@ -25421,6 +25989,9 @@ function update(): void {
   // Cherry moon festival (spring-night signature event)
   updateCherryMoonFestival();
 
+  // Sakura petal keepsake drop (spawned by a blessed cherry moon)
+  updateSakuraPetalKeepsake();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -26606,6 +27177,9 @@ function draw(): void {
 
   // Snowflake keepsake drop (falls from moon to ground after a snow moon blessing)
   drawSnowflakeKeepsake();
+
+  // Sakura petal keepsake drop (falls from moon to ground after a cherry moon blessing)
+  drawSakuraPetalKeepsake();
 
   // Winter cardinal (drawn in the ground/body layer so it reads behind the pet)
   drawCardinal();

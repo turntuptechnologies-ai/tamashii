@@ -3,105 +3,76 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.103.0 — Cherry Moon Festival (2026-04-20)
+## Last completed: v0.104.0 — Sakura Petal Keepsake Drop (2026-04-20)
 
 ### What was done
-- Added the **Cherry Moon Festival (桜月夜)** — a rare spring-night signature event where an oversized pink-peach full moon rises alongside 4-6 floating origami paper cranes (orizuru). Click each crane to "wish" on it; wishing on every crane triggers the Cherry Moon Blessing (warm D major pentatonic arpeggio + pink sparkle/petal fountain + soft spring-breeze noise). Fills NEXT.md's #1 suggestion from last cycle — spring was the biggest remaining seasonal-night gap now that winter is filled. Three of four seasonal night events are now complete (autumn, winter, spring); only summer-night remains.
-- **Vocabulary inverted point-for-point from snow moon** so they feel distinct rather than reskins: silvery-blue → pink-peach palette; drifting snowflakes → floating cranes; crystalline triangle-wave tinkle → warm sine+triangle koto-like pluck; A-minor triangle pentatonic → D major sine pentatonic; high bandpass wind-whisper → low-filtered spring-breeze pink noise; snow catch *freezes* the crystal → cherry wish *lifts* the crane skyward.
-- **Moon-rabbit silhouette** on the moon's face — a soft-shadow body + head + two tall tilted ears in semi-transparent rose-brown. Cultural callback to East Asian folk tale of the rabbit pounding mochi on the moon. Reads as abstract crater detail from a distance and as a rabbit on closer look.
-- **Spatial bias** — cherry moon sits at w*0.55-0.75 (center-right), snow moon sits at w*0.18-0.36 (left), harvest moon sits far-right. Across a full year of play, all three moons visibly occupy different positions in the sky.
-- **Wish-lifts-the-crane mechanic** — wished cranes physically drift up to 4 px higher as if the wish carries them skyward. New mechanic unique to this event.
-- **Verb: *wish*** — deliberate new interaction-verb category, distinct from snow's *catch*, mooncake's *share*, and keepsake's *treasure*. Cranes in Japanese folklore (senbazuru) are vessels for wishes, so the verb ties into cultural vocabulary.
-- **Achievement #78 "Cherry Moon Blessed"** — wish on every crane under a cherry moon (single-completion, scaled to match Moon Blessed + Snow Moon Blessed).
-- **Diary milestones** — first sighting + first blessing + ongoing "Cherry moon blessing #N~!" entries.
-- **"cherry_moon" dream template + sleep-talks + contextual dream icons** added for post-blessing dreams.
-- **Stats panel** — CHERRY MOON row in WEATHER section between SNOWFLAKE KEEPSAKES and LIGHTNING BOLTS in bright `#FFC6D8`.
-- **Full persistence** (`totalCherryMoonsSeen`, `totalCranesWished`, `totalCherryMoonsBlessed`, `cherryMoonFirstSeen`, `cherryMoonFirstBlessed`).
-- **Spawn gating** — canSpawnCherryMoonFestival blocks if another moon festival is active or wrong season/time/weather/sleep.
-- **Total achievements: 78.**
-- Renderer grew from ~26,668 to ~27,554 lines (+~585 lines).
+- Added the **Sakura Petal Keepsake Drop** — after every Cherry Moon Blessing, the pink moon now drops a single oversized 5-petal cherry blossom keepsake that tumbles down to the ground as a persistent collectible. Click it to *press* the petal (like pressing flowers in a book — a third distinct keepsake verb alongside mooncake's *share* and snowflake's *treasure*). Completes the three-of-four seasonal-keepsake parity pattern (harvest→mooncake, snow→snowflake keepsake, cherry→sakura petal). Fills NEXT.md's #1 suggestion from last cycle — the natural immediate follow-up to the Cherry Moon Festival.
+- **Vocabulary inverted point-for-point from snowflake keepsake** so they feel distinct rather than reskins: crystalline 6-armed snowflake → 5-petal cherry blossom with cream pollen center; side-to-side sway → wider flutter + faster continuous rotation (0.08 vs 0.05); bright triangle-wave glockenspiel drop chime → warm sine-wave descending cascade one octave lower; crystalline triangle tink + high bandpass frost-noise landing → soft sine sigh + low-pass paper-rustle landing; cool C-E-G-C triangle-wave silver press arpeggio → warm F#-A-C#-F# sine-wave press arpeggio; cool silvery-blue halo → warm pink blush halo; pure sparkle ambient emission → petal-biased ambient emission (55% petals, 45% sparkles).
+- **Verb: *press*** — introduces a third distinct keepsake-interaction category. Mooncake is *shared* (food), snowflake is *treasured* (preserve), sakura petal is *pressed* (preserve between pages). Mirrors hanami tradition.
+- **5-petal sakura silhouette** with subtle tip-notches, warm cream-yellow pollen center with 6 darker stamen dots, and bright inner core. Petal body rendered in one of 4 cherry-moon crane palette hues (soft pink 340°, warm peach 15°, paper white 0° sat 0, deeper rose 330°) so the keepsake reads as a color-continuous sibling of the cranes the player just wished on.
+- **Tumble physics** — wider flutter (8 px vs snowflake's 6 px, tapering to zero as it lands) + faster continuous rotation (0.08/frame) makes the petal visibly tumble end-over-end through the air, genuinely reading as a real falling petal rather than a drifting crystal. Slower fall (~3s, longer than snowflake's 2.3s and mooncake's 1.5s) because petals flutter down slowest of all.
+- **Sound design** — warm sine palette vs snowflake's triangle-wave crystalline palette. Drop cascade D6→A5→F#5→D5 is a full octave lower and softer. Landing is a paper sigh with low-pass noise rather than a crystalline tink. Press arpeggio is F#-A-C#-F# sine (F# major, mirroring the cherry moon blessing's D-major palette) vs snowflake's cool C-E-G-C triangle.
+- **Achievement #79 "Sakura Petal Keeper"** — press a sakura petal keepsake from a blessed cherry moon (single-completion, scaled to match Snowflake Keeper tier).
+- **Diary milestones** — first press + ongoing "Pressed sakura petal keepsake #N~!" entries.
+- **"sakura_petal" dream template + sleep-talks + contextual dream icons** added.
+- **Stats panel** — SAKURA PETALS row in WEATHER section between CHERRY MOON and LIGHTNING BOLTS in soft `#FFD6E0`.
+- **Full persistence** (`totalSakuraPetalKeepsakesPressed`, `totalSakuraPetalKeepsakesDropped`, `sakuraPetalKeepsakeFirstPressed`).
+- **Total achievements: 79.**
+- Renderer grew from ~27,554 to ~28,128 lines (+~574 lines).
 
 ### Thoughts for next cycle
-- **Cherry blossom / sakura petal keepsake drop** — the natural follow-up to complete the spring-night 4-stage arc (rise → interact → bless → collectible drop). After the blessing, a single larger pink cherry-blossom petal (or a pink-paper origami heart, or a folded paper crane keepsake) arcs down from the moon and lands as a persistent ground collectible to *treasure* with the pet. Would fully close the harvest → snow → cherry seasonal-parity pattern and reuse the proven keepsake template (mooncake uses "share", snowflake uses "treasure", cherry keepsake could use "treasure" too or introduce a new verb like "fold" / "keep" / "cherish"). Feels like the most natural immediate follow-up — exactly what the last two cycles did for harvest and snow moons.
-- **Summer night signature event** — the *last* remaining seasonal night gap. Options: fireworks show (rising rockets that bloom into colored radial sparkles, click each bloom before it fades to "catch the finale"), sea of fireflies over a tide pool (higher density than the existing firefly feature), shooting-star meteor shower (already exists as a rarer standalone feature — could scale up), a summer fishing-boat with paper lanterns. Completing summer-night would finish the four-season night vocabulary.
-- **Moon-family gallery / journal** — a small UI showing the four seasonal moons side by side (harvest amber, snow silver, cherry pink, future summer) with "blessed: N times" counters under each. Would give returning players a visual sense of seasonal progress. Small persistent reward-viewer UI.
-- **Blue moon rarity** — 1-5% chance any seasonal moon arrives as a true "blue moon" variant with a deeper indigo tint, a unique blue-tinted keepsake, and a "Blue Moon" achievement. Plays on the idiom and gives returning players a rare hook across all four seasons.
-- **Golden harvest-moon keepsake** / **rose-gold cherry-moon keepsake** — rare chance the reward drop is replaced by a special gilded version with its own rare-drop speech. Parallel for each moon side.
-- **Cherry moon + hanami dango** — after blessing, a 3-color dango stick (pink/white/green) appears at the bottom of the canvas as a shareable spring treat. Parallel to mooncake for the harvest moon.
-- **Cherry moon + paper lantern rise** — small floating sky lanterns released after blessing drift up into the sky (would cross-over with the long-listed "lantern release ritual" feature from prior NEXT.md cycles).
-- **Aurora + any moon cross-event** — if aurora is active during a seasonal moon, the sky paints both simultaneously and the blessing audio adds aurora shimmer. Would be the first cross-weather-event bloom in the game.
-- **Shooting star during cherry moon** — rare chance a shooting star streaks past the cherry moon during its active window, worth a tiny wish bonus if clicked (similar idea listed last cycle for snow moon).
-- **Crane pair** — rare chance 2 cranes spawn side-by-side as a paired set (cranes traditionally pair for life).
+- **Summer night signature event** — the *last* remaining seasonal night gap now that autumn/winter/spring all have their signature moons + keepsakes. Highest-impact next step. Options: (a) **fireworks show** — rising rockets that bloom into colored radial sparkles, click each bloom before it fades to "catch the finale" (4-stage arc: rise → bloom → catch → blessing); (b) **sea of fireflies over a tide pool** — denser than existing firefly feature, forming a slow drift that culminates in a firefly-cloud blessing; (c) **shooting-star meteor shower** — scale up the existing meteor feature into a signature event; (d) **paper lanterns on a summer river** — drift downstream, click to light each one, all lit triggers a river blessing. Option (a) or (d) follows the 4-stage template most directly. Completing summer-night would finish the four-season night vocabulary — this is the single most thematically important remaining feature.
+- **Summer keepsake drop** — whatever summer-night event ships should also drop a keepsake following the proven 4-stage arc (rise → interact → bless → drop). Candidates: a small glass firework-fragment charm, a preserved firefly in a paper jar, a single meteor-glass stone, or a folded paper-boat from the lantern river. Would finally complete the full four-season 4-stage keepsake cycle.
+- **Moon-family / keepsake-family gallery UI** — a small pop-up showing the four seasonal moons (harvest amber, snow silver, cherry pink, future summer) side-by-side with blessing counters under each, OR a keepsake gallery with the three keepsake sprites (mooncake, snowflake, sakura petal) and press/share/treasure counters. Would give returning players a visual sense of seasonal progress and reward parity.
+- **Blue moon rarity** — 1-5% chance any seasonal moon arrives as a "blue moon" variant with a deeper indigo tint, a unique blue-tinted keepsake, and a "Blue Moon" achievement. Plays on the idiom and gives returning players a rare hook across all four seasons.
+- **Golden harvest-moon keepsake / rose-gold cherry-moon keepsake / platinum snowflake keepsake** — rare gilded versions of each keepsake with their own rare-drop speech. Adds collection depth without requiring new mechanics.
+- **Cherry moon + hanami dango** — after blessing, a 3-color dango stick (pink/white/green) appears as a shareable spring treat. Parallel to mooncake for the harvest moon but specifically *food* rather than a second *memento*.
+- **Cherry moon + paper lantern rise** — small floating sky lanterns released after blessing drift up into the sky (would cross-over with the long-listed "lantern release ritual" feature).
+- **Aurora + any moon cross-event** — if aurora is active during a seasonal moon, the sky paints both simultaneously and the blessing audio adds aurora shimmer. First cross-weather-event bloom in the game.
+- **Shooting star during cherry moon / snow moon** — rare chance a shooting star streaks past during the festival window, worth a tiny wish bonus if clicked.
+- **Crane pair** — rare chance 2 cranes spawn side-by-side (cranes pair for life).
 - **Golden crane variant** — 1-in-20 crane is gilded gold for a rare spawn.
 - **Cranes fly off after blessing** — wished cranes drift slowly off-screen rather than fading out, reinforcing the "wishes taking flight" metaphor visually.
-- **Pet approaches the cherry moon** — pet walks toward the moon and stretches up during the blessing, mirroring a pattern listed repeatedly but never shipped.
-- **Pet holds a wished crane** — after blessing, the pet visibly holds a tiny paper crane in its paws for a few seconds with a gentle glow before it fades. Would be a "visible receipt" of the reward like the long-listed keepsake-holding pattern.
-- **Pet approaches the snowflake keepsake / mooncake / bunny** — still unshipped (listed repeatedly).
-- **Pet *holds* the snowflake keepsake / mooncake briefly** — visible receipt pattern, still unshipped.
-- **Keepsake shelf** — small drawable shelf in the corner showing the last 1-3 keepsakes the pet has treasured (works for both snowflake and future cherry keepsakes). Persistent visual reward UI.
-- **Snowflake uniqueness detail** — each snowflake renders with procedurally-varied arm counts (4/6/8) or branch patterns so no two flakes are identical. Currently all are 6-armed with uniform branches. Could also apply to cranes — procedurally-varied crane fold patterns.
-- **Snowflake / crane collection journal** — thumbnail gallery of every unique color variant caught/wished-on.
+- **Pet approaches the cherry moon / snow moon / harvest moon** — pet walks toward the moon and stretches up during the blessing. Pattern listed repeatedly but never shipped across multiple cycles.
+- **Pet *holds* the sakura petal / snowflake keepsake / mooncake briefly** — visible receipt pattern where the pet carries the collected keepsake in its paws for a few seconds with a gentle glow before it fades. Visible reward beat, still unshipped.
+- **Keepsake shelf** — small drawable shelf in the corner showing the last 1-3 keepsakes the pet has collected across all three (now four) keepsake types. Persistent visual reward UI.
+- **Snowflake / petal / crane uniqueness detail** — procedurally-varied arm counts (4/6/8 snowflakes), branch patterns, petal counts (4/5/6 petals), or crane fold patterns so no two instances are identical.
+- **Keepsake journal** — thumbnail gallery of every unique color variant collected.
 - **Bunny pair / family** — rare chance 2-3 bunnies hop in together.
 - **Bunny leaves a snow-bunny sculpture** — rare persistent ground object.
-- **Female cardinal variant** — 1-in-5 chance cardinal spawns as buff-brown-plumage female.
-- **Cardinal pair** — rare male + female side-by-side (cardinals pair for life).
+- **Female cardinal variant** — 1-in-5 chance cardinal spawns as buff-brown female.
+- **Cardinal pair** — rare male + female side-by-side.
 - **Cardinal on a branch** — occasional bare winter branch in the sky.
-- **Chickadee / titmouse / junco** — other winter birds with distinct calls.
+- **Chickadee / titmouse / junco / owl / fox / deer** — other creature visitors.
 - **Seed feeder** — crafted/placed birdseed feeder attracting multiple bird species.
-- **Spring swallow visitor** — counterpart to winter cardinal (sky bird, arrives from below in a swoop).
-- **Spring ladybug visitor** — counterpart to summer butterfly (ground/leaf-dwelling).
-- **Fox visitor** — rare red fox at twilight.
-- **Deer visitor** — tall graceful background-layer creature.
-- **Owl visitor** — night-only winter bird.
-- **Cardinal feather keepsake** — rare chance cardinal drops a feather on departure.
-- **Cardinal + bunny cross-encounter** — scripted dual-spawn moment.
-- **Golden-fairy variant** — 1-in-20 gold fairy from fairy ring.
-- **Multiple fairies at once** — rare chance 2 fairies per ring.
-- **Fairy gift / keepsake** — rare heart-shaped petal accessory after greeting.
-- **Mooncake variations** — lotus paste / red bean / salted egg yolk.
-- **Mooncake box / gift wrap** — rare chance mooncake arrives wrapped.
-- **Lantern release ritual** — lit harvest lanterns drift up into the sky (overlap with "cherry moon + paper lantern rise" idea above).
-- **Squirrel steals an acorn** — small chance squirrel sniffs a leftover acorn and snatches it back.
-- **Acorn inventory screen** — hoard-view with basket visual.
-- **Butterfly lands on squirrel's tail** — cross-feature interaction.
-- **Raking animation** — rake scattered leaves back into a pile.
+- **Spring swallow / ladybug visitor** — spring counterpart creatures to winter cardinal/bunny and autumn squirrel/fairy.
+- **Cardinal feather keepsake** — rare chance cardinal drops a feather on departure (would fit the keepsake-drop pattern).
+- **Golden-fairy variant / multiple fairies at once / fairy gift** — fairy ring expansions.
+- **Mooncake variations** — lotus paste / red bean / salted egg yolk. Mooncake box / gift wrap.
+- **Lantern release ritual** — lit harvest lanterns drift up (overlap with "cherry moon + paper lantern rise").
+- **Squirrel steals an acorn / Acorn inventory screen / Butterfly on squirrel's tail / Raking animation**.
 - **S'mores combo** — 3 perfect roasts → s'more treat next cocoa.
 - **Seasonal festivals** — winter solstice / spring equinox / summer solstice.
-- **Wind streaks on the chime** — faint horizontal wind-streak particles during gusts.
-- **Firefly lantern** — craft a lantern from caught fireflies.
-- **Constellation lore** — short mythical story overlay on completed constellation click.
-- **Photo gallery** — in-canvas gallery showing thumbnails of saved photos.
-- **Fortune cookie rarity tiers** — golden fortune cookies with rare fortunes.
-- **Combo hint system** — subtle visual hints when partway through a combo.
-- **Bedtime story continuation** — stories spanning multiple nights with cliffhangers.
-- **Sound volume slider** — ambient sound volume control.
-- **Frog chorus visual** — tiny frog silhouettes during evening chorus.
-- **Nightlight color customization** — different nightlight colors/styles.
-- **Weather forecast widget** — show upcoming weather.
-- **Tide pools** — interactive mini-scene during summer evenings.
-- **Dream diary** — separate section in diary recording dream captions.
-- **Lucid dreaming** — rare event where clicking a dream scene triggers a mini dream interaction.
-- **Winter tea party variant** — tea ceremony during snowy weather.
+- **Wind streaks on the chime / Firefly lantern / Constellation lore / Photo gallery / Fortune cookie tiers / Combo hints / Bedtime story continuation / Sound volume slider / Frog chorus / Nightlight colors / Weather forecast / Tide pools / Dream diary / Lucid dreaming / Winter tea party variant**.
 
 ### Current architecture notes
-- Renderer is now ~27,554 lines.
-- Cherry moon feature lives immediately after `drawSnowflakeKeepsake()` and before `WEATHER_CHANGE_MIN` (starts around line 15655).
-- Key interfaces: `OrigamiCrane` (x, y, bobPhase, bobSpeed, wingPhase, wingSpeed, wished, wishAnim, hue, sparkleTimer, liftY) and `CherryMoonFestival` (moonCx, moonCy, moonRadius, riseProgress, life, fadeIn, fadeOut, cranes, blessed, blessGlow, blessTimer, ambientSparkleTimer).
-- Only one cherry moon festival exists at a time (`cherryMoonFestival: CherryMoonFestival | null = null`). Mutual-exclusion with harvest and snow moon festivals via `canSpawnCherryMoonFestival()`.
-- Key constants: `CHERRY_MOON_FADE_IN/OUT = 180`, `CHERRY_MOON_LIFE = 7200` (~2 min), `CHERRY_MOON_RISE_DURATION = 600` (~10s).
-- Key functions: `spawnCherryMoonFestival()`, `tryClickCrane(x, y)`, `wishOnCrane(index)`, `blessCherryMoon()`, `updateCherryMoonFestival()`, `drawCherryMoonSky()`, `drawCherryMoonCranes()`, `drawOrigamiCrane()`, `playCraneWishSound()`, `playCherryMoonBlessing()`.
-- Crane click hitbox: circular `dx² + dy² < 110` (~10.5 px). Only clickable while `!wished && fest.fadeIn >= 0.4 && !fest.blessed`. Click routed in mousedown handler immediately after `tryClickSnowflake`.
-- Rendering: `drawCherryMoonSky()` in sky layer immediately after `drawSnowMoonSky()`; `drawCherryMoonCranes()` in top-air layer immediately after `drawSnowMoonCrystals()`.
-- Update call: `updateCherryMoonFestival()` in the main frame loop immediately after `updateSnowflakeKeepsake()`.
-- Palette: `CHERRY_HUES[c.hue]` — one of 4 variants (soft cherry pink 340°, warm peach 15°, paper white 0° sat 0, deeper rose 330°) picked per crane.
-- Spring-night gated; allowed weathers: clear/cloudy/rainy. Blocked on stormy, on sleep, on season ≠ spring, on time ≠ night, and if another moon festival is active.
-- Moon-rabbit silhouette on moon face: body + head + two tall tilted ears drawn in semi-transparent rose-brown (`rgba(150, 90, 110, 0.26)`).
-- Save version still 1; added fields: `totalCherryMoonsSeen`, `totalCranesWished`, `totalCherryMoonsBlessed`, `cherryMoonFirstSeen`, `cherryMoonFirstBlessed`.
-- Total achievements: 78 (added "cherry_moon_blessed" — wish on every crane under a cherry moon).
-- dailyActivityLog now tracks 31 activities: ...`snowflake_keepsake`, `cherry_moon`.
-- `DREAM_TEMPLATES` + `SLEEP_TALK_CONTEXTUAL` extended to include "cherry_moon".
-- `getContextualDreamIcons()` now includes "cherry_moon" (flower/moon/heart bias).
-- Stats panel WEATHER section now shows cherry moon stats between SNOWFLAKE KEEPSAKES and LIGHTNING BOLTS in bright `#FFC6D8` CHERRY MOON row.
-- Diary: one milestone per player (first sighting 🌕 + first blessing 🌕). Subsequent blessings add "Cherry moon blessing #N~!" entries.
-- The existing spring "Cherry Blossom Festival" (April-only daytime petal-catching) is a *separate* feature that co-exists with the cherry moon — petals can still fall during April days while the cherry moon is a rare spring-night event. They share the "cherry blossom" theme but operate on totally different layers (daytime petal-catching vs. night moon-festival) and have different interaction verbs (*catch petals* vs. *wish on cranes*).
-- The harvest moon (autumn) + snow moon (winter) + cherry moon (spring) now form 3-of-4 seasonal night events. Summer-night is the only remaining gap. Future spring 4-stage arc should add a cherry/sakura keepsake drop to match the harvest→mooncake and snow→keepsake pattern.
+- Renderer is now ~28,128 lines.
+- Sakura petal keepsake feature lives immediately after `drawCherryMoonCranes()` and before `WEATHER_CHANGE_MIN` (starts around line 16408).
+- Key interface: `SakuraPetalKeepsake` (x, startX, startY, groundX, groundY, y, fallProgress, spin, flutterPhase, life, fadeIn, fadeOut, landed, landBounce, active, glowPulse, petalTimer, hueIndex).
+- Only one sakura petal keepsake exists at a time (`sakuraPetalKeepsake: SakuraPetalKeepsake | null = null`).
+- Key constants: `SAKURA_PETAL_KEEPSAKE_FALL_FRAMES = 180` (~3s), `SAKURA_PETAL_KEEPSAKE_LIFE = 2400` (~40s), fade-in 30f / fade-out 60f.
+- Key functions: `spawnSakuraPetalKeepsake(startX, startY)`, `tryClickSakuraPetalKeepsake(x, y)`, `pressSakuraPetalKeepsake()`, `updateSakuraPetalKeepsake()`, `drawSakuraPetalKeepsake()`, `playSakuraPetalKeepsakeDropSound()`, `playSakuraPetalKeepsakeLandSound()`, `playSakuraPetalKeepsakePressSound()`.
+- Keepsake click hitbox: circular `dx² + dy² < 110` (~10.5 px) while `landed && active`. Click routed in mousedown handler immediately after `tryClickSnowflakeKeepsake`.
+- Rendering: `drawSakuraPetalKeepsake()` in ground layer immediately after `drawSnowflakeKeepsake()`.
+- Update call: `updateSakuraPetalKeepsake()` in the main frame loop immediately after `updateCherryMoonFestival()`.
+- Palette: `CHERRY_HUES[k.hueIndex]` — reuses the 4 cherry-moon crane color variants (soft pink 340°, warm peach 15°, paper white 0° sat 0, deeper rose 330°). Pollen center always warm cream-yellow `hsl(48, 85%, 82%)` regardless of petal hue for a unified sakura feel.
+- Spawned from `blessCherryMoon()` at the moon's position immediately after the diary milestone entry is added.
+- Save version still 1; added fields: `totalSakuraPetalKeepsakesPressed`, `totalSakuraPetalKeepsakesDropped`, `sakuraPetalKeepsakeFirstPressed`.
+- Total achievements: 79 (added "sakura_petal_keeper" — press a sakura petal keepsake from a blessed cherry moon).
+- `dailyActivityLog` now tracks 32 activities: ...`cherry_moon`, `sakura_petal`.
+- `DREAM_TEMPLATES` + `SLEEP_TALK_CONTEXTUAL` extended to include "sakura_petal".
+- `getContextualDreamIcons()` now includes "sakura_petal" (flower/heart/moon bias).
+- Stats panel WEATHER section now shows sakura petal stats between CHERRY MOON and LIGHTNING BOLTS in soft `#FFD6E0` SAKURA PETALS row.
+- Diary: one milestone per player (first press 🌸). Subsequent presses add "Pressed sakura petal keepsake #N~!" entries.
+- Three of four seasonal-night 4-stage arcs are now complete: autumn (harvest moon → lanterns → mooncake), winter (snow moon → snowflakes → snowflake keepsake), spring (cherry moon → cranes → sakura petal keepsake). Summer-night remains the only major seasonal gap. Once summer-night ships a signature event + its keepsake drop, the game will have a full four-season seasonal-moon vocabulary with matched daytime-night parity and a keepsake payoff per season.
+- The snowflake keepsake lands with a *left-bias* (w*0.2 + w*0.4 → 0.2-0.6) to echo the snow moon's left-bias; the sakura petal lands with a *right-bias* (w*0.4 + w*0.4 → 0.4-0.8) to echo the cherry moon's right-bias. Across a multi-season session, the two keepsakes visibly rest on opposite sides of the canvas.
