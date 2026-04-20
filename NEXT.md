@@ -3,7 +3,27 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.105.1 — Hotfix: Main-Process Startup Crash (2026-04-20)
+## Last completed: v0.105.2 — Hotfix: Loop Crashed on TDZ access to shortcutUsageCount (2026-04-20)
+
+### What was done
+- **Root-cause fix for the v0.104.0 "pet never draws" bug.** The v0.105.1 error overlay successfully did its job — the user's screenshot showed `ReferenceError: Cannot access 'shortcutUsageCount' before initialization`. The animation loop was starting at renderer.ts:27630, but `let shortcutUsageCount = 0;` was declared at line 27823 — still in its TDZ when `loop()` first ran. The `shortcut_master` achievement condition `() => shortcutUsageCount >= 10` threw on the first `checkAchievements()` call inside `update()`.
+- Moved `loop()` and `reportAchievements()` kickoff calls from ~line 27630 to the very end of the module (after every top-level `let`/`const` has executed). Left an inline comment at the original site explaining why.
+- Before v0.105.0 this exception was uncaught, `requestAnimationFrame` was never scheduled, and the pet silently didn't draw. The Windows 11 user saw a window outline but nothing inside — perfectly matching their original bug report. v0.105.0's `loop()` try/catch + DOM overlay was exactly the diagnostic that surfaced it.
+
+### Thoughts for next cycle
+- **WAIT for the user to confirm v0.105.2 launches AND draws correctly on Windows 11 before shipping any more features.** If the pet now draws normally, the multi-cycle rendering regression is closed and we can resume the feature backlog (summer night signature event is still the top item).
+- **Systemic fix worth considering**: the renderer file now has ~28k lines of top-level `let`/`const` interleaved with function definitions, and achievement conditions reference variables declared thousands of lines below their array. This TDZ bug is latent — any future achievement that references a yet-to-be-declared variable will re-trigger the same kind of crash. Two possible preventive structural changes: (a) move ALL top-level `let`/`const` state declarations to the top of the file, above the achievements array, so closures never forward-reference an uninitialized binding; (b) convert the achievements array from eager `[]` into a lazy getter or move its construction into a `function buildAchievements()` that's called on first `checkAchievements()` invocation — by then all state is definitely initialized. Option (a) is more invasive but preventive; option (b) is localized but papers over the issue.
+- **Second preventive structural change**: the `let shortcutUsageCount` declaration was essentially a dangling variable buried at line ~27823. Module-level state at that depth in a 28k-line file is a code-smell. Grouping related state + functions into small IIFE-style modules or TypeScript namespaces would both improve locality and eliminate TDZ foot-guns.
+- Once the user confirms the fix: **summer night signature event** remains the highest-value feature — the last seasonal-night gap (options: fireworks show, firefly sea, meteor shower, paper lanterns on a river).
+
+### Architecture notes
+- `loop()` is now kicked off from the LAST line of meaningful module code (right before `export {};`). All top-level declarations above it — including `shortcutUsageCount` at line 27823, `butterfly: Butterfly` at line 27651, and the `shortcutHelpOpen`/`shortcutHelpFade`/`SHORTCUT_HELP_FADE_SPEED` trio at lines 27820-27822 — are now guaranteed to exit their TDZ before the first `update()` → `checkAchievements()` call.
+- Other latent TDZ risks in this file: any future variable declared BELOW the `loop()` call that's referenced inside an achievement `condition` closure, speech-bubble generator, draw function called from `draw()`, or update function called from `update()`. None are obviously broken right now, but the 28k-line scale makes proving it hard. See "systemic fix" above.
+- The v0.105.1 defensive main-process wrappers + `uncaughtException` / `unhandledRejection` safety nets are retained unchanged — they proved their worth catching the signature-mismatch crash, and they're still the right structural defense for future diagnostic additions.
+
+---
+
+## Previously completed: v0.105.1 — Hotfix: Main-Process Startup Crash (2026-04-20)
 
 ### What was done
 - **Emergency hotfix**, not a feature. The user reported that v0.105.0 wouldn't launch at all on Windows 11 — Electron's default "A JavaScript error occurred in the main process" alert dialog appeared immediately on startup. The v0.105.0 diagnostic additions (`render-process-gone`, `console-message`, `before-input-event` listeners) were registered without defensive guards, and one of those callbacks was throwing synchronously during startup.

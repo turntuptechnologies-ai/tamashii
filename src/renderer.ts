@@ -27627,10 +27627,11 @@ function loop(): void {
   requestAnimationFrame(loop);
 }
 
-loop();
-
-// Report initial achievement state
-reportAchievements();
+// loop() and reportAchievements() are kicked off at the very end of this file
+// AFTER all top-level `let`/`const` declarations have executed, because
+// achievement-condition closures reference variables declared much later in the
+// file (e.g. shortcutUsageCount). Starting the loop here would run
+// checkAchievements() before those variables exit their Temporal Dead Zone.
 
 // --- Butterfly Companion ---
 interface Butterfly {
@@ -28153,5 +28154,11 @@ canvas.addEventListener("wheel", (e) => {
 window.addEventListener("beforeunload", () => {
   saveGame();
 });
+
+// Kick off the animation loop AFTER all top-level declarations above have run.
+// Achievement conditions (defined ~line 20940) reference variables declared
+// far below them (shortcutUsageCount, etc.), so loop() must start last.
+loop();
+reportAchievements();
 
 export {};

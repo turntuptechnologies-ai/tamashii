@@ -3,6 +3,15 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.105.2] — 2026-04-20 — Hotfix: Loop Crashed on "shortcutUsageCount before initialization"
+
+### Fixed
+- **Root cause of the v0.104.0 "pet never draws" bug** — the v0.105.1 error overlay successfully surfaced the real exception: `ReferenceError: Cannot access 'shortcutUsageCount' before initialization`. The animation loop was being kicked off at line 27630 of renderer.ts, but `let shortcutUsageCount = 0;` was declared at line 27823 — still in its Temporal Dead Zone when `loop()` first ran. The `shortcut_master` achievement's condition closure `() => shortcutUsageCount >= 10` was therefore throwing on the very first `checkAchievements()` call inside `update()`.
+- **Moved `loop()` and `reportAchievements()` kickoff to the end of the module**, after every top-level `let`/`const` declaration has executed. Added an inline comment at the original location explaining why the loop must start last.
+- **Why this bug appeared only now**: prior cycles kept growing the renderer file past 28k lines and the `shortcutUsageCount` declaration drifted below `loop()` without anyone noticing. Before v0.105.0, the exception was uncaught, `requestAnimationFrame` was never scheduled, and the pet silently didn't draw — on Windows 11 it showed the window outline but nothing inside (matching the user's original bug report). Every prior cycle's feature additions and achievement additions continued to compound this hidden bug because `checkAchievements()` is called from dozens of places.
+
+**Result:** the pet should now actually draw on Windows 11. This closes the v0.104.0 rendering regression that the diagnostic v0.105.x releases were meant to catch.
+
 ## [v0.105.1] — 2026-04-20 — Hotfix: Main-Process Startup Crash
 
 ### Fixed
