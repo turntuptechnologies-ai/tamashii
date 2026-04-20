@@ -438,6 +438,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "bunny", icons: [["heart", "flower", "heart"], ["star", "heart", "flower"]], captions: ["a meadow of bunnies~", "hop hop hop forever~", "soft ears in the snow~"] },
   { activity: "snow_moon", icons: [["moon", "star", "heart"], ["star", "moon", "star"]], captions: ["a sky of silver snowflakes~", "moonlit winter festival~", "dancing under the pale-blue moon~"] },
   { activity: "snowflake_keepsake", icons: [["heart", "star", "moon"], ["star", "heart", "moon"]], captions: ["a crystal shelf of keepsakes~", "silver snowflakes in my paws~", "the moon's gift glowing softly~"] },
+  { activity: "cherry_moon", icons: [["moon", "flower", "heart"], ["flower", "moon", "heart"]], captions: ["a sky of paper cranes~", "moonlit hanami festival~", "wishing under the pink moon~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -587,6 +588,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... tiny crystal... mine forever...",
     "Zzz... keepsake from the moon... hehe...",
     "*snore*... silver snowflake... safe with me...",
+  ],
+  cherry_moon: [
+    "*mumble*... pink moon... so soft...",
+    "Zzz... paper cranes... wishing...",
+    "*snore*... hanami... under the stars...",
   ],
 };
 
@@ -3645,6 +3651,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("bunny")) contextIcons.push("heart", "flower", "star");
   if (dailyActivityLog.includes("snow_moon")) contextIcons.push("moon", "star", "heart");
   if (dailyActivityLog.includes("snowflake_keepsake")) contextIcons.push("heart", "star", "moon");
+  if (dailyActivityLog.includes("cherry_moon")) contextIcons.push("flower", "moon", "heart");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -15652,6 +15659,753 @@ function drawSnowflakeKeepsake(): void {
   ctx.restore();
 }
 
+// --- Cherry Moon Festival (spring-night signature event) ---
+// Spring's counterpart to the autumn harvest moon and winter snow moon. A soft
+// pink-peach oversized moon rises into the spring night, surrounded by 4-6
+// origami paper cranes (orizuru) floating in the upper air with slow wing-beats.
+// Click each crane to "wish" on it — it unfolds a pink glow and drifts slightly
+// higher. Wishing on every crane triggers the Cherry Moon Blessing: a warm
+// D major pentatonic arpeggio, a pink sparkle + petal fountain, and a soft
+// spring-breeze noise tail. Inverts the snow moon's vocabulary point-for-point:
+// silvery-blue → pink-peach palette, drifting snowflakes → floating cranes,
+// cool minor pentatonic + wind-whisper → warm major pentatonic + spring-breeze.
+// Cranes in Japanese tradition are symbols of hope, healing, and wishes
+// (senbazuru — a thousand paper cranes) so the cherry moon becomes a spring
+// "wish moon" rather than a second catch-em-all festival.
+interface OrigamiCrane {
+  x: number;           // upper-air anchor position
+  y: number;
+  bobPhase: number;    // gentle bob in-air
+  bobSpeed: number;
+  wingPhase: number;   // wing-beat oscillation
+  wingSpeed: number;   // per-crane slightly different so flock isn't synced
+  wished: boolean;     // has player clicked to wish?
+  wishAnim: number;    // 0 → 1 bloom animation after wishing
+  hue: number;         // 0..3 into CHERRY_HUES palette
+  sparkleTimer: number; // throttle for wished-crane ambient sparkles
+  liftY: number;       // small upward lift after wishing (drifts higher)
+}
+
+interface CherryMoonFestival {
+  moonCx: number;
+  moonCy: number;
+  moonRadius: number;
+  riseProgress: number;
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  cranes: OrigamiCrane[];
+  blessed: boolean;
+  blessGlow: number;
+  blessTimer: number;
+  ambientSparkleTimer: number;
+}
+
+let cherryMoonFestival: CherryMoonFestival | null = null;
+let totalCherryMoonsSeen = 0;
+let totalCranesWished = 0;
+let totalCherryMoonsBlessed = 0;
+let cherryMoonFirstSeen = false;
+let cherryMoonFirstBlessed = false;
+
+const CHERRY_MOON_FADE_IN = 180;        // 3s fade-in
+const CHERRY_MOON_FADE_OUT = 180;       // 3s fade-out
+const CHERRY_MOON_LIFE = 7200;          // ~2 minutes natural lifespan
+const CHERRY_MOON_RISE_DURATION = 600;  // ~10s moon rise animation
+
+// Per-crane color palette: soft pink / warm peach / paper white / rose pink
+const CHERRY_HUES = [
+  { hue: 340, sat: 70, light: 88 }, // soft cherry pink
+  { hue: 15, sat: 55, light: 86 },  // warm peach
+  { hue: 0, sat: 0, light: 96 },    // paper white
+  { hue: 330, sat: 55, light: 84 }, // deeper rose pink
+];
+
+const CHERRY_MOON_SIGHT_SPEECHES = [
+  "The cherry moon~! 🌸🌕",
+  "A pink spring moon~! 🌸✨",
+  "Look, paper cranes~! 🕊️",
+  "So soft and pink~! 🌕💗",
+  "Hanami magic in the sky~! 🌸🌕",
+  "Moonlit spring night~! 🌕🌸",
+];
+
+const CRANE_WISHED_SPEECHES = [
+  "Made a wish~! 🕊️",
+  "Ooh, a crane~! 🕊️✨",
+  "Wish floating up~! 🌸",
+  "So gentle~! 🕊️💗",
+  "Keep wishing on cranes~! 🕊️",
+];
+
+const CHERRY_MOON_BLESS_SPEECHES = [
+  "The cherry moon blesses me~! 🌕🌸",
+  "Every crane carried a wish~! 🕊️🌸",
+  "Pink spring blessing~! 🌕✨",
+  "The sakura sky smiles~! 🌕🌸💖",
+  "Moonlit hanami festival~! 🌕🌸",
+];
+
+function playCraneWishSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Gentle wooden koto-like pluck: C6 + G6 — warm rounded chime, distinct
+  // from the snow moon's bright E6 + B6 crystalline frost-tinkle.
+  const freqs = [1046.5, 1568]; // C6, G6 (a sweet open fifth)
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = i === 0 ? "sine" : "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.045, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.6);
+  }
+  // Soft high shimmer harmonic — C#7 (a quarter-tone-ish warmth above B7)
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 2217; // C#7
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t);
+  sgain.gain.linearRampToValueAtTime(0.015, t + 0.015);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(t);
+  shimmer.stop(t + 0.4);
+}
+
+function playCherryMoonBlessing(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Warm D major pentatonic arpeggio: D5, E5, F#5, A5, B5, D6, F#6.
+  // Sine waves give a softer/rounder feel than the snow moon's triangles —
+  // spring warmth vs. winter crystalline.
+  const freqs = [587.3, 659.3, 740, 880, 987.8, 1174.7, 1480];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.085;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.08, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.8);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 0.85);
+  }
+  // Warm C#7 shimmer on top (a shade lower than snow moon's B7 for softer feel)
+  const shimmer = audioCtx.createOscillator();
+  shimmer.type = "sine";
+  shimmer.frequency.value = 2217; // C#7
+  const sgain = audioCtx.createGain();
+  const sStart = t + 0.65;
+  sgain.gain.setValueAtTime(0, sStart);
+  sgain.gain.linearRampToValueAtTime(0.03, sStart + 0.08);
+  sgain.gain.exponentialRampToValueAtTime(0.001, sStart + 0.95);
+  shimmer.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  shimmer.start(sStart);
+  shimmer.stop(sStart + 1);
+  // Soft "spring breeze" — low-filtered pink-noise tail rather than the snow
+  // moon's high-filtered wind-whisper. Warmer, closer, more "breath through
+  // petals" than the crystalline winter wind.
+  const bufferSize = audioCtx.sampleRate * 0.7;
+  const noiseBuf = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const noiseData = noiseBuf.getChannelData(0);
+  // Pinkish noise via a simple IIR-ish lowpass accumulator
+  let last = 0;
+  for (let i = 0; i < bufferSize; i++) {
+    const white = Math.random() * 2 - 1;
+    last = last * 0.96 + white * 0.04;
+    noiseData[i] = last;
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 1200;
+  lp.Q.value = 0.7;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.018, t + 0.18);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  noise.connect(lp);
+  lp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.72);
+}
+
+function canSpawnCherryMoonFestival(): boolean {
+  if (cherryMoonFestival) return false;
+  if (harvestMoonFestival || snowMoonFestival) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "spring") return false;
+  if (currentTimeOfDay !== "night") return false;
+  // Spring nights can be rainy but stormy is out; allow clear/cloudy/rainy
+  // (a little rain with cherry moon is atmospheric — think hanami drizzle).
+  if (currentWeather === "stormy") return false;
+  return true;
+}
+
+function spawnCherryMoonFestival(): void {
+  if (cherryMoonFestival) return;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // Moon: oversized soft pink-peach orb, slightly right-biased (w*0.55-0.75)
+  // to spatially distinguish from the snow moon's left-bias and harvest's
+  // right-bias. Cherry sits closer to center-right than harvest's far-right.
+  const moonCx = w * (0.55 + Math.random() * 0.2);
+  const moonCy = h * 0.18 + Math.random() * 8;
+  const moonRadius = 22 + Math.random() * 4;
+
+  // 4-6 floating paper cranes scattered across the upper air
+  const craneCount = 4 + Math.floor(Math.random() * 3);
+  const cranes: OrigamiCrane[] = [];
+  const spacing = w / (craneCount + 1);
+  for (let i = 0; i < craneCount; i++) {
+    const baseX = spacing * (i + 1) + (Math.random() - 0.5) * 12;
+    const baseY = 22 + Math.random() * 42;
+    cranes.push({
+      x: baseX,
+      y: baseY,
+      bobPhase: Math.random() * Math.PI * 2,
+      bobSpeed: 0.016 + Math.random() * 0.012,
+      wingPhase: Math.random() * Math.PI * 2,
+      wingSpeed: 0.028 + Math.random() * 0.02,
+      wished: false,
+      wishAnim: 0,
+      hue: Math.floor(Math.random() * CHERRY_HUES.length),
+      sparkleTimer: 45 + Math.floor(Math.random() * 30),
+      liftY: 0,
+    });
+  }
+
+  cherryMoonFestival = {
+    moonCx,
+    moonCy,
+    moonRadius,
+    riseProgress: 0,
+    life: CHERRY_MOON_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    cranes,
+    blessed: false,
+    blessGlow: 0,
+    blessTimer: 0,
+    ambientSparkleTimer: 0,
+  };
+
+  totalCherryMoonsSeen++;
+
+  if (!cherryMoonFirstSeen) {
+    cherryMoonFirstSeen = true;
+    addDiaryEntry("milestone", "🌕", "A pink cherry moon rose over my world~! Tiny paper cranes floated in the sky, waiting for my wishes! 🌕🌸🕊️");
+  }
+
+  if (Math.random() < 0.9) {
+    const s = CHERRY_MOON_SIGHT_SPEECHES[Math.floor(Math.random() * CHERRY_MOON_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 180);
+  }
+
+  saveGame();
+}
+
+function getCraneX(c: OrigamiCrane): number {
+  return c.x + Math.sin(c.bobPhase) * 3;
+}
+
+function getCraneY(c: OrigamiCrane): number {
+  return c.y + Math.cos(c.bobPhase * 0.7) * 2 - c.liftY;
+}
+
+function tryClickCrane(clickX: number, clickY: number): boolean {
+  if (!cherryMoonFestival) return false;
+  const fest = cherryMoonFestival;
+  if (fest.fadeIn < 0.4) return false;
+  if (fest.blessed) return false;
+  for (let i = 0; i < fest.cranes.length; i++) {
+    const c = fest.cranes[i];
+    if (c.wished) continue;
+    const sx = getCraneX(c);
+    const sy = getCraneY(c);
+    const dx = clickX - sx;
+    const dy = clickY - sy;
+    if (dx * dx + dy * dy < 110) { // ~10.5 px radius hitbox (cranes are slightly larger)
+      wishOnCrane(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function wishOnCrane(index: number): void {
+  if (!cherryMoonFestival) return;
+  const fest = cherryMoonFestival;
+  const c = fest.cranes[index];
+  if (!c || c.wished) return;
+  c.wished = true;
+  c.wishAnim = 0;
+  totalCranesWished++;
+
+  playCraneWishSound();
+
+  const sx = getCraneX(c);
+  const sy = getCraneY(c);
+  // Pink sparkle bloom at the wish point
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 0.6 + Math.random() * 1.4;
+    particles.push({
+      x: sx,
+      y: sy,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.3,
+      life: 34 + Math.floor(Math.random() * 22),
+      maxLife: 56,
+      size: 1.3 + Math.random() * 1.3,
+      type: "sparkle",
+    });
+  }
+  // A tiny drifting petal or two accompanying the wish
+  for (let i = 0; i < 2; i++) {
+    particles.push({
+      x: sx + (Math.random() - 0.5) * 4,
+      y: sy + (Math.random() - 0.5) * 3,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: -0.2 + Math.random() * 0.3,
+      life: 50 + Math.floor(Math.random() * 25),
+      maxLife: 75,
+      size: 3 + Math.random() * 1.2,
+      type: "blossom",
+    });
+  }
+
+  petHappiness = Math.min(100, petHappiness + 1);
+  addFriendshipXP(1);
+
+  if (Math.random() < 0.5) {
+    const s = CRANE_WISHED_SPEECHES[Math.floor(Math.random() * CRANE_WISHED_SPEECHES.length)];
+    queueSpeechBubble(s, 120);
+  }
+
+  const allWished = fest.cranes.every(x => x.wished);
+  if (allWished) {
+    blessCherryMoon();
+  }
+
+  logDailyActivity("cherry_moon");
+  checkAchievements();
+  saveGame();
+}
+
+function blessCherryMoon(): void {
+  if (!cherryMoonFestival || cherryMoonFestival.blessed) return;
+  const fest = cherryMoonFestival;
+  fest.blessed = true;
+  fest.blessGlow = 1;
+  fest.blessTimer = 0;
+  totalCherryMoonsBlessed++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  addFriendshipXP(5);
+
+  playCherryMoonBlessing();
+
+  // Pink sparkle fountain radiating from the moon
+  for (let i = 0; i < 32; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.0 + Math.random() * 2.4;
+    particles.push({
+      x: fest.moonCx + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      y: fest.moonCy + (Math.random() - 0.5) * fest.moonRadius * 1.4,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 70 + Math.floor(Math.random() * 45),
+      maxLife: 115,
+      size: 2 + Math.random() * 2.3,
+      type: "sparkle",
+    });
+  }
+  // Falling pink petals for spring flavor (instead of drifting snowflakes)
+  for (let i = 0; i < 14; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.4 + Math.random() * 1.2;
+    particles.push({
+      x: fest.moonCx + (Math.random() - 0.5) * fest.moonRadius * 1.5,
+      y: fest.moonCy + (Math.random() - 0.5) * fest.moonRadius * 1.5,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed + 0.25,
+      life: 90 + Math.floor(Math.random() * 50),
+      maxLife: 140,
+      size: 3.2 + Math.random() * 1.6,
+      type: "blossom",
+    });
+  }
+
+  const s = CHERRY_MOON_BLESS_SPEECHES[Math.floor(Math.random() * CHERRY_MOON_BLESS_SPEECHES.length)];
+  queueSpeechBubble(s, 240);
+
+  if (!cherryMoonFirstBlessed) {
+    cherryMoonFirstBlessed = true;
+    addDiaryEntry("milestone", "🌕", "I wished on every crane under the cherry moon~! The sky answered with a pink spring blessing! 🌕🌸🕊️");
+  } else {
+    addDiaryEntry("milestone", "🌕", `Cherry moon blessing #${totalCherryMoonsBlessed}~! Every wish took flight! 🌕🌸`);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateCherryMoonFestival(): void {
+  // Very rare spawn during spring night
+  if (!cherryMoonFestival && canSpawnCherryMoonFestival() && Math.random() < 0.00012) {
+    spawnCherryMoonFestival();
+  }
+
+  if (!cherryMoonFestival) return;
+  const fest = cherryMoonFestival;
+
+  // Fade-in ramp
+  if (fest.fadeIn < 1) fest.fadeIn = Math.min(1, fest.fadeIn + 1 / CHERRY_MOON_FADE_IN);
+
+  // Moon rise
+  if (fest.riseProgress < 1) {
+    fest.riseProgress = Math.min(1, fest.riseProgress + 1 / CHERRY_MOON_RISE_DURATION);
+  }
+
+  // Bob + wing-beat + post-wish lift + ambient sparkles for wished cranes
+  for (const c of fest.cranes) {
+    c.bobPhase += c.bobSpeed;
+    c.wingPhase += c.wingSpeed;
+    if (c.wished) {
+      if (c.wishAnim < 1) c.wishAnim = Math.min(1, c.wishAnim + 0.04);
+      // Gentle upward drift after wishing — the wish floats higher
+      if (c.liftY < 4) c.liftY = Math.min(4, c.liftY + 0.02);
+      c.sparkleTimer--;
+      if (c.sparkleTimer <= 0) {
+        const sx = getCraneX(c);
+        const sy = getCraneY(c);
+        particles.push({
+          x: sx + (Math.random() - 0.5) * 4,
+          y: sy + (Math.random() - 0.5) * 3,
+          vx: (Math.random() - 0.5) * 0.18,
+          vy: -0.1 + Math.random() * 0.18,
+          life: 30 + Math.floor(Math.random() * 20),
+          maxLife: 50,
+          size: 0.9 + Math.random() * 0.6,
+          type: "sparkle",
+        });
+        c.sparkleTimer = 55 + Math.floor(Math.random() * 35);
+      }
+    }
+  }
+
+  // Post-bless glow decay + celebratory continuous petal/sparkle emission
+  if (fest.blessed) {
+    fest.blessTimer++;
+    if (fest.blessGlow > 0) fest.blessGlow = Math.max(0, fest.blessGlow - 0.008);
+    fest.ambientSparkleTimer--;
+    if (fest.blessTimer < 120 && fest.ambientSparkleTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = fest.moonRadius + Math.random() * 20;
+      particles.push({
+        x: fest.moonCx + Math.cos(angle) * r,
+        y: fest.moonCy + Math.sin(angle) * r,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.25 + Math.random() * 0.3,
+        life: 45 + Math.floor(Math.random() * 30),
+        maxLife: 75,
+        size: 1.5 + Math.random() * 1.5,
+        type: Math.random() < 0.4 ? "blossom" : "sparkle",
+      });
+      fest.ambientSparkleTimer = 3;
+    }
+  }
+
+  // Natural lifespan
+  fest.life--;
+
+  // Early end: weather/season/time turns unfavorable, pet sleeps (unless blessing playing out)
+  const inappropriate =
+    currentTimeOfDay !== "night" ||
+    currentSeason !== "spring" ||
+    currentWeather === "stormy";
+  if ((inappropriate || isSleeping) && !fest.blessed) {
+    fest.life = Math.min(fest.life, CHERRY_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= CHERRY_MOON_FADE_OUT) {
+    fest.fadeOut = Math.max(0, fest.life / CHERRY_MOON_FADE_OUT);
+  }
+
+  if (fest.life <= 0) {
+    cherryMoonFestival = null;
+  }
+}
+
+function drawCherryMoonSky(): void {
+  if (!cherryMoonFestival) return;
+  const fest = cherryMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  // Ease-out rise: moon starts 50px below resting position
+  const easedRise = 1 - Math.pow(1 - fest.riseProgress, 3);
+  const riseOffset = (1 - easedRise) * 50;
+  const mx = fest.moonCx;
+  const my = fest.moonCy + riseOffset;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Outer breathing halo — warm pink blush (slower pulse than snow moon — 0.015
+  // vs 0.018 — for a calmer spring feel; faster than harvest's 0.02 inversely).
+  const haloR = fest.moonRadius * (2.3 + Math.sin(frame * 0.015) * 0.15);
+  const halo = ctx.createRadialGradient(mx, my, fest.moonRadius * 0.9, mx, my, haloR);
+  halo.addColorStop(0, "rgba(255, 200, 220, 0.45)");
+  halo.addColorStop(0.5, "rgba(250, 170, 200, 0.18)");
+  halo.addColorStop(1, "rgba(230, 150, 180, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(mx, my, haloR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Post-bless bright pink outer glow
+  if (fest.blessed && fest.blessGlow > 0) {
+    const bhalo = ctx.createRadialGradient(mx, my, fest.moonRadius, mx, my, fest.moonRadius * 3.5);
+    bhalo.addColorStop(0, `rgba(255, 220, 235, ${0.4 * fest.blessGlow})`);
+    bhalo.addColorStop(1, "rgba(250, 180, 210, 0)");
+    ctx.fillStyle = bhalo;
+    ctx.beginPath();
+    ctx.arc(mx, my, fest.moonRadius * 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Moon disk — radial gradient cream-pink center → pale rose → deep rose rim
+  const moonGrad = ctx.createRadialGradient(
+    mx - fest.moonRadius * 0.25, my - fest.moonRadius * 0.25, 0,
+    mx, my, fest.moonRadius
+  );
+  moonGrad.addColorStop(0, "#FFF0F4");
+  moonGrad.addColorStop(0.5, "#FDCBD8");
+  moonGrad.addColorStop(0.85, "#E89AAC");
+  moonGrad.addColorStop(1, "#B6687E");
+  ctx.fillStyle = moonGrad;
+  ctx.beginPath();
+  ctx.arc(mx, my, fest.moonRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle moon-rabbit silhouette on the moon's face — a small visual callback
+  // to the East Asian folk tale of the rabbit in the moon. Two rounded shapes
+  // suggest a crouched rabbit with ears tucked; reads as soft crater detail
+  // from a distance and as a rabbit on closer look.
+  ctx.fillStyle = "rgba(150, 90, 110, 0.26)";
+  // Rabbit body (rounded lump on lower-left quadrant)
+  ctx.beginPath();
+  ctx.ellipse(
+    mx - fest.moonRadius * 0.15, my + fest.moonRadius * 0.15,
+    fest.moonRadius * 0.22, fest.moonRadius * 0.16,
+    0, 0, Math.PI * 2
+  );
+  ctx.fill();
+  // Rabbit head (smaller rounded shape to upper-left of body)
+  ctx.beginPath();
+  ctx.ellipse(
+    mx - fest.moonRadius * 0.32, my + fest.moonRadius * 0.02,
+    fest.moonRadius * 0.12, fest.moonRadius * 0.11,
+    0, 0, Math.PI * 2
+  );
+  ctx.fill();
+  // Two tall rabbit ears (thin tilted ovals above the head)
+  ctx.beginPath();
+  ctx.ellipse(
+    mx - fest.moonRadius * 0.36, my - fest.moonRadius * 0.2,
+    fest.moonRadius * 0.045, fest.moonRadius * 0.16,
+    -0.15, 0, Math.PI * 2
+  );
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(
+    mx - fest.moonRadius * 0.26, my - fest.moonRadius * 0.22,
+    fest.moonRadius * 0.045, fest.moonRadius * 0.14,
+    0.15, 0, Math.PI * 2
+  );
+  ctx.fill();
+
+  // Small additional crater on right side
+  ctx.fillStyle = "rgba(150, 90, 110, 0.2)";
+  ctx.beginPath();
+  ctx.arc(mx + fest.moonRadius * 0.35, my - fest.moonRadius * 0.25, fest.moonRadius * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Upper-left highlight (specular) — soft cream-pink
+  ctx.fillStyle = "rgba(255, 248, 250, 0.42)";
+  ctx.beginPath();
+  ctx.arc(mx - fest.moonRadius * 0.3, my - fest.moonRadius * 0.35, fest.moonRadius * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawOrigamiCrane(c: OrigamiCrane, baseAlpha: number): void {
+  const palette = CHERRY_HUES[c.hue % CHERRY_HUES.length];
+  const sx = getCraneX(c);
+  const sy = getCraneY(c);
+  const ease = c.wished ? c.wishAnim : 0;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  // Outer glow halo — only when wished (the crane "lights up" after the wish)
+  if (c.wished && ease > 0.05) {
+    const haloR = 8 + ease * 4;
+    const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, haloR);
+    halo.addColorStop(0, `hsla(${palette.hue}, ${Math.min(90, palette.sat + 20)}%, ${Math.min(98, palette.light + 8)}%, ${0.55 * ease})`);
+    halo.addColorStop(0.5, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, ${0.22 * ease})`);
+    halo.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sx, sy, haloR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.translate(sx, sy);
+
+  // Paper colors — wished cranes glow warm pink, un-wished are muted paper-cream
+  const mainColor = c.wished
+    ? `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0.96)`
+    : "rgba(240, 230, 230, 0.78)";
+  const edgeColor = c.wished
+    ? `hsla(${palette.hue}, ${palette.sat + 15}%, ${Math.max(45, palette.light - 25)}%, 0.88)`
+    : "rgba(190, 175, 180, 0.7)";
+  const foldColor = c.wished
+    ? `hsla(${palette.hue}, ${palette.sat + 10}%, ${Math.max(55, palette.light - 15)}%, 0.75)`
+    : "rgba(200, 188, 192, 0.55)";
+
+  // Wing-beat oscillation: wings open and close slowly, a calm breathing flap
+  // rather than a fast flight flap. Wished cranes flap slightly wider.
+  const wingOpen = 0.55 + Math.sin(c.wingPhase) * 0.18 + (c.wished ? 0.05 : 0);
+
+  const size = 5 + ease * 0.8; // slight size bloom when wished
+
+  // Body (central paper diamond/kite shape, facing right)
+  ctx.fillStyle = mainColor;
+  ctx.beginPath();
+  ctx.moveTo(size * 0.5, 0);      // front
+  ctx.lineTo(0, -size * 0.25);    // upper hinge
+  ctx.lineTo(-size * 0.55, 0);    // back
+  ctx.lineTo(0, size * 0.25);     // lower hinge
+  ctx.closePath();
+  ctx.fill();
+
+  // Left wing (upper) — triangular folded-paper wing, tilted by wingOpen
+  ctx.save();
+  ctx.rotate(-wingOpen);
+  ctx.fillStyle = mainColor;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(size * 0.3, -size * 1.1);
+  ctx.lineTo(-size * 0.3, -size * 0.35);
+  ctx.closePath();
+  ctx.fill();
+  // Fold line across wing
+  ctx.strokeStyle = foldColor;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -size * 0.05);
+  ctx.lineTo(size * 0.2, -size * 0.85);
+  ctx.stroke();
+  ctx.restore();
+
+  // Right wing (lower mirror) — gives the orizuru its characteristic silhouette
+  ctx.save();
+  ctx.rotate(wingOpen * 0.75);
+  ctx.fillStyle = edgeColor;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(size * 0.25, size * 1.0);
+  ctx.lineTo(-size * 0.3, size * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  // Fold line
+  ctx.strokeStyle = foldColor;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, size * 0.05);
+  ctx.lineTo(size * 0.15, size * 0.8);
+  ctx.stroke();
+  ctx.restore();
+
+  // Head and long forward beak (pointing forward-right) — the crane's signature
+  ctx.strokeStyle = edgeColor;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(size * 0.5, 0);
+  ctx.lineTo(size * 1.15, -size * 0.35);
+  ctx.stroke();
+  // Tiny head dot at the end of the neck
+  ctx.fillStyle = edgeColor;
+  ctx.beginPath();
+  ctx.arc(size * 1.15, -size * 0.35, 0.55, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Long back tail (pointing backward, a little lower than head)
+  ctx.strokeStyle = edgeColor;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.55, 0);
+  ctx.lineTo(-size * 1.15, size * 0.15);
+  ctx.stroke();
+
+  // Inner warm core shimmer when wished
+  if (c.wished && ease > 0.15) {
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 2.5);
+    core.addColorStop(0, `hsla(${palette.hue}, 100%, 96%, ${0.7 * ease})`);
+    core.addColorStop(1, `hsla(${palette.hue}, 100%, 85%, 0)`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawCherryMoonCranes(): void {
+  if (!cherryMoonFestival) return;
+  const fest = cherryMoonFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  for (const c of fest.cranes) {
+    drawOrigamiCrane(c, baseAlpha);
+  }
+
+  // Hint text above the first un-wished crane until player has blessed their first cherry moon
+  const firstUnwished = fest.cranes.find(x => !x.wished);
+  if (!cherryMoonFirstBlessed && firstUnwished && !fest.blessed && fest.fadeIn >= 1 && Math.floor(frame / 60) % 5 < 2) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.55;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.fillText("wish 🕊️", getCraneX(firstUnwished), getCraneY(firstUnwished) - 8);
+    ctx.restore();
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -18110,6 +18864,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for cherry moon crane wishing (paper cranes in the upper air)
+  if (cherryMoonFestival) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickCrane(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for mooncake pickup (dropped on ground after a blessing)
   if (mooncake) {
     const rect = canvas.getBoundingClientRect();
@@ -19938,6 +20701,11 @@ const achievements: Achievement[] = [
     icon: "❄️", unlockMessage: "A crystalline keepsake kept forever~! The snow moon smiles! ❄️🌕✨",
     condition: () => totalSnowflakeKeepsakesTreasured >= 1, unlocked: false,
   },
+  {
+    id: "cherry_moon_blessed", name: "Cherry Moon Blessed", description: "Wish on every crane under a cherry moon",
+    icon: "🌕", unlockMessage: "The cherry moon blesses you~! A pink spring festival in your heart! 🌕🌸🕊️",
+    condition: () => totalCherryMoonsBlessed >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -20927,6 +21695,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFC6D8";
+  ctx.fillText("CHERRY MOON", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🌕 ${totalCherryMoonsBlessed} blessed (${totalCranesWished} cranes)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -21437,6 +22215,11 @@ interface SaveData {
   totalSnowflakeKeepsakesTreasured: number;
   totalSnowflakeKeepsakesDropped: number;
   snowflakeKeepsakeFirstTreasured: boolean;
+  totalCherryMoonsSeen: number;
+  totalCranesWished: number;
+  totalCherryMoonsBlessed: number;
+  cherryMoonFirstSeen: boolean;
+  cherryMoonFirstBlessed: boolean;
   version: number;
 }
 
@@ -21580,6 +22363,11 @@ function buildSaveData(): SaveData {
     totalSnowflakeKeepsakesTreasured,
     totalSnowflakeKeepsakesDropped,
     snowflakeKeepsakeFirstTreasured,
+    totalCherryMoonsSeen,
+    totalCranesWished,
+    totalCherryMoonsBlessed,
+    cherryMoonFirstSeen,
+    cherryMoonFirstBlessed,
     version: 1,
   };
 }
@@ -22077,6 +22865,21 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).snowflakeKeepsakeFirstTreasured === "boolean") {
     snowflakeKeepsakeFirstTreasured = (data as SaveData).snowflakeKeepsakeFirstTreasured;
+  }
+  if (typeof (data as SaveData).totalCherryMoonsSeen === "number") {
+    totalCherryMoonsSeen = (data as SaveData).totalCherryMoonsSeen;
+  }
+  if (typeof (data as SaveData).totalCranesWished === "number") {
+    totalCranesWished = (data as SaveData).totalCranesWished;
+  }
+  if (typeof (data as SaveData).totalCherryMoonsBlessed === "number") {
+    totalCherryMoonsBlessed = (data as SaveData).totalCherryMoonsBlessed;
+  }
+  if (typeof (data as SaveData).cherryMoonFirstSeen === "boolean") {
+    cherryMoonFirstSeen = (data as SaveData).cherryMoonFirstSeen;
+  }
+  if (typeof (data as SaveData).cherryMoonFirstBlessed === "boolean") {
+    cherryMoonFirstBlessed = (data as SaveData).cherryMoonFirstBlessed;
   }
 
   // Restore diary
@@ -24615,6 +25418,9 @@ function update(): void {
   // Snowflake keepsake drop (spawned by a blessed snow moon)
   updateSnowflakeKeepsake();
 
+  // Cherry moon festival (spring-night signature event)
+  updateCherryMoonFestival();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -25749,6 +26555,9 @@ function draw(): void {
   // Snow moon (sky layer, behind pet) — winter-night special event
   drawSnowMoonSky();
 
+  // Cherry moon (sky layer, behind pet) — spring-night signature event
+  drawCherryMoonSky();
+
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
 
@@ -26088,6 +26897,9 @@ function draw(): void {
 
   // Snow moon paper snowflakes (drifting in upper air, above pet)
   drawSnowMoonCrystals();
+
+  // Cherry moon paper cranes (floating in upper air, above pet)
+  drawCherryMoonCranes();
 
   // Nightlight (beside sleeping pet, below dream bubbles)
   drawNightlight();
