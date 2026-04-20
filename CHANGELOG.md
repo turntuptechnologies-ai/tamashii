@@ -3,6 +3,16 @@
 All notable changes to Tamashii are documented here.
 Each entry is a feature added autonomously by Claude Code.
 
+## [v0.105.0] — 2026-04-20 — Diagnostic: Visible Error Overlay + DevTools Shortcut
+
+### Added
+- **Visible error overlay** — uncaught renderer errors and unhandled promise rejections are now surfaced as a red-tinted DOM overlay pinned to the top of the window, showing the error message, source file, line/column, and stack trace. Designed so users hitting a "pet never draws" failure can screenshot the error and report it, without needing to open DevTools at all.
+- **Draw-loop try/catch** — `loop()` now wraps `update()` + `draw()` in a try/catch. The first exception is reported to the error overlay; subsequent frames continue scheduling so a partial render or a transient failure doesn't permanently freeze the animation.
+- **F12 / Ctrl+Shift+I DevTools shortcut** — the main process now listens for F12 and Ctrl+Shift+I key events via `before-input-event` and toggles DevTools on the pet window. Gives users a fast path to the Chrome DevTools console without needing a dev build.
+- **Main-process logging for renderer errors** — the main process now listens for `render-process-gone` and `console-message` on `mainWindow.webContents`. Renderer warnings/errors (console.warn/console.error) are now mirrored to the main-process stdout, so crash data is visible in terminal launches as well.
+
+**Why this release:** A user reported that after downloading v0.104.0 on Windows 11, the window's outline appears and click interactions work (right-click menu, sounds), but the pet itself never draws. JS is clearly running but something is silently throwing between startup and the first frame — and without DevTools or a visible error surface, there's no way to diagnose from a user report. This release ships a minimal diagnostic harness so the next bug report can include a screenshot of the actual error instead of guesswork. Not a feature cycle — a debug-instrumentation release, because the underlying rendering failure needs the real exception text before a proper fix can be written.
+
 ## [v0.104.0] — 2026-04-20 — Sakura Petal Keepsake Drop
 
 ### Added

@@ -34,6 +34,26 @@ declare global {
   }
 }
 
+// Surface any uncaught renderer error as a visible DOM overlay so users can
+// report what went wrong even if the canvas never draws. Press F12 for full
+// stack traces in DevTools.
+function showFatalError(msg: string): void {
+  let div = document.getElementById("tamashii-error") as HTMLDivElement | null;
+  if (!div) {
+    div = document.createElement("div");
+    div.id = "tamashii-error";
+    div.style.cssText = "position:fixed;inset:0;background:rgba(20,0,0,0.92);color:#ffd0d0;font:10px/1.3 monospace;padding:8px;white-space:pre-wrap;overflow:auto;z-index:9999;user-select:text;";
+    document.body.appendChild(div);
+  }
+  div.textContent = "Tamashii error — press F12 for details:\n\n" + msg + "\n\n" + (div.textContent || "");
+}
+window.addEventListener("error", (e) => {
+  showFatalError(`${e.message}\n  at ${e.filename}:${e.lineno}:${e.colno}\n${e.error?.stack || ""}`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  showFatalError(`Unhandled promise rejection: ${e.reason?.message || e.reason}\n${e.reason?.stack || ""}`);
+});
+
 const canvas = document.getElementById("pet") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
@@ -27592,9 +27612,18 @@ function draw(): void {
   drawShortcutHelp();
 }
 
+let loopErrorReported = false;
 function loop(): void {
-  update();
-  draw();
+  try {
+    update();
+    draw();
+  } catch (err) {
+    if (!loopErrorReported) {
+      loopErrorReported = true;
+      const e = err as Error;
+      showFatalError(`Loop crashed: ${e.message}\n${e.stack || ""}`);
+    }
+  }
   requestAnimationFrame(loop);
 }
 

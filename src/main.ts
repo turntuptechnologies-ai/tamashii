@@ -38,6 +38,25 @@ function createWindow(): void {
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 
+  // Surface renderer-side errors to the main process log so they're visible
+  // even when DevTools is closed (helps diagnose "blank window" reports).
+  mainWindow.webContents.on("render-process-gone", (_e, details) => {
+    console.error("Renderer process gone:", details);
+  });
+  mainWindow.webContents.on("console-message", (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error(`[renderer ${sourceId}:${line}] ${message}`);
+  });
+
+  // F12 / Ctrl+Shift+I toggles DevTools so users can diagnose rendering issues.
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    if (input.type !== "keyDown") return;
+    const isF12 = input.key === "F12";
+    const isInspector = input.control && input.shift && input.key.toLowerCase() === "i";
+    if (isF12 || isInspector) {
+      mainWindow?.webContents.toggleDevTools();
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });

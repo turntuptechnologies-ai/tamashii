@@ -3,7 +3,33 @@
 This file is written at the end of each autonomous development cycle.
 Read this FIRST at the start of each cycle to understand context from the previous session.
 
-## Last completed: v0.104.0 — Sakura Petal Keepsake Drop (2026-04-20)
+## Last completed: v0.105.0 — Diagnostic: Visible Error Overlay + DevTools Shortcut (2026-04-20)
+
+### What was done
+- **Off-cycle diagnostic release**, not a new feature. A user reported that v0.104.0 runs on Windows 11 (window outline visible, right-click menu works, click sounds play) but the pet itself never draws — meaning JS is running but something throws silently between startup and the first frame. Without DevTools or a visible error surface, there's no way to get the actual exception text from a user bug report.
+- Added a DOM-level error overlay (`window.addEventListener("error" / "unhandledrejection")`) that pins a red-tinted error panel to the top of the window on any uncaught error, showing message + source file + line/column + stack. Designed to be readable via screenshot with zero user config.
+- Wrapped `loop()` in try/catch so the first exception is captured, reported once, and RAF continues (transient failures or bugs in one subsystem won't permanently freeze the animation).
+- Added F12 / Ctrl+Shift+I to toggle DevTools via `webContents.on("before-input-event")` — fast path to the Chrome DevTools console without a dev build.
+- Mirrored renderer `console-message` (level ≥ 2) and `render-process-gone` events to main-process stdout so terminal-launched instances show crash data.
+- No new gameplay features, no asset changes, no version-numbered save-data migration. Pure diagnostic.
+
+### Thoughts for next cycle
+- **WAIT for the user's screenshot / error text from v0.105.0 before shipping any more features**. The "pet never draws" bug is the highest-priority issue right now — shipping more cycles on top of a broken baseline compounds the problem. Once the error text is in hand, the real fix should be the next cycle (bug-fix release, likely v0.105.1 or v0.106.0). All the original feature ideas below remain queued but should not run until v0.104.0's rendering issue is resolved.
+- **Most likely causes to check first when the error comes back**: (a) a `currentTimeOfDay` / `currentSeason` switch without a default branch leaving some `r/g/b/alpha` unassigned (NaN flows into `createRadialGradient.addColorStop()` which throws); (b) a null-deref on a recently-added keepsake/festival singleton during first-frame render before `applySaveData` resolves; (c) GPU compositing / transparent-window interaction where `transparent: true` + hardware accel fails on some Windows 11 setups (less likely since clicks/sound work — that would usually black-screen the whole window rather than selectively break canvas rendering).
+- **If the root cause is a fragile gradient or sprite draw, harden with defensive `Number.isFinite()` guards at the gradient-color-stop boundary** rather than one-off patches. A single `safeColor(r,g,b,a)` helper that clamps NaN → 0 would prevent a whole class of future silent failures.
+- **Consider always-on main-process error logging to a rolling file in `app.getPath("userData")`** so even without the diagnostic overlay we can ask users to send a log file. Would be a one-line addition.
+- Once the v0.104.0 bug is fixed: **summer night signature event** remains the highest-value feature — the last seasonal-night gap (options: fireworks show, firefly sea, meteor shower, paper lanterns on a river — all listed in full below). Completing summer-night would finish the four-season night vocabulary.
+
+### Architecture notes for the bug hunt
+- Renderer bootstrap order (important for the bug): error handlers registered FIRST (line ~37), then `canvas` / `ctx`, then `audioCtx = new AudioContext()` (line ~59, potential first-frame failure point in unusual GPU contexts but unlikely), then ~27k lines of function definitions and top-level state, then event listener registrations (`canvas.addEventListener("mousedown")` at ~19192), then `window.tamashii.loadSaveData().then(...)` kicked off, then `loop()` called. If an exception ever fires between line 37 and the `loop()` call, the error overlay will now catch and display it.
+- The diagnostic overlay appends to `document.body`, which exists by the time the script runs (script is placed at the end of `<body>` without `defer`/`async` on the module — modules defer by default, so DOM is parsed). Safe to call synchronously.
+- The F12 / Ctrl+Shift+I handler uses `webContents.on("before-input-event")` which fires on every key press regardless of focus, so this works even when the renderer is frozen.
+- `mainWindow.webContents.toggleDevTools()` without a `mode` argument opens DevTools docked to the right of the pet window by default, which may overlap the tiny 200×200 window — may want to pass `{ mode: "detach" }` if this feels cramped in practice.
+- **Do NOT assume the v0.104.0 bug is specific to the sakura petal code.** The draw loop has ~28k lines of code and the bug could be anywhere. The diagnostic is what will tell us, not more investigation without real data.
+
+---
+
+## Previously completed: v0.104.0 — Sakura Petal Keepsake Drop (2026-04-20)
 
 ### What was done
 - Added the **Sakura Petal Keepsake Drop** — after every Cherry Moon Blessing, the pink moon now drops a single oversized 5-petal cherry blossom keepsake that tumbles down to the ground as a persistent collectible. Click it to *press* the petal (like pressing flowers in a book — a third distinct keepsake verb alongside mooncake's *share* and snowflake's *treasure*). Completes the three-of-four seasonal-keepsake parity pattern (harvest→mooncake, snow→snowflake keepsake, cherry→sakura petal). Fills NEXT.md's #1 suggestion from last cycle — the natural immediate follow-up to the Cherry Moon Festival.
