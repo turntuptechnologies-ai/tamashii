@@ -460,6 +460,7 @@ const DREAM_TEMPLATES: DreamTemplate[] = [
   { activity: "snowflake_keepsake", icons: [["heart", "star", "moon"], ["star", "heart", "moon"]], captions: ["a crystal shelf of keepsakes~", "silver snowflakes in my paws~", "the moon's gift glowing softly~"] },
   { activity: "cherry_moon", icons: [["moon", "flower", "heart"], ["flower", "moon", "heart"]], captions: ["a sky of paper cranes~", "moonlit hanami festival~", "wishing under the pink moon~"] },
   { activity: "sakura_petal", icons: [["flower", "heart", "moon"], ["heart", "flower", "moon"]], captions: ["a book of pressed petals~", "sakura blossoms in my paws~", "the moon's soft pink gift~"] },
+  { activity: "summer_fireworks", icons: [["star", "heart", "star"], ["heart", "star", "star"]], captions: ["a sky of blooming fireworks~", "colored stars exploding~", "hanabi festival forever~"] },
 ];
 
 const DREAM_GENERIC_SCENES: { icons: string[][]; captions: string[] } = {
@@ -619,6 +620,11 @@ const SLEEP_TALK_CONTEXTUAL: Record<string, string[]> = {
     "*mumble*... tiny petal... pressed forever...",
     "Zzz... keepsake from the moon... hehe...",
     "*snore*... pink blossom... safe with me...",
+  ],
+  summer_fireworks: [
+    "*mumble*... pretty colors... in the sky...",
+    "Zzz... tamaya... hehe... more...",
+    "*snore*... bright bloom... bigger bigger...",
   ],
 };
 
@@ -3679,6 +3685,7 @@ function getContextualDreamIcons(): string[] {
   if (dailyActivityLog.includes("snowflake_keepsake")) contextIcons.push("heart", "star", "moon");
   if (dailyActivityLog.includes("cherry_moon")) contextIcons.push("flower", "moon", "heart");
   if (dailyActivityLog.includes("sakura_petal")) contextIcons.push("flower", "heart", "moon");
+  if (dailyActivityLog.includes("summer_fireworks")) contextIcons.push("star", "heart", "star");
   if (dailyActivityLog.includes("story")) contextIcons.push(...activeStoryDreamTheme);
   // Always include some baseline dream icons
   const baseline = ["star", "heart", "moon", "butterfly", "flower"];
@@ -16955,6 +16962,809 @@ function drawSakuraPetalKeepsake(): void {
   ctx.restore();
 }
 
+// =====================================================
+// SUMMER FIREWORKS FESTIVAL — the summer-night signature event (hanabi 花火)
+// =====================================================
+// Japanese "fire flower" festival: rockets rise from below and bloom into
+// colored radial starbursts in the upper air. Players cheer for each bloom
+// before it fades (the cry is "tamaya!" 玉屋 — the traditional cheer for a
+// beautiful hanabi). Cheering every firework triggers a grand finale blessing.
+//
+// Completes the four-season seasonal-night vocabulary:
+//   autumn  → harvest moon (light lanterns) → mooncake keepsake
+//   winter  → snow moon (catch snowflakes) → snowflake keepsake
+//   spring  → cherry moon (wish on cranes) → sakura petal keepsake
+//   summer  → fireworks (cheer for blooms) → [future keepsake drop]
+//
+// Verb inversion from cherry moon (*wish*) — summer is *cheer*, a loud
+// celebratory verb rather than a quiet wishful one. Audio is correspondingly
+// louder and brighter: a rising whistle + boom-crackle bloom rather than a
+// gentle koto pluck, and a G-major-pentatonic grand arpeggio with sub-bass
+// finale thump for the blessing rather than the cherry moon's soft D-major
+// sine arpeggio + spring-breeze pink noise.
+interface Firework {
+  rocketX: number;
+  rocketStartY: number;
+  bloomX: number;
+  bloomY: number;
+  riseDelay: number;
+  risePhase: number;       // 0 → 1 during rocket rise
+  bloomed: boolean;
+  bloomPhase: number;      // 0 → 1 during bloom expansion
+  cheered: boolean;
+  cheerAnim: number;       // 0 → 1 cheer bloom animation
+  bloomLife: number;       // frames since bloom started (visible → fading)
+  state: "waiting" | "rising" | "bloomed";
+  hueIndex: number;        // index into FIREWORK_HUES
+  petalCount: number;      // 5 / 6 / 8 — radial spoke count (varies per bloom)
+  sparkleTimer: number;
+  rocketTrailTimer: number;
+}
+
+interface SummerFireworksFestival {
+  fireworks: Firework[];
+  life: number;
+  fadeIn: number;
+  fadeOut: number;
+  blessed: boolean;
+  blessGlow: number;
+  blessTimer: number;
+  ambientSparkleTimer: number;
+  allFiredTimer: number;
+}
+
+let summerFireworksFestival: SummerFireworksFestival | null = null;
+let totalSummerFireworksSeen = 0;
+let totalFireworksCheered = 0;
+let totalSummerFireworksBlessed = 0;
+let summerFireworksFirstSeen = false;
+let summerFireworksFirstBlessed = false;
+
+const SUMMER_FIREWORKS_FADE_IN = 60;       // 1s fade-in
+const SUMMER_FIREWORKS_FADE_OUT = 120;     // 2s fade-out
+const SUMMER_FIREWORKS_LIFE = 3600;        // ~1 minute natural lifespan
+const FIREWORK_RISE_DURATION = 54;         // ~0.9s rocket rise
+const FIREWORK_BLOOM_VISIBLE = 240;        // ~4s window to cheer the bloom
+const FIREWORK_BLOOM_FADE = 90;            // ~1.5s fade after visible window
+const FIREWORK_STAGGER = 180;              // ~3s between consecutive rocket launches
+
+// Hanabi palette — crimson, warm gold, emerald, aqua-blue, violet. Five
+// classic Japanese summer-firework hues, chosen to be distinct from the
+// cherry moon's 4 soft pastels and the snow moon's single silver-blue.
+const FIREWORK_HUES = [
+  { hue: 0, sat: 85, light: 62 },     // crimson
+  { hue: 38, sat: 90, light: 62 },    // warm gold
+  { hue: 130, sat: 75, light: 58 },   // vivid emerald green
+  { hue: 200, sat: 85, light: 65 },   // sky-blue aqua
+  { hue: 290, sat: 70, light: 65 },   // violet
+];
+
+const SUMMER_FIREWORKS_SIGHT_SPEECHES = [
+  "Fireworks~! 🎆✨",
+  "Hanabi night~! 🎆",
+  "Look, the sky's blooming~! 🎆🌸",
+  "Summer fire flowers~! 🎆🔥",
+  "Ooh, shiny lights~! 🎆✨",
+  "The sky is dancing~! 🎆💖",
+];
+
+const FIREWORK_CHEERED_SPEECHES = [
+  "Tamaya~! 🎆",
+  "Ooh so pretty~! ✨",
+  "Cheer cheer~! 🎆💖",
+  "Such bright colors~! 🎆✨",
+  "Keep them coming~! 🎆",
+];
+
+const SUMMER_FIREWORKS_BLESS_SPEECHES = [
+  "The summer sky blooms for me~! 🎆💖",
+  "Every firework cheered~! Tamaya! 🎆✨",
+  "Hanabi festival blessing~! 🎆🌸",
+  "The night sky bows~! 🎆💫",
+  "Summer magic forever~! 🎆💖",
+];
+
+function playFireworkRiseSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Rising whistle — sine sweep 180Hz → 1400Hz over ~0.5s. The signature
+  // shhhhwip of a rocket climbing into the sky.
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(1400, t + 0.5);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.028, t + 0.02);
+  gain.gain.linearRampToValueAtTime(0.016, t + 0.45);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.6);
+  // Sparkle-hiss trail — high-passed pink noise, very quiet
+  const bufferSize = Math.floor(audioCtx.sampleRate * 0.5);
+  const noiseBuf = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) nd[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 3500;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.008, t + 0.05);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  noise.connect(hp);
+  hp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.5);
+}
+
+function playFireworkBloomSound(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Bloom boom — quick low-pass-filtered noise burst for the BWOOM
+  const bufferSize = Math.floor(audioCtx.sampleRate * 0.6);
+  const noiseBuf = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) nd[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 900;
+  lp.Q.value = 1.2;
+  const ngain = audioCtx.createGain();
+  ngain.gain.setValueAtTime(0, t);
+  ngain.gain.linearRampToValueAtTime(0.11, t + 0.01);
+  ngain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  noise.connect(lp);
+  lp.connect(ngain);
+  ngain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.6);
+  // Sub-bass thump — 80→45 Hz sine drop for body
+  const sub = audioCtx.createOscillator();
+  sub.type = "sine";
+  sub.frequency.setValueAtTime(80, t);
+  sub.frequency.exponentialRampToValueAtTime(45, t + 0.2);
+  const sgain = audioCtx.createGain();
+  sgain.gain.setValueAtTime(0, t);
+  sgain.gain.linearRampToValueAtTime(0.13, t + 0.01);
+  sgain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  sub.connect(sgain);
+  sgain.connect(audioCtx.destination);
+  sub.start(t);
+  sub.stop(t + 0.35);
+  // Bright bandpass crackle tail — the characteristic after-sparkle
+  const crackleLen = Math.floor(audioCtx.sampleRate * 0.8);
+  const crackleBuf = audioCtx.createBuffer(1, crackleLen, audioCtx.sampleRate);
+  const cd = crackleBuf.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / cd.length, 2);
+  const crackle = audioCtx.createBufferSource();
+  crackle.buffer = crackleBuf;
+  const cp = audioCtx.createBiquadFilter();
+  cp.type = "bandpass";
+  cp.frequency.value = 6500;
+  cp.Q.value = 0.8;
+  const cgain = audioCtx.createGain();
+  cgain.gain.setValueAtTime(0, t + 0.02);
+  cgain.gain.linearRampToValueAtTime(0.02, t + 0.1);
+  cgain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  crackle.connect(cp);
+  cp.connect(cgain);
+  cgain.connect(audioCtx.destination);
+  crackle.start(t + 0.02);
+  crackle.stop(t + 0.8);
+}
+
+function playFireworkCheerSound(hueIndex: number): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Bright major triad chime — each firework has a slightly different pitch
+  // so the cheers don't sound identical. Base triad: C6 + E6 + G6 (bright
+  // C major). Per-hue detune spreads the palette across ~6 semitones.
+  const detune = hueIndex * 1.5;
+  const mult = Math.pow(2, detune / 12);
+  const freqs = [1046.5 * mult, 1318.5 * mult, 1568 * mult];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = i === 0 ? "sine" : "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.04, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.55);
+  }
+}
+
+function playSummerFireworksBlessing(): void {
+  if (!soundEnabled) return;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const t = audioCtx.currentTime;
+  // Bright G major pentatonic grand arpeggio — 8 notes G4→D6. Mixed sine
+  // + triangle oscillators give a warm bell-tower feel. G major pentatonic
+  // is the brightest of the moon-festival palettes: harvest (warm amber),
+  // snow (A minor pentatonic triangle — cool & crystalline), cherry (D major
+  // pentatonic sine — warm & soft), summer (G major pentatonic sine+triangle —
+  // brightest & most celebratory).
+  const freqs = [392, 440, 493.9, 587.3, 659.3, 784, 987.8, 1174.7];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = i % 2 === 0 ? "sine" : "triangle";
+    osc.frequency.value = freqs[i];
+    const gain = audioCtx.createGain();
+    const start = t + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.075, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.9);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(start + 1);
+  }
+  // Sustained G5 root pedal — keeps the "festival bell tower" ring under the arpeggio
+  const pedal = audioCtx.createOscillator();
+  pedal.type = "sine";
+  pedal.frequency.value = 784; // G5
+  const pgain = audioCtx.createGain();
+  pgain.gain.setValueAtTime(0, t);
+  pgain.gain.linearRampToValueAtTime(0.03, t + 0.1);
+  pgain.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  pedal.connect(pgain);
+  pgain.connect(audioCtx.destination);
+  pedal.start(t);
+  pedal.stop(t + 1.7);
+  // Finale boom — a deep opening thud, the cue that says "the show is over, tamaya!"
+  const boom = audioCtx.createOscillator();
+  boom.type = "sine";
+  boom.frequency.setValueAtTime(90, t);
+  boom.frequency.exponentialRampToValueAtTime(45, t + 0.3);
+  const bgain = audioCtx.createGain();
+  bgain.gain.setValueAtTime(0, t);
+  bgain.gain.linearRampToValueAtTime(0.14, t + 0.01);
+  bgain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  boom.connect(bgain);
+  bgain.connect(audioCtx.destination);
+  boom.start(t);
+  boom.stop(t + 0.4);
+}
+
+function canSpawnSummerFireworksFestival(): boolean {
+  if (summerFireworksFestival) return false;
+  if (harvestMoonFestival || snowMoonFestival || cherryMoonFestival) return false;
+  if (isSleeping) return false;
+  if (currentSeason !== "summer") return false;
+  if (currentTimeOfDay !== "night") return false;
+  // Summer fireworks need a clear or cloudy sky — nobody sets off hanabi
+  // during rain or a thunderstorm.
+  if (currentWeather === "stormy" || currentWeather === "rainy") return false;
+  return true;
+}
+
+function spawnSummerFireworksFestival(): void {
+  if (summerFireworksFestival) return;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // 5 fireworks launched in a staggered sequence — fills the 200×200 canvas
+  // without overwhelming it, and matches the cherry moon's ~5-crane flock size.
+  const fireworkCount = 5;
+  const fireworks: Firework[] = [];
+  // Petal counts for variety: 5, 6, 8 — each bloom has a different spoke count
+  // so the show reads as a varied show rather than identical blooms on repeat.
+  const petalChoices = [5, 6, 8, 5, 6];
+  // Shuffle hues so the color order is fresh every time
+  const hueOrder = [0, 1, 2, 3, 4];
+  for (let i = hueOrder.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [hueOrder[i], hueOrder[j]] = [hueOrder[j], hueOrder[i]];
+  }
+  for (let i = 0; i < fireworkCount; i++) {
+    const slot = (w / (fireworkCount + 1)) * (i + 1) + (Math.random() - 0.5) * 14;
+    const bloomY = 35 + Math.random() * 40;
+    fireworks.push({
+      rocketX: slot,
+      rocketStartY: h + 6,
+      bloomX: slot + (Math.random() - 0.5) * 6,
+      bloomY: bloomY,
+      riseDelay: i * FIREWORK_STAGGER + Math.floor(Math.random() * 30),
+      risePhase: 0,
+      bloomed: false,
+      bloomPhase: 0,
+      cheered: false,
+      cheerAnim: 0,
+      bloomLife: 0,
+      state: "waiting",
+      hueIndex: hueOrder[i % hueOrder.length],
+      petalCount: petalChoices[i % petalChoices.length],
+      sparkleTimer: 0,
+      rocketTrailTimer: 0,
+    });
+  }
+
+  summerFireworksFestival = {
+    fireworks,
+    life: SUMMER_FIREWORKS_LIFE,
+    fadeIn: 0,
+    fadeOut: 1,
+    blessed: false,
+    blessGlow: 0,
+    blessTimer: 0,
+    ambientSparkleTimer: 0,
+    allFiredTimer: 0,
+  };
+
+  totalSummerFireworksSeen++;
+
+  if (!summerFireworksFirstSeen) {
+    summerFireworksFirstSeen = true;
+    addDiaryEntry("milestone", "🎆", "A summer fireworks show lit up the night~! Colored blooms exploded above me — hanabi magic! 🎆🌸✨");
+  }
+
+  if (Math.random() < 0.9) {
+    const s = SUMMER_FIREWORKS_SIGHT_SPEECHES[Math.floor(Math.random() * SUMMER_FIREWORKS_SIGHT_SPEECHES.length)];
+    queueSpeechBubble(s, 180);
+  }
+
+  saveGame();
+}
+
+function tryClickFirework(clickX: number, clickY: number): boolean {
+  if (!summerFireworksFestival) return false;
+  const fest = summerFireworksFestival;
+  if (fest.fadeIn < 0.4) return false;
+  if (fest.blessed) return false;
+  // Iterate in reverse so newer blooms on top of older ones get clicked first
+  for (let i = fest.fireworks.length - 1; i >= 0; i--) {
+    const fw = fest.fireworks[i];
+    if (fw.state !== "bloomed") continue;
+    if (fw.cheered) continue;
+    // Only clickable while bloom is still visibly bright — missed blooms can't be cheered
+    if (fw.bloomLife > FIREWORK_BLOOM_VISIBLE) continue;
+    const dx = clickX - fw.bloomX;
+    const dy = clickY - fw.bloomY;
+    if (dx * dx + dy * dy < 400) { // ~20 px radius — generous, blooms are big & bright
+      cheerFirework(i);
+      return true;
+    }
+  }
+  return false;
+}
+
+function cheerFirework(index: number): void {
+  if (!summerFireworksFestival) return;
+  const fest = summerFireworksFestival;
+  const fw = fest.fireworks[index];
+  if (!fw || fw.cheered) return;
+  fw.cheered = true;
+  fw.cheerAnim = 0;
+  totalFireworksCheered++;
+
+  playFireworkCheerSound(fw.hueIndex);
+
+  const palette = FIREWORK_HUES[fw.hueIndex];
+  // Colored confetti burst at the cheer point — colored so it visibly belongs
+  // to THIS firework's palette, not a generic sparkle shower.
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 0.8 + Math.random() * 1.8;
+    particles.push({
+      x: fw.bloomX,
+      y: fw.bloomY,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.2,
+      life: 40 + Math.floor(Math.random() * 30),
+      maxLife: 70,
+      size: 1.5 + Math.random() * 1.3,
+      type: "confetti",
+      color: `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`,
+    });
+  }
+  // Two drifting hearts — cheers are warm, a little love floats up
+  for (let i = 0; i < 2; i++) {
+    particles.push({
+      x: fw.bloomX + (Math.random() - 0.5) * 6,
+      y: fw.bloomY + (Math.random() - 0.5) * 4,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.4 - Math.random() * 0.3,
+      life: 45 + Math.floor(Math.random() * 25),
+      maxLife: 70,
+      size: 2.4 + Math.random() * 0.8,
+      type: "heart",
+    });
+  }
+
+  petHappiness = Math.min(100, petHappiness + 1);
+  addFriendshipXP(1);
+
+  if (Math.random() < 0.5) {
+    const s = FIREWORK_CHEERED_SPEECHES[Math.floor(Math.random() * FIREWORK_CHEERED_SPEECHES.length)];
+    queueSpeechBubble(s, 120);
+  }
+
+  const allCheered = fest.fireworks.every(f => f.cheered);
+  if (allCheered) {
+    blessSummerFireworks();
+  }
+
+  logDailyActivity("summer_fireworks");
+  checkAchievements();
+  saveGame();
+}
+
+function blessSummerFireworks(): void {
+  if (!summerFireworksFestival || summerFireworksFestival.blessed) return;
+  const fest = summerFireworksFestival;
+  fest.blessed = true;
+  fest.blessGlow = 1;
+  fest.blessTimer = 0;
+  totalSummerFireworksBlessed++;
+
+  petHappiness = Math.min(100, petHappiness + 5);
+  totalCarePoints += 3;
+  addFriendshipXP(5);
+
+  playSummerFireworksBlessing();
+
+  // Grand finale — rainbow bursts across the sky, one per hue
+  const w = canvas.width;
+  for (let h = 0; h < FIREWORK_HUES.length; h++) {
+    const palette = FIREWORK_HUES[h];
+    const bx = (w / (FIREWORK_HUES.length + 1)) * (h + 1);
+    const by = 40 + Math.random() * 30;
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      const speed = 1.4 + Math.random() * 2.2;
+      particles.push({
+        x: bx,
+        y: by,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 50 + Math.floor(Math.random() * 30),
+        maxLife: 80,
+        size: 1.6 + Math.random() * 1.4,
+        type: "confetti",
+        color: `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`,
+      });
+    }
+  }
+  // Drifting wash of bright sparkles across the upper sky
+  for (let i = 0; i < 24; i++) {
+    particles.push({
+      x: Math.random() * w,
+      y: 20 + Math.random() * 40,
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: 0.2 + Math.random() * 0.5,
+      life: 70 + Math.floor(Math.random() * 40),
+      maxLife: 110,
+      size: 1.4 + Math.random() * 1.2,
+      type: "sparkle",
+    });
+  }
+
+  const s = SUMMER_FIREWORKS_BLESS_SPEECHES[Math.floor(Math.random() * SUMMER_FIREWORKS_BLESS_SPEECHES.length)];
+  queueSpeechBubble(s, 240);
+
+  if (!summerFireworksFirstBlessed) {
+    summerFireworksFirstBlessed = true;
+    addDiaryEntry("milestone", "🎆", "I cheered for every firework and the summer sky rained colored sparks on me~! Tamaya! 🎆🌸✨");
+  } else {
+    addDiaryEntry("milestone", "🎆", `Summer fireworks blessing #${totalSummerFireworksBlessed}~! Tamaya! 🎆`);
+  }
+
+  checkAchievements();
+  saveGame();
+}
+
+function updateSummerFireworksFestival(): void {
+  // Very rare spawn during summer night — same 0.00012/frame rate as cherry
+  // and snow moons so the four seasonal-night events have matched rarity.
+  if (!summerFireworksFestival && canSpawnSummerFireworksFestival() && Math.random() < 0.00012) {
+    spawnSummerFireworksFestival();
+  }
+
+  if (!summerFireworksFestival) return;
+  const fest = summerFireworksFestival;
+
+  if (fest.fadeIn < 1) fest.fadeIn = Math.min(1, fest.fadeIn + 1 / SUMMER_FIREWORKS_FADE_IN);
+
+  let allBloomedOrDone = true;
+  for (const fw of fest.fireworks) {
+    if (fw.state === "waiting") {
+      allBloomedOrDone = false;
+      fw.riseDelay--;
+      if (fw.riseDelay <= 0) {
+        fw.state = "rising";
+        fw.risePhase = 0;
+        fw.rocketTrailTimer = 0;
+        playFireworkRiseSound();
+      }
+    } else if (fw.state === "rising") {
+      allBloomedOrDone = false;
+      fw.risePhase = Math.min(1, fw.risePhase + 1 / FIREWORK_RISE_DURATION);
+      // Rocket trail sparkles — tiny drifting dots behind the climbing rocket
+      fw.rocketTrailTimer--;
+      if (fw.rocketTrailTimer <= 0) {
+        const ry = fw.rocketStartY + (fw.bloomY - fw.rocketStartY) * (1 - Math.pow(1 - fw.risePhase, 2));
+        particles.push({
+          x: fw.rocketX + (Math.random() - 0.5) * 2,
+          y: ry + 2,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: 0.3 + Math.random() * 0.4,
+          life: 18 + Math.floor(Math.random() * 10),
+          maxLife: 28,
+          size: 0.8 + Math.random() * 0.5,
+          type: "sparkle",
+        });
+        fw.rocketTrailTimer = 3;
+      }
+      if (fw.risePhase >= 1) {
+        fw.state = "bloomed";
+        fw.bloomed = true;
+        fw.bloomPhase = 0;
+        fw.bloomLife = 0;
+        playFireworkBloomSound();
+        // Radial starburst — colored confetti spokes radiating outward
+        const palette = FIREWORK_HUES[fw.hueIndex];
+        const spokes = fw.petalCount;
+        for (let s = 0; s < spokes; s++) {
+          const baseAngle = (s / spokes) * Math.PI * 2;
+          // 3 particles per spoke at staggered speeds create a streaking trail look
+          for (let k = 0; k < 3; k++) {
+            const angle = baseAngle + (Math.random() - 0.5) * 0.15;
+            const speed = 1.5 + k * 0.5 + Math.random() * 0.3;
+            particles.push({
+              x: fw.bloomX,
+              y: fw.bloomY,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              life: 40 + Math.floor(Math.random() * 20),
+              maxLife: 60,
+              size: 1.4 + Math.random() * 1.1,
+              type: "confetti",
+              color: `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`,
+            });
+          }
+        }
+        // Central bright flash — a few big white sparkle kernels
+        for (let i = 0; i < 6; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const spd = 0.5 + Math.random() * 1;
+          particles.push({
+            x: fw.bloomX,
+            y: fw.bloomY,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            life: 25 + Math.floor(Math.random() * 15),
+            maxLife: 40,
+            size: 2 + Math.random() * 1.2,
+            type: "sparkle",
+          });
+        }
+      }
+    } else if (fw.state === "bloomed") {
+      if (fw.bloomPhase < 1) fw.bloomPhase = Math.min(1, fw.bloomPhase + 0.06);
+      fw.bloomLife++;
+      if (fw.cheered && fw.cheerAnim < 1) {
+        fw.cheerAnim = Math.min(1, fw.cheerAnim + 0.05);
+      }
+      // Cheered blooms shed ambient tiny sparkles — "wishes taking flight" for summer
+      if (fw.cheered && fw.bloomLife < FIREWORK_BLOOM_VISIBLE + FIREWORK_BLOOM_FADE) {
+        fw.sparkleTimer--;
+        if (fw.sparkleTimer <= 0) {
+          particles.push({
+            x: fw.bloomX + (Math.random() - 0.5) * 10,
+            y: fw.bloomY + (Math.random() - 0.5) * 10,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: 0.2 + Math.random() * 0.3,
+            life: 25 + Math.floor(Math.random() * 15),
+            maxLife: 40,
+            size: 1 + Math.random() * 0.6,
+            type: "sparkle",
+          });
+          fw.sparkleTimer = 40 + Math.floor(Math.random() * 25);
+        }
+      }
+    }
+  }
+
+  // Once all fireworks have bloomed, track time — auto-fade if player misses cheering
+  if (fest.fireworks.every(f => f.state === "bloomed")) {
+    fest.allFiredTimer++;
+    const uncheered = fest.fireworks.some(f => !f.cheered);
+    if (uncheered && !fest.blessed && fest.allFiredTimer > FIREWORK_BLOOM_VISIBLE + FIREWORK_BLOOM_FADE + 60) {
+      fest.life = Math.min(fest.life, SUMMER_FIREWORKS_FADE_OUT);
+    }
+  }
+
+  // Post-bless glow decay + celebratory continuous confetti/sparkle emission
+  if (fest.blessed) {
+    fest.blessTimer++;
+    if (fest.blessGlow > 0) fest.blessGlow = Math.max(0, fest.blessGlow - 0.008);
+    fest.ambientSparkleTimer--;
+    if (fest.blessTimer < 180 && fest.ambientSparkleTimer <= 0) {
+      const w = canvas.width;
+      const palette = FIREWORK_HUES[Math.floor(Math.random() * FIREWORK_HUES.length)];
+      particles.push({
+        x: Math.random() * w,
+        y: 30 + Math.random() * 40,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: 0.25 + Math.random() * 0.3,
+        life: 45 + Math.floor(Math.random() * 30),
+        maxLife: 75,
+        size: 1.3 + Math.random() * 1.3,
+        type: Math.random() < 0.5 ? "confetti" : "sparkle",
+        color: `hsl(${palette.hue}, ${palette.sat}%, ${palette.light}%)`,
+      });
+      fest.ambientSparkleTimer = 3;
+    }
+  }
+
+  fest.life--;
+
+  const inappropriate =
+    currentTimeOfDay !== "night" ||
+    currentSeason !== "summer" ||
+    currentWeather === "stormy" ||
+    currentWeather === "rainy";
+  if ((inappropriate || isSleeping) && !fest.blessed) {
+    fest.life = Math.min(fest.life, SUMMER_FIREWORKS_FADE_OUT);
+  }
+
+  if (fest.life <= SUMMER_FIREWORKS_FADE_OUT) {
+    fest.fadeOut = Math.max(0, fest.life / SUMMER_FIREWORKS_FADE_OUT);
+  }
+
+  if (fest.life <= 0) {
+    summerFireworksFestival = null;
+  }
+}
+
+// Rockets drawn at sky layer (behind the pet) so a rising rocket can appear
+// to come from behind the pet silhouette.
+function drawSummerFireworkRockets(): void {
+  if (!summerFireworksFestival) return;
+  const fest = summerFireworksFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  for (const fw of fest.fireworks) {
+    if (fw.state !== "rising") continue;
+    const palette = FIREWORK_HUES[fw.hueIndex];
+    const ry = fw.rocketStartY + (fw.bloomY - fw.rocketStartY) * (1 - Math.pow(1 - fw.risePhase, 2));
+    const rg = ctx.createRadialGradient(fw.rocketX, ry, 0, fw.rocketX, ry, 3.2);
+    rg.addColorStop(0, `hsla(${palette.hue}, 100%, 92%, 1)`);
+    rg.addColorStop(0.5, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0.55)`);
+    rg.addColorStop(1, `hsla(${palette.hue}, 90%, 70%, 0)`);
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(fw.rocketX, ry, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `hsla(${palette.hue}, 90%, 88%, 0.95)`;
+    ctx.beginPath();
+    ctx.arc(fw.rocketX, ry, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Blooms drawn at the upper-air layer (above the pet) so the colored starbursts
+// read as floating high in the sky.
+function drawSummerFireworkBlooms(): void {
+  if (!summerFireworksFestival) return;
+  const fest = summerFireworksFestival;
+  const baseAlpha = fest.fadeIn * fest.fadeOut;
+  if (baseAlpha <= 0.01) return;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
+
+  for (const fw of fest.fireworks) {
+    if (fw.state !== "bloomed") continue;
+    const palette = FIREWORK_HUES[fw.hueIndex];
+    const bloomVisible = Math.min(1, fw.bloomLife / FIREWORK_BLOOM_VISIBLE);
+    let fade = 1;
+    if (fw.bloomLife > FIREWORK_BLOOM_VISIBLE) {
+      fade = Math.max(0, 1 - (fw.bloomLife - FIREWORK_BLOOM_VISIBLE) / FIREWORK_BLOOM_FADE);
+    }
+    const expand = Math.min(1, fw.bloomPhase);
+    const R = 6 + expand * 16;
+
+    // Outer flower gradient — soft colored glow
+    const core = ctx.createRadialGradient(fw.bloomX, fw.bloomY, 0, fw.bloomX, fw.bloomY, R);
+    const cheeredBoost = fw.cheered ? 0.18 : 0;
+    core.addColorStop(0, `hsla(${palette.hue}, 100%, 90%, ${(0.85 + cheeredBoost) * fade})`);
+    core.addColorStop(0.4, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, ${(0.55 + cheeredBoost) * fade})`);
+    core.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(fw.bloomX, fw.bloomY, R, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Radial spokes — N-point star silhouette behind the particle burst
+    ctx.save();
+    ctx.translate(fw.bloomX, fw.bloomY);
+    const spokes = fw.petalCount;
+    for (let s = 0; s < spokes; s++) {
+      ctx.save();
+      ctx.rotate((s / spokes) * Math.PI * 2);
+      const spokeLen = 5 + expand * 14;
+      const spokeGrad = ctx.createLinearGradient(0, 0, spokeLen, 0);
+      spokeGrad.addColorStop(0, `hsla(${palette.hue}, 100%, 90%, ${0.9 * fade})`);
+      spokeGrad.addColorStop(0.6, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, ${0.45 * fade})`);
+      spokeGrad.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+      ctx.fillStyle = spokeGrad;
+      ctx.beginPath();
+      ctx.moveTo(0, -0.8);
+      ctx.lineTo(spokeLen, 0);
+      ctx.lineTo(0, 0.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    // Bright central core
+    ctx.fillStyle = `hsla(${palette.hue}, 100%, 96%, ${bloomVisible * fade})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 2 + expand * 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Cheered halo — an extra soft glow ring around cheered blooms
+    if (fw.cheered && fw.cheerAnim > 0.05) {
+      const haloR = R + 4 + fw.cheerAnim * 5;
+      const halo = ctx.createRadialGradient(fw.bloomX, fw.bloomY, R, fw.bloomX, fw.bloomY, haloR);
+      halo.addColorStop(0, `hsla(${palette.hue}, 100%, 90%, ${0.35 * fw.cheerAnim * fade})`);
+      halo.addColorStop(1, `hsla(${palette.hue}, ${palette.sat}%, ${palette.light}%, 0)`);
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(fw.bloomX, fw.bloomY, haloR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Post-bless festival glow — a soft rainbow haze over the upper sky
+  if (fest.blessed && fest.blessGlow > 0) {
+    const w = canvas.width;
+    const glow = ctx.createLinearGradient(0, 0, 0, 100);
+    glow.addColorStop(0, `hsla(0, 55%, 85%, ${0.12 * fest.blessGlow})`);
+    glow.addColorStop(0.5, `hsla(280, 60%, 80%, ${0.1 * fest.blessGlow})`);
+    glow.addColorStop(1, "rgba(200, 200, 240, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, 100);
+  }
+
+  ctx.restore();
+
+  // "cheer ✨" hint on the first un-cheered visible bloom until first blessing
+  if (!summerFireworksFirstBlessed && Math.floor(frame / 60) % 5 < 2) {
+    const hinted = fest.fireworks.find(f => f.state === "bloomed" && !f.cheered && f.bloomLife < FIREWORK_BLOOM_VISIBLE);
+    if (hinted) {
+      ctx.save();
+      ctx.globalAlpha = baseAlpha * 0.65;
+      ctx.font = "7px monospace";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.fillText("cheer ✨", hinted.bloomX, hinted.bloomY - 20);
+      ctx.restore();
+    }
+  }
+}
+
 const WEATHER_CHANGE_MIN = 72000;  // ~20 minutes at 60fps
 const WEATHER_CHANGE_MAX = 162000; // ~45 minutes at 60fps
 
@@ -19449,6 +20259,15 @@ canvas.addEventListener("mousedown", (e) => {
       return;
     }
   }
+  // Check for summer firework cheer (bloomed starbursts in the upper air)
+  if (summerFireworksFestival) {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (tryClickFirework(clickX, clickY)) {
+      return;
+    }
+  }
   // Check for winter cardinal greet (perched on the ground in winter daytime)
   if (cardinal) {
     const rect = canvas.getBoundingClientRect();
@@ -21269,6 +22088,11 @@ const achievements: Achievement[] = [
     icon: "🌸", unlockMessage: "A pressed pink petal kept forever~! The cherry moon smiles! 🌸🌕✨",
     condition: () => totalSakuraPetalKeepsakesPressed >= 1, unlocked: false,
   },
+  {
+    id: "summer_fireworks_blessed", name: "Summer Fireworks Blessed", description: "Cheer for every firework in a summer hanabi show",
+    icon: "🎆", unlockMessage: "Every bloom cheered~! Tamaya! The summer sky celebrates with you! 🎆🌸✨",
+    condition: () => totalSummerFireworksBlessed >= 1, unlocked: false,
+  },
 ];
 
 function checkAchievements(): void {
@@ -22278,6 +23102,16 @@ function drawStatsPanel(): void {
   y += 18;
   ctx.textAlign = "left";
   ctx.font = "bold 9px monospace";
+  ctx.fillStyle = "#FFD07A";
+  ctx.fillText("SUMMER FIREWORKS", panelX + 12, y);
+  ctx.textAlign = "right";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`🎆 ${totalSummerFireworksBlessed} blessed (${totalFireworksCheered} cheered)`, panelX + panelW - 12, y);
+
+  y += 18;
+  ctx.textAlign = "left";
+  ctx.font = "bold 9px monospace";
   ctx.fillStyle = "#E0E0FF";
   ctx.fillText("LIGHTNING BOLTS", panelX + 12, y);
   ctx.textAlign = "right";
@@ -22796,6 +23630,11 @@ interface SaveData {
   totalSakuraPetalKeepsakesPressed: number;
   totalSakuraPetalKeepsakesDropped: number;
   sakuraPetalKeepsakeFirstPressed: boolean;
+  totalSummerFireworksSeen: number;
+  totalFireworksCheered: number;
+  totalSummerFireworksBlessed: number;
+  summerFireworksFirstSeen: boolean;
+  summerFireworksFirstBlessed: boolean;
   version: number;
 }
 
@@ -22947,6 +23786,11 @@ function buildSaveData(): SaveData {
     totalSakuraPetalKeepsakesPressed,
     totalSakuraPetalKeepsakesDropped,
     sakuraPetalKeepsakeFirstPressed,
+    totalSummerFireworksSeen,
+    totalFireworksCheered,
+    totalSummerFireworksBlessed,
+    summerFireworksFirstSeen,
+    summerFireworksFirstBlessed,
     version: 1,
   };
 }
@@ -23468,6 +24312,21 @@ function applySaveData(data: SaveData): void {
   }
   if (typeof (data as SaveData).sakuraPetalKeepsakeFirstPressed === "boolean") {
     sakuraPetalKeepsakeFirstPressed = (data as SaveData).sakuraPetalKeepsakeFirstPressed;
+  }
+  if (typeof (data as SaveData).totalSummerFireworksSeen === "number") {
+    totalSummerFireworksSeen = (data as SaveData).totalSummerFireworksSeen;
+  }
+  if (typeof (data as SaveData).totalFireworksCheered === "number") {
+    totalFireworksCheered = (data as SaveData).totalFireworksCheered;
+  }
+  if (typeof (data as SaveData).totalSummerFireworksBlessed === "number") {
+    totalSummerFireworksBlessed = (data as SaveData).totalSummerFireworksBlessed;
+  }
+  if (typeof (data as SaveData).summerFireworksFirstSeen === "boolean") {
+    summerFireworksFirstSeen = (data as SaveData).summerFireworksFirstSeen;
+  }
+  if (typeof (data as SaveData).summerFireworksFirstBlessed === "boolean") {
+    summerFireworksFirstBlessed = (data as SaveData).summerFireworksFirstBlessed;
   }
 
   // Restore diary
@@ -26012,6 +26871,9 @@ function update(): void {
   // Sakura petal keepsake drop (spawned by a blessed cherry moon)
   updateSakuraPetalKeepsake();
 
+  // Summer fireworks festival (summer-night signature event — hanabi 花火)
+  updateSummerFireworksFestival();
+
   // Autonomous emotes — pet spontaneously shows emoji reactions
   autonomousEmoteTimer++;
   if (autonomousEmoteTimer >= nextAutonomousEmoteAt && !minigameActive && !memoryGameActive && !isDragging && !isSleeping) {
@@ -27149,6 +28011,10 @@ function draw(): void {
   // Cherry moon (sky layer, behind pet) — spring-night signature event
   drawCherryMoonSky();
 
+  // Summer fireworks rocket rise (sky layer, behind pet — so a rising rocket
+  // appears to come from behind the pet silhouette as it climbs)
+  drawSummerFireworkRockets();
+
   // Cherry blossom petals (sky layer, behind pet)
   drawCherryBlossoms();
 
@@ -27494,6 +28360,10 @@ function draw(): void {
 
   // Cherry moon paper cranes (floating in upper air, above pet)
   drawCherryMoonCranes();
+
+  // Summer firework blooms (upper-air layer, above pet — the big colored
+  // starbursts read as floating high in the sky above the pet)
+  drawSummerFireworkBlooms();
 
   // Nightlight (beside sleeping pet, below dream bubbles)
   drawNightlight();
